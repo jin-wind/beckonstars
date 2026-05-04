@@ -1,0 +1,12 @@
+node_modules/
+functions/node_modules/
+.env
+serviceAccountKey.json
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+data/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties

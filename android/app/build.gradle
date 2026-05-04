@@ -1,0 +1,29 @@
+plugins {
+    id "com.android.application"
+}
+
+android {
+    namespace "hk.beckonstars.app"
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "hk.beckonstars.app"
+        minSdk 23
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+}
+
+tasks.register("syncWebAssets", Copy) {
+    def webRoot = rootProject.projectDir.parentFile
+    from(webRoot) {
+        include "index.html"
+        include "manifest.webmanifest"
+        include "sw.js"
+        include "icons/icon.svg"
+    }
+    into layout.projectDirectory.dir("src/main/assets")
+}
+
+preBuild.dependsOn("syncWebAssets")

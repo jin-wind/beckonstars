@@ -1,0 +1,10 @@
+{
+  "scripts": {
+    "push-worker": "node scripts/local-push-worker.js",
+    "api-server": "node scripts/local-api-server.js"
+  },
+  "dependencies": {
+    "firebase": "^12.12.1",
+    "firebase-admin": "^12.7.0"
+  }
+}
