@@ -12,7 +12,7 @@ const maxBodyBytes = Number(process.env.API_MAX_BODY_BYTES || 24_000_000);
 const llmBaseUrl = (process.env.LLM_OPENAI_BASE_URL || 'https://fufu.iqach.top/v1').replace(/\/+$/, '');
 const llmApiKey = process.env.LLM_SUMMARY_API_KEY || process.env.OPENAI_API_KEY || 'dummy-key';
 const llmModel = process.env.LLM_SUMMARY_MODEL || process.env.OPENAI_SUMMARY_MODEL || 'mimo-v2.5';
-const llmTranscribeModel = process.env.LLM_TRANSCRIBE_MODEL || process.env.LLM_AUDIO_MODEL || 'mimo-v2.5';
+const llmTranscribeModel = process.env.LLM_TRANSCRIBE_MODEL || process.env.LLM_AUDIO_MODEL || 'mimo-v2-omni';
 
 function ensureDb() {
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
@@ -276,6 +276,89 @@ async function summarizeWithLlm(text) {
   }
 }
 
+const videosDir = path.join(process.cwd(), 'data', 'videos');
+
+async function generateSummaryVideo(memories, year, month, familyId) {
+  fs.mkdirSync(videosDir, { recursive: true });
+  const videoFilename = `${familyId}_${year}_${month}_${Date.now()}.mp4`;
+  const videoPath = path.join(videosDir, videoFilename);
+  const tmpDir = path.join(os.tmpdir(), `beckon-video-${Date.now()}`);
+  fs.mkdirSync(tmpDir, { recursive: true });
+
+  try {
+    // 下載圖片到臨時目錄
+    const imageFiles = [];
+    for (let i = 0; i < memories.length; i++) {
+      const mem = memories[i];
+      const imgPath = path.join(tmpDir, `img_${String(i).padStart(3, '0')}.jpg`);
+      try {
+        let imgData;
+        if (mem.img.startsWith('data:')) {
+          const base64 = mem.img.split(',')[1];
+          imgData = Buffer.from(base64, 'base64');
+        } else {
+          const resp = await fetch(mem.img);
+          if (!resp.ok) continue;
+          imgData = Buffer.from(await resp.arrayBuffer());
+        }
+        fs.writeFileSync(imgPath, imgData);
+        imageFiles.push(imgPath);
+      } catch (err) {
+        console.warn('[video] skip image', i, err.message);
+      }
+    }
+
+    if (imageFiles.length === 0) {
+      throw new Error('No valid images found');
+    }
+
+    // 用 ffmpeg 生成幻燈片影片
+    // 每張 3 秒，帶淡入淡出，720x1280 竖屏
+    const inputs = [];
+    const filters = [];
+    for (let i = 0; i < imageFiles.length; i++) {
+      inputs.push('-loop', '1', '-t', '3', '-i', imageFiles[i]);
+      filters.push(`[${i}:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30,format=yuv420p[v${i}]`);
+    }
+
+    // 淡入淡出轉場
+    if (imageFiles.length === 1) {
+      filters.push(`[v0]fade=t=in:st=0:d=0.5,fade=t=out:st=2.5:d=0.5[out]`);
+    } else {
+      let lastLabel = 'v0';
+      for (let i = 1; i < imageFiles.length; i++) {
+        const outLabel = `c${i}`;
+        const fadeIn = i === 0 ? 0 : 0.5;
+        filters.push(`[${lastLabel}][v${i}]xfade=transition=fade:duration=0.5:offset=${3 * i - 0.5 * i}[${outLabel}]`);
+        lastLabel = outLabel;
+      }
+      filters.push(`[${lastLabel}]fade=t=in:st=0:d=0.5,fade=t=out:st=${3 * imageFiles.length - 1}:d=0.5[out]`);
+    }
+
+    const filterComplex = filters.join(';');
+
+    const args = [
+      ...inputs,
+      '-filter_complex', filterComplex,
+      '-map', '[out]',
+      '-c:v', 'libx264',
+      '-preset', 'fast',
+      '-crf', '23',
+      '-pix_fmt', 'yuv420p',
+      '-movflags', '+faststart',
+      '-y',
+      videoPath
+    ];
+
+    execFileSync('ffmpeg', args, { timeout: 120_000 });
+
+    return `/videos/${videoFilename}`;
+  } finally {
+    // 清理臨時文件
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+}
+
 function routeParts(req) {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   return {
@@ -286,6 +369,27 @@ function routeParts(req) {
 
 const server = http.createServer(async (req, res) => {
   try {
+    // 靜態文件：影片
+    const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    if (req.method === 'GET' && url.pathname.startsWith('/videos/')) {
+      const filename = path.basename(url.pathname);
+      const filePath = path.join(videosDir, filename);
+      if (fs.existsSync(filePath)) {
+        const ext = path.extname(filePath).toLowerCase();
+        const mimeTypes = { '.mp4': 'video/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime' };
+        res.writeHead(200, {
+          'Content-Type': mimeTypes[ext] || 'video/mp4',
+          'Access-Control-Allow-Origin': '*',
+          'Cache-Control': 'public, max-age=3600'
+        });
+        fs.createReadStream(filePath).pipe(res);
+        return;
+      }
+      res.writeHead(404);
+      res.end('Video not found');
+      return;
+    }
+
     if (req.method === 'OPTIONS') {
       sendNoContent(res);
       return;
@@ -535,6 +639,38 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // --- 影片生成 ---
+    if (req.method === 'POST' && parts[3] === 'summary-video') {
+      const latestDb = readDb();
+      const latestFamily = getFamily(latestDb, familyId);
+      if (!latestFamily) {
+        sendJson(res, 404, { error: 'family-not-found' });
+        return;
+      }
+
+      const body = await readBody(req).catch(() => ({}));
+      const targetMonth = Number(body.month) || new Date().getMonth() + 1;
+      const targetYear = Number(body.year) || new Date().getFullYear();
+
+      const photoMemories = latestFamily.memories.filter(m =>
+        m.img && m.month === targetMonth && m.year === targetYear
+      );
+
+      if (photoMemories.length === 0) {
+        sendJson(res, 200, { error: 'no-photos', message: '這個月還沒有照片回憶' });
+        return;
+      }
+
+      try {
+        const videoUrl = await generateSummaryVideo(photoMemories, targetYear, targetMonth, familyId);
+        sendJson(res, 200, { videoUrl });
+      } catch (error) {
+        console.error('[video] generation failed', error);
+        sendJson(res, 500, { error: 'video-generation-failed', message: error.message });
+      }
+      return;
+    }
+
     sendJson(res, 404, { error: 'not-found' });
   } catch (error) {
     console.error('[api] request failed', error);
@@ -544,7 +680,7 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(port, host, () => {
   console.log(`Beckon Stars local API listening on http://${host}:${port}`);
-  console.log(`Public test URL: http://beckonstars.pppjj.dpdns.org/api/health`);
+  console.log(`Public test URL: http://113.253.204.130:8787/api/health`);
   console.log(`LLM summary endpoint: ${llmBaseUrl}/chat/completions (${llmModel})`);
   console.log(`LLM transcription model: ${llmTranscribeModel}`);
   console.log(`Database: ${dbPath}`);

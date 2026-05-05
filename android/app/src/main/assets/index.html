@@ -45,6 +45,43 @@
         .animate-fadeIn { animation: fadeIn 0.3s ease-out; }
         @keyframes shake { 0%, 100% {transform: translateX(0);} 25% {transform: translateX(-5px);} 75% {transform: translateX(5px);} }
         .animate-shake { animation: shake 0.3s ease-in-out; }
+
+        /* 日曆撕拉動畫 */
+        .calendar-page-container { position: relative; overflow: hidden; touch-action: pan-y; }
+        .calendar-page { transition: transform 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.35s ease; will-change: transform, opacity; }
+        .calendar-page.swiping { transition: none; }
+        .calendar-page.tear-out-left { animation: tearOutLeft 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards; }
+        .calendar-page.tear-out-right { animation: tearOutRight 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards; }
+        .calendar-page.tear-in-left { animation: tearInLeft 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards; }
+        .calendar-page.tear-in-right { animation: tearInRight 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards; }
+
+        @keyframes tearOutLeft {
+            0% { transform: translateX(0) rotate(0deg); opacity: 1; }
+            40% { transform: translateX(-30%) rotate(-2deg); opacity: 0.8; }
+            100% { transform: translateX(-110%) rotate(-4deg); opacity: 0; }
+        }
+        @keyframes tearOutRight {
+            0% { transform: translateX(0) rotate(0deg); opacity: 1; }
+            40% { transform: translateX(30%) rotate(2deg); opacity: 0.8; }
+            100% { transform: translateX(110%) rotate(4deg); opacity: 0; }
+        }
+        @keyframes tearInLeft {
+            0% { transform: translateX(110%) rotate(3deg); opacity: 0; }
+            60% { transform: translateX(-3%) rotate(-0.5deg); opacity: 1; }
+            100% { transform: translateX(0) rotate(0deg); opacity: 1; }
+        }
+        @keyframes tearInRight {
+            0% { transform: translateX(-110%) rotate(-3deg); opacity: 0; }
+            60% { transform: translateX(3%) rotate(0.5deg); opacity: 1; }
+            100% { transform: translateX(0) rotate(0deg); opacity: 1; }
+        }
+
+        /* 日曆底部指示點 */
+        .calendar-day-dot { cursor: pointer; }
+        .calendar-day-dot:active { transform: scale(1.3); }
+
+        /* 導航按鈕 */
+        .calendar-nav-btn { cursor: pointer; user-select: none; -webkit-user-select: none; }
     </style>
     <script>
         tailwind.config = {
@@ -98,11 +135,17 @@
 
             currentTab: 'calendar',  // 'calendar', 'chat', 'rewards'
             calendarMode: 'tear-off',// 'tear-off', 'monthly'
+            calendarYear: today.getFullYear(),
+            calendarMonth: today.getMonth() + 1,
+            calendarDay: today.getDate(),
             points: 240,
             dailyMessages: 3,
             claimedDailyReward: false,
             redeemedRewards: [],
             showModal: null,         // 'addMemory', 'memoryDetail', 'videoPlayer', 'messageBox', 'confirmReset'
+            videoGenerating: false,
+            videoUrl: null,
+            videoError: null,
             selectedDate: null,
             modalMessage: '',        // 通用彈窗訊息
             pendingMemoryType: 'text',
@@ -346,6 +389,99 @@
             });
         }
 
+        function initVideoPlayer() {
+            const video = document.getElementById('memVideo');
+            const overlay = document.getElementById('videoOverlay');
+            const playBtn = document.getElementById('videoPlayBtn');
+            const playIcon = document.getElementById('videoPlayIcon');
+            const progressFill = document.getElementById('videoProgressFill');
+            const progressBar = document.getElementById('videoProgressBar');
+            const timeDisplay = document.getElementById('videoTime');
+            if (!video) return;
+
+            let hideTimer = null;
+
+            function formatTime(s) {
+                const m = Math.floor(s / 60);
+                const sec = Math.floor(s % 60);
+                return m + ':' + String(sec).padStart(2, '0');
+            }
+
+            function showOverlay() {
+                overlay.classList.remove('opacity-0');
+                overlay.classList.add('opacity-100');
+                clearTimeout(hideTimer);
+                hideTimer = setTimeout(() => {
+                    if (!video.paused) {
+                        overlay.classList.add('opacity-0');
+                        overlay.classList.remove('opacity-100');
+                    }
+                }, 2500);
+            }
+
+            overlay.style.transition = 'opacity 0.3s ease';
+            overlay.classList.add('opacity-100');
+
+            video.addEventListener('play', () => {
+                playIcon.className = 'fa-solid fa-pause text-white text-3xl';
+                showOverlay();
+            });
+
+            video.addEventListener('pause', () => {
+                playIcon.className = 'fa-solid fa-play text-white text-3xl ml-1';
+                overlay.classList.remove('opacity-0');
+                overlay.classList.add('opacity-100');
+            });
+
+            video.addEventListener('timeupdate', () => {
+                if (video.duration) {
+                    const pct = (video.currentTime / video.duration) * 100;
+                    progressFill.style.width = pct + '%';
+                    timeDisplay.textContent = formatTime(video.currentTime) + ' / ' + formatTime(video.duration);
+                }
+            });
+
+            video.addEventListener('ended', () => {
+                playIcon.className = 'fa-solid fa-play text-white text-3xl ml-1';
+                overlay.classList.remove('opacity-0');
+                overlay.classList.add('opacity-100');
+            });
+
+            playBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (video.paused) {
+                    video.play().catch(() => {});
+                } else {
+                    video.pause();
+                }
+            });
+
+            overlay.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (video.paused) {
+                    video.play().catch(() => {});
+                } else {
+                    video.pause();
+                }
+            });
+
+            progressBar.addEventListener('click', (e) => {
+                const rect = progressBar.getBoundingClientRect();
+                const pct = (e.clientX - rect.left) / rect.width;
+                video.currentTime = pct * video.duration;
+            });
+
+            video.addEventListener('click', () => {
+                if (video.paused) {
+                    video.play().catch(() => {});
+                } else {
+                    video.pause();
+                }
+            });
+
+            video.play().catch(() => {});
+        }
+
         async function toggleVoiceMessage(messageId) {
             const id = String(messageId || '');
             const message = state.messages.find(item => String(item.id) === id);
@@ -408,7 +544,7 @@
         let deferredInstallPrompt = null;
         let serviceWorkerRegistration = null;
 
-        const selfHostedApiBase = localStorage.getItem('beckon-stars-api-base') || 'http://beckonstars.pppjj.dpdns.org';
+        const selfHostedApiBase = localStorage.getItem('beckon-stars-api-base') || 'http://113.253.204.130:8787';
         const useSelfHostedServer = true;
 
         function loadDemoData() {
@@ -481,11 +617,13 @@
         async function initServerBackend() {
             try {
                 state.authUid = state.authUid || getOrCreateServerUid();
+                console.log('[beckon] Trying server:', selfHostedApiBase + '/api/health');
                 await serverApi('/api/health');
                 state.backendMode = 'server';
+                console.log('[beckon] Server connected! Mode:', state.backendMode);
                 return true;
             } catch (error) {
-                console.warn('Self-hosted server connection failed', error);
+                console.warn('[beckon] Self-hosted server connection failed', error);
                 state.backendMode = 'local';
                 return false;
             }
@@ -799,6 +937,7 @@
                 applyChatScrollAfterRender(previousChatSnapshot);
                 restoreChatInputFocusAfterRender();
                 syncVoicePlayerUi();
+                initVideoPlayer();
             });
         }
 
@@ -1031,7 +1170,7 @@
             }
 
             return `
-                <div class="p-6">
+                <div class="p-6" id="calendarContent">
                     <div class="flex bg-gray-200 rounded-xl p-1 mb-6">
                         <button class="action-btn flex-1 py-2 rounded-lg font-bold text-sm transition-colors ${state.calendarMode === 'tear-off' ? 'bg-white text-brand shadow' : 'text-gray-500'}" data-action="switchCalendar" data-mode="tear-off">
                             手撕日曆
@@ -1054,65 +1193,111 @@
             `;
         }
 
-        // 手撕日曆
-        function renderTearOffCalendar(memories) {
+        // 只更新日曆容器（不重建整個 DOM，避免閃爍）
+        function updateCalendarContent() {
+            let visibleMemories = state.memories;
+            if (state.role === 'child') {
+                visibleMemories = state.memories.filter(m => m.childId === 'child_1');
+            }
+            const calendarEl = document.getElementById('calendarContent');
+            if (!calendarEl) return;
+
+            // 保留切換按鈕和底部按鈕，只替換中間的日曆內容
+            const tmp = document.createElement('div');
+            tmp.innerHTML = state.calendarMode === 'tear-off'
+                ? renderTearOffCalendar(visibleMemories)
+                : renderMonthlyCalendar(visibleMemories);
+            const newCalendar = tmp.firstElementChild;
+
+            // 找到現有的日曆容器（切換按鈕之後的第一個子元素）
+            const switcher = calendarEl.querySelector('.flex.bg-gray-200');
+            if (switcher && switcher.nextElementSibling) {
+                // 如果現有元素有 calendarPageContainer，保留其動畫狀態
+                const oldContainer = switcher.nextElementSibling;
+                calendarEl.replaceChild(newCalendar, oldContainer);
+            }
+
+            // 重新綁定日曆區塊的事件
+            calendarEl.querySelectorAll('.calendar-nav-btn').forEach(btn => {
+                btn.addEventListener('click', event => {
+                    event.stopPropagation();
+                    navigateCalendarMonth(parseInt(btn.getAttribute('data-calendar-dir')));
+                });
+            });
+            setupCalendarSwipe();
+        }
+
+        // 手撕日曆 - 產生某一天的頁面 HTML（不含容器）
+        function tearOffPageHtml(displayDay, displayYear, displayMonth, memories) {
             const dayNames = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
-            const todayMemories = memories.filter(m => m.date === today.getDate());
+            const displayDate = new Date(displayYear, displayMonth - 1, displayDay);
+            const isCurrentMonth = displayYear === today.getFullYear() && displayMonth === today.getMonth() + 1;
+            const dayMemories = memories.filter(m => m.date === displayDay && m.month === displayMonth);
 
             return `
-                <div class="bg-white rounded-3xl shadow-xl overflow-hidden border-2 border-gray-100 relative animate-fadeIn">
-                    <div class="bg-brand-red text-white py-3 px-6 flex justify-between items-center">
-                        <span class="text-xl font-bold">${today.getFullYear()}年 ${today.getMonth() + 1}月</span>
-                        <span class="text-sm border border-white px-2 py-0.5 rounded">農曆</span>
+                <div class="p-8 text-center relative tear-off-bg">
+                    <h3 class="text-2xl font-medium text-gray-500 mb-2">${dayNames[displayDate.getDay()]}</h3>
+                    <h1 class="text-8xl font-bold text-gray-800 mb-6 font-serif">${displayDay}</h1>
+                    <div class="bg-[#FFF8F0] border border-orange-200 rounded-xl p-4 shadow-sm inline-block">
+                        <span class="bg-orange-100 text-brand-dark px-2 py-1 rounded text-sm font-bold mr-2">${isCurrentMonth && displayDay === today.getDate() ? '今日宜' : '宜'}</span>
+                        <span class="text-gray-700 font-medium">${getDailySuggestion()}</span>
                     </div>
-                    
-                    <div class="p-8 text-center relative tear-off-bg">
-                        <h3 class="text-2xl font-medium text-gray-500 mb-2">${dayNames[today.getDay()]}</h3>
-                        <h1 class="text-8xl font-bold text-gray-800 mb-6 font-serif">${today.getDate()}</h1>
-                        
-                        <div class="bg-[#FFF8F0] border border-orange-200 rounded-xl p-4 shadow-sm inline-block">
-                            <span class="bg-orange-100 text-brand-dark px-2 py-1 rounded text-sm font-bold mr-2">今日宜</span>
-                            <span class="text-gray-700 font-medium">${getDailySuggestion()}</span>
+                </div>
+                ${dayMemories.length > 0 ? `
+                    <div class="bg-orange-50 p-4 border-t border-orange-100">
+                        <p class="text-sm font-bold text-brand-dark mb-2"><i class="fa-solid fa-heart"></i> ${displayDay}日已有 ${dayMemories.length} 個回憶</p>
+                        <div class="flex gap-2 overflow-x-auto no-scrollbar">
+                            ${dayMemories.map(m => `
+                                <div class="w-12 h-12 rounded-lg bg-white border border-orange-200 flex-shrink-0 flex items-center justify-center overflow-hidden">
+                                    ${m.img ? `<img src="${m.img}" class="w-full h-full object-cover">` : `<i class="fa-solid ${m.type === 'audio' ? 'fa-microphone text-blue-400' : 'fa-font text-gray-400'} text-xl"></i>`}
+                                </div>
+                            `).join('')}
                         </div>
+                    </div>
+                ` : ''}
+            `;
+        }
+
+        // 手撕日曆
+        function renderTearOffCalendar(memories) {
+            const daysInMonth = new Date(state.calendarYear, state.calendarMonth, 0).getDate();
+            const displayDay = Math.min(state.calendarDay || today.getDate(), daysInMonth);
+            const isCurrentMonth = state.calendarYear === today.getFullYear() && state.calendarMonth === today.getMonth() + 1;
+
+            return `
+                <div class="bg-white rounded-3xl shadow-xl overflow-hidden border-2 border-gray-100 relative" id="tearOffCalendar">
+                    <div class="bg-brand-red text-white py-3 px-6 flex justify-between items-center">
+                        <button class="calendar-nav-btn text-white/80 hover:text-white text-lg px-2" data-calendar-dir="-1"><i class="fa-solid fa-chevron-left"></i></button>
+                        <span class="text-xl font-bold">${state.calendarYear}年 ${state.calendarMonth}月</span>
+                        <button class="calendar-nav-btn text-white/80 hover:text-white text-lg px-2" data-calendar-dir="1"><i class="fa-solid fa-chevron-right"></i></button>
                     </div>
 
-                    ${todayMemories.length > 0 ? `
-                        <div class="bg-orange-50 p-4 border-t border-orange-100">
-                            <p class="text-sm font-bold text-brand-dark mb-2"><i class="fa-solid fa-heart"></i> 今日已有 ${todayMemories.length} 個回憶</p>
-                            <div class="flex gap-2 overflow-x-auto no-scrollbar">
-                                ${todayMemories.map(m => `
-                                    <div class="w-12 h-12 rounded-lg bg-white border border-orange-200 flex-shrink-0 flex items-center justify-center overflow-hidden">
-                                        ${m.img ? `<img src="${m.img}" class="w-full h-full object-cover">` : `<i class="fa-solid ${m.type === 'audio' ? 'fa-microphone text-blue-400' : 'fa-font text-gray-400'} text-xl"></i>`}
-                                    </div>
-                                `).join('')}
-                            </div>
+                    <div class="calendar-page-container overflow-hidden relative" id="calendarPageContainer">
+                        <div class="calendar-page" id="calendarPage">
+                            ${tearOffPageHtml(displayDay, state.calendarYear, state.calendarMonth, memories)}
                         </div>
-                    ` : ''}
+                    </div>
                 </div>
             `;
         }
 
-        // 月曆
-        function renderMonthlyCalendar(memories) {
-            const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-            const firstDay = new Date(today.getFullYear(), today.getMonth(), 1).getDay();
-            
-            let gridHtml = '';
+        // 月曆 - 產生某個月的頁面 HTML（不含容器）
+        function monthlyPageHtml(calYear, calMonth, memories) {
+            const daysInMonth = new Date(calYear, calMonth, 0).getDate();
+            const firstDay = new Date(calYear, calMonth - 1, 1).getDay();
+            const isCurrentMonth = calYear === today.getFullYear() && calMonth === today.getMonth() + 1;
             const dayNames = ["日", "一", "二", "三", "四", "五", "六"];
-            
-            gridHtml += dayNames.map(d => `<div class="text-center text-sm font-bold text-gray-400 py-2">${d}</div>`).join('');
-            
+
+            let gridHtml = dayNames.map(d => `<div class="text-center text-sm font-bold text-gray-400 py-2">${d}</div>`).join('');
             for (let i = 0; i < firstDay; i++) gridHtml += `<div></div>`;
-            
             for (let i = 1; i <= daysInMonth; i++) {
-                const isToday = i === today.getDate();
-                const dayMemories = memories.filter(m => m.date === i);
+                const isToday = isCurrentMonth && i === today.getDate();
+                const dayMemories = memories.filter(m => m.date === i && m.month === calMonth);
                 const hasMemory = dayMemories.length > 0;
-                
                 gridHtml += `
                     <div class="aspect-square flex items-center justify-center p-1 relative">
                         <button class="action-btn w-full h-full rounded-xl flex items-center justify-center font-medium text-lg transition-all ${isToday ? 'bg-brand text-white shadow-md' : 'bg-gray-50 text-gray-700 hover:bg-orange-100'} ${hasMemory && !isToday ? 'border-2 border-brand-light' : ''}"
-                                ${hasMemory ? `data-action="viewMemories" data-date="${i}"` : ''}>
+                                ${hasMemory ? `data-action="viewMemories" data-date="${i}" data-month="${calMonth}"` : ''}>
                             ${i}
                         </button>
                         ${hasMemory ? `<div class="absolute top-2 right-2 w-2 h-2 bg-brand-red rounded-full shadow-sm"></div>` : ''}
@@ -1121,17 +1306,30 @@
             }
 
             return `
-                <div class="bg-white rounded-3xl shadow-lg p-5 border border-gray-100 animate-fadeIn">
-                    <div class="flex justify-between items-center mb-4">
-                        <button class="text-gray-400"><i class="fa-solid fa-chevron-left"></i></button>
-                        <h3 class="text-xl font-bold text-gray-800">${today.getFullYear()}年 ${today.getMonth() + 1}月</h3>
-                        <button class="text-gray-400"><i class="fa-solid fa-chevron-right"></i></button>
+                <div class="flex justify-between items-center mb-4">
+                    <button class="calendar-nav-btn text-gray-400 hover:text-brand transition-colors p-2" data-calendar-dir="-1"><i class="fa-solid fa-chevron-left"></i></button>
+                    <h3 class="text-xl font-bold text-gray-800">${calYear}年 ${calMonth}月</h3>
+                    <button class="calendar-nav-btn text-gray-400 hover:text-brand transition-colors p-2" data-calendar-dir="1"><i class="fa-solid fa-chevron-right"></i></button>
+                </div>
+                <div class="grid grid-cols-7 gap-2 mb-6">
+                    ${gridHtml}
+                </div>
+            `;
+        }
+
+        // 月曆
+        function renderMonthlyCalendar(memories) {
+            const calYear = state.calendarYear;
+            const calMonth = state.calendarMonth;
+
+            return `
+                <div class="bg-white rounded-3xl shadow-lg p-5 border border-gray-100 relative" id="monthlyCalendar">
+                    <div class="calendar-page-container overflow-hidden relative" id="calendarPageContainer">
+                        <div class="calendar-page" id="calendarPage">
+                            ${monthlyPageHtml(calYear, calMonth, memories)}
+                        </div>
                     </div>
-                    
-                    <div class="grid grid-cols-7 gap-2 mb-6">
-                        ${gridHtml}
-                    </div>
-                    
+
                     <button class="action-btn w-full bg-gradient-to-r from-orange-400 to-brand-dark text-white rounded-xl p-4 flex items-center justify-between shadow-md mt-4" data-action="openModal" data-modal="videoPlayer">
                         <div class="flex items-center">
                             <div class="w-10 h-10 bg-white/30 rounded-full flex items-center justify-center mr-3 backdrop-blur-sm">
@@ -1469,23 +1667,82 @@
             }
 
             if (state.showModal === 'videoPlayer') {
-                modalContent = `
-                    <div class="bg-black w-full h-full flex flex-col relative animate-fadeIn">
-                        <button class="action-btn absolute top-10 right-6 w-10 h-10 bg-black/50 rounded-full text-white flex items-center justify-center z-50 backdrop-blur-md" data-action="closeModal">
-                            <i class="fa-solid fa-times text-xl"></i>
-                        </button>
-                        <div class="flex-1 flex items-center justify-center relative overflow-hidden">
-                            <img src="https://images.unsplash.com/photo-1563245372-f21724e3856d?auto=format&fit=crop&w=600&q=80" class="absolute inset-0 w-full h-full object-cover opacity-60 scale-105 animate-pulse">
-                            <div class="z-10 text-center px-6">
-                                <h2 class="text-3xl font-bold text-white mb-4 drop-shadow-lg">${today.getMonth() + 1}月 回憶精華</h2>
-                                <p class="text-lg text-white/90 drop-shadow-md">這個月，我們共享了溫暖的時光</p>
-                                <button class="mt-8 w-20 h-20 rounded-full bg-brand/90 text-white flex items-center justify-center text-3xl shadow-2xl backdrop-blur-sm border-4 border-white/30 mx-auto">
-                                    <i class="fa-solid fa-pause"></i>
-                                </button>
+                const hasPhotos = state.memories.some(m => m.img && m.month === today.getMonth() + 1 && m.year === today.getFullYear());
+                if (state.videoGenerating) {
+                    modalContent = `
+                        <div class="bg-gradient-to-b from-brand-dark to-black w-full max-w-md h-96 rounded-3xl flex flex-col items-center justify-center relative animate-fadeIn">
+                            <button class="action-btn absolute top-4 right-4 w-10 h-10 bg-white/20 rounded-full text-white flex items-center justify-center z-50" data-action="closeModal">
+                                <i class="fa-solid fa-times text-xl"></i>
+                            </button>
+                            <div class="w-16 h-16 border-4 border-white/30 border-t-white rounded-full animate-spin mb-6"></div>
+                            <h2 class="text-2xl font-bold text-white mb-2">正在生成回憶影片</h2>
+                            <p class="text-white/70">把這個月的照片縫合成影片...</p>
+                        </div>
+                    `;
+                } else if (state.videoUrl) {
+                    modalContent = `
+                        <div class="bg-black w-full max-w-md rounded-3xl overflow-hidden relative animate-fadeIn" id="videoContainer">
+                            <button class="action-btn absolute top-4 right-4 w-10 h-10 bg-black/50 rounded-full text-white flex items-center justify-center z-50 backdrop-blur-md" data-action="closeModal">
+                                <i class="fa-solid fa-times text-xl"></i>
+                            </button>
+                            <video src="${state.videoUrl}" playsinline class="w-full" style="max-height: 70vh;" id="memVideo"></video>
+                            <div class="absolute inset-0 flex items-center justify-center pointer-events-none" id="videoOverlay">
+                                <div class="w-20 h-20 bg-black/50 rounded-full flex items-center justify-center backdrop-blur-md" id="videoPlayBtn" style="pointer-events:auto;">
+                                    <i class="fa-solid fa-play text-white text-3xl ml-1" id="videoPlayIcon"></i>
+                                </div>
+                            </div>
+                            <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 pt-8">
+                                <div class="w-full h-1 bg-white/30 rounded-full mb-3 cursor-pointer" id="videoProgressBar">
+                                    <div class="h-full bg-brand rounded-full transition-all" id="videoProgressFill" style="width:0%"></div>
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <p class="text-white/80 text-sm">${today.getFullYear()}年 ${today.getMonth() + 1}月 回憶精華</p>
+                                    <span class="text-white/60 text-xs" id="videoTime">0:00</span>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                `;
+                    `;
+                } else if (state.videoError) {
+                    modalContent = `
+                        <div class="bg-white w-full max-w-md rounded-3xl p-8 text-center relative animate-fadeIn">
+                            <button class="action-btn absolute top-4 right-4 w-8 h-8 bg-gray-100 rounded-full text-gray-500 flex items-center justify-center" data-action="closeModal">
+                                <i class="fa-solid fa-times"></i>
+                            </button>
+                            <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <i class="fa-solid fa-triangle-exclamation text-2xl text-red-500"></i>
+                            </div>
+                            <h3 class="text-xl font-bold text-gray-800 mb-2">無法生成影片</h3>
+                            <p class="text-gray-500 mb-6">${state.videoError}</p>
+                            <button class="action-btn w-full py-3 bg-brand text-white font-bold rounded-xl" data-action="closeModal">確定</button>
+                        </div>
+                    `;
+                } else {
+                    modalContent = `
+                        <div class="bg-gradient-to-b from-brand to-brand-dark w-full max-w-md rounded-3xl overflow-hidden relative animate-fadeIn">
+                            <button class="action-btn absolute top-4 right-4 w-10 h-10 bg-white/20 rounded-full text-white flex items-center justify-center z-50" data-action="closeModal">
+                                <i class="fa-solid fa-times text-xl"></i>
+                            </button>
+                            <div class="p-8 text-center text-white">
+                                <div class="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-6">
+                                    <i class="fa-solid fa-film text-4xl"></i>
+                                </div>
+                                <h2 class="text-2xl font-bold mb-2">${today.getFullYear()}年 ${today.getMonth() + 1}月 回憶精華</h2>
+                                <p class="text-white/80 mb-8">把這個月的照片縫合成一段溫馨的回憶影片</p>
+                                ${hasPhotos ? `
+                                    <button class="action-btn w-full py-4 bg-white text-brand font-bold text-lg rounded-2xl shadow-lg" data-action="generateVideo">
+                                        <i class="fa-solid fa-wand-magic-sparkles mr-2"></i> 生成回憶影片
+                                    </button>
+                                ` : `
+                                    <div class="bg-white/10 rounded-2xl p-6">
+                                        <i class="fa-solid fa-image text-3xl text-white/50 mb-3"></i>
+                                        <p class="text-white/70">這個月還沒有照片回憶</p>
+                                        <p class="text-white/50 text-sm mt-1">先去記錄一些回憶吧！</p>
+                                    </div>
+                                `}
+                            </div>
+                        </div>
+                    `;
+                }
             }
 
             return `
@@ -1604,6 +1861,36 @@
                         state.showModal = newBtn.getAttribute('data-modal');
                         state.pendingMemoryType = 'text';
                         state.pendingMemoryImage = '';
+                        if (state.showModal === 'videoPlayer') {
+                            state.videoUrl = null;
+                            state.videoError = null;
+                            state.videoGenerating = false;
+                        }
+                        render();
+                    }
+                    else if (action === 'generateVideo') {
+                        state.videoGenerating = true;
+                        state.videoError = null;
+                        render();
+                        try {
+                            const familyId = state.familyId || state.calendarCode;
+                            const result = await serverApi(`/api/families/${encodeURIComponent(familyId)}/summary-video`, {
+                                method: 'POST',
+                                body: JSON.stringify({
+                                    month: today.getMonth() + 1,
+                                    year: today.getFullYear()
+                                })
+                            });
+                            if (result.error) {
+                                state.videoError = result.message || '沒有照片可生成影片';
+                            } else {
+                                state.videoUrl = `${selfHostedApiBase}${result.videoUrl}`;
+                            }
+                        } catch (error) {
+                            console.error('[video] generation failed', error);
+                            state.videoError = '影片生成失敗，請稍後再試。';
+                        }
+                        state.videoGenerating = false;
                         render();
                     }
                     else if (action === 'requestNotifications') {
@@ -1617,9 +1904,14 @@
                         await installPwaApp();
                     }
                     else if (action === 'closeModal') {
+                        const mv = document.getElementById('memVideo');
+                        if (mv) { mv.pause(); mv.src = ''; }
                         state.showModal = null;
                         state.selectedDate = null;
                         state.pendingMemoryContent = '';
+                        state.videoUrl = null;
+                        state.videoError = null;
+                        state.videoGenerating = false;
                         render();
                     }
                     else if (action === 'viewMemories') {
@@ -1784,6 +2076,275 @@
 
             const voiceHoldButton = document.getElementById('voiceHoldButton');
             if (voiceHoldButton) attachVoiceHoldEvents(voiceHoldButton);
+
+            // 日曆月份導航按鈕（箭頭切換月份）
+            document.querySelectorAll('.calendar-nav-btn').forEach(btn => {
+                btn.addEventListener('click', event => {
+                    event.stopPropagation();
+                    const dir = parseInt(btn.getAttribute('data-calendar-dir'));
+                    navigateCalendarMonth(dir);
+                });
+            });
+
+            // 日曆滑動手勢
+            setupCalendarSwipe();
+        }
+
+        // --- 日曆導航 ---
+        // 箭頭按鈕：切換月份
+        function navigateCalendarMonth(dir) {
+            const container = document.getElementById('calendarPageContainer');
+            const page = document.getElementById('calendarPage');
+            if (!container || !page) {
+                changeCalendarMonth(dir);
+                return;
+            }
+
+            let newMonth = state.calendarMonth + dir;
+            let newYear = state.calendarYear;
+            if (newMonth > 12) { newMonth = 1; newYear++; }
+            else if (newMonth < 1) { newMonth = 12; newYear--; }
+
+            let visibleMemories = state.memories;
+            if (state.role === 'child') visibleMemories = visibleMemories.filter(m => m.childId === 'child_1');
+            const newHtml = state.calendarMode === 'tear-off'
+                ? tearOffPageHtml(Math.min(state.calendarDay || today.getDate(), new Date(newYear, newMonth, 0).getDate()), newYear, newMonth, visibleMemories)
+                : monthlyPageHtml(newYear, newMonth, visibleMemories);
+
+            doCalendarTransition(page, container, dir, newHtml, () => {
+                state.calendarMonth = newMonth;
+                state.calendarYear = newYear;
+                // 手撕日曆：如果新月的天數比當前日期小，調整日期
+                if (state.calendarMode === 'tear-off') {
+                    const maxDay = new Date(newYear, newMonth, 0).getDate();
+                    if (state.calendarDay > maxDay) state.calendarDay = maxDay;
+                } else {
+                    state.calendarDay = null;
+                }
+                updateCalendarContent();
+            });
+        }
+
+        // 滑動：切換日期（手撕）或月份（月曆）
+        function navigateCalendarSwipe(dir) {
+            const container = document.getElementById('calendarPageContainer');
+            const page = document.getElementById('calendarPage');
+            if (!container || !page) {
+                if (state.calendarMode === 'tear-off') changeCalendarDay(dir);
+                else changeCalendarMonth(dir);
+                return;
+            }
+
+            let newHtml = '';
+            let onDone = () => {};
+
+            if (state.calendarMode === 'tear-off') {
+                // 滑動切換日期
+                let newDay = (state.calendarDay || today.getDate()) + dir;
+                let newMonth = state.calendarMonth;
+                let newYear = state.calendarYear;
+                const dim = new Date(newYear, newMonth, 0).getDate();
+                if (newDay < 1) {
+                    newMonth--;
+                    if (newMonth < 1) { newMonth = 12; newYear--; }
+                    newDay = new Date(newYear, newMonth, 0).getDate();
+                } else if (newDay > dim) {
+                    newMonth++;
+                    if (newMonth > 12) { newMonth = 1; newYear++; }
+                    newDay = 1;
+                }
+                let visibleMemories = state.memories;
+                if (state.role === 'child') visibleMemories = visibleMemories.filter(m => m.childId === 'child_1');
+                newHtml = tearOffPageHtml(newDay, newYear, newMonth, visibleMemories);
+                onDone = () => {
+                    state.calendarDay = newDay;
+                    state.calendarMonth = newMonth;
+                    state.calendarYear = newYear;
+                    updateCalendarContent();
+                };
+            } else {
+                // 滑動切換月份
+                let newMonth = state.calendarMonth + dir;
+                let newYear = state.calendarYear;
+                if (newMonth > 12) { newMonth = 1; newYear++; }
+                else if (newMonth < 1) { newMonth = 12; newYear--; }
+                let visibleMemories = state.memories;
+                if (state.role === 'child') visibleMemories = visibleMemories.filter(m => m.childId === 'child_1');
+                newHtml = monthlyPageHtml(newYear, newMonth, visibleMemories);
+                onDone = () => {
+                    state.calendarMonth = newMonth;
+                    state.calendarYear = newYear;
+                    state.calendarDay = null;
+                    updateCalendarContent();
+                };
+            }
+
+            doCalendarTransition(page, container, dir, newHtml, onDone);
+        }
+
+        // 共用的過渡動畫
+        function doCalendarTransition(oldPage, container, dir, newHtml, onDone) {
+            const newPage = document.createElement('div');
+            newPage.className = 'calendar-page';
+            newPage.innerHTML = newHtml;
+            newPage.style.position = 'absolute';
+            newPage.style.top = '0';
+            newPage.style.left = '0';
+            newPage.style.right = '0';
+            newPage.style.zIndex = '1';
+            container.appendChild(newPage);
+
+            const offset = dir > 0 ? '100%' : '-100%';
+            newPage.style.transform = `translateX(${offset}) rotate(${dir > 0 ? 3 : -3}deg)`;
+            newPage.style.opacity = '0';
+
+            oldPage.offsetHeight;
+            newPage.offsetHeight;
+
+            const duration = 350;
+            const ease = 'cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+            oldPage.style.transition = `transform ${duration}ms ${ease}, opacity ${duration}ms ease`;
+            newPage.style.transition = `transform ${duration}ms ${ease}, opacity ${duration}ms ease`;
+
+            const oldOut = dir > 0 ? '-100%' : '100%';
+            oldPage.style.transform = `translateX(${oldOut}) rotate(${dir > 0 ? -3 : 3}deg)`;
+            oldPage.style.opacity = '0';
+            newPage.style.transform = 'translateX(0) rotate(0deg)';
+            newPage.style.opacity = '1';
+
+            setTimeout(() => {
+                onDone();
+            }, duration);
+        }
+
+        function changeCalendarDay(dir) {
+            const daysInMonth = new Date(state.calendarYear, state.calendarMonth, 0).getDate();
+            state.calendarDay = (state.calendarDay || today.getDate()) + dir;
+            if (state.calendarDay < 1) {
+                state.calendarMonth--;
+                if (state.calendarMonth < 1) { state.calendarMonth = 12; state.calendarYear--; }
+                state.calendarDay = new Date(state.calendarYear, state.calendarMonth, 0).getDate();
+            } else if (state.calendarDay > daysInMonth) {
+                state.calendarMonth++;
+                if (state.calendarMonth > 12) { state.calendarMonth = 1; state.calendarYear++; }
+                state.calendarDay = 1;
+            }
+            updateCalendarContent();
+        }
+
+        function changeCalendarMonth(dir) {
+            state.calendarMonth += dir;
+            if (state.calendarMonth > 12) {
+                state.calendarMonth = 1;
+                state.calendarYear++;
+            } else if (state.calendarMonth < 1) {
+                state.calendarMonth = 12;
+                state.calendarYear--;
+            }
+            state.calendarDay = null;
+            updateCalendarContent();
+        }
+
+        function setupCalendarSwipe() {
+            const container = document.getElementById('calendarPageContainer');
+            if (!container) return;
+
+            let startX = 0;
+            let startY = 0;
+            let dx = 0;
+            let isDragging = false;
+            let isHorizontal = null;
+            let animating = false;
+            let hasMoved = false;
+
+            container.addEventListener('touchstart', event => {
+                if (animating || event.touches.length !== 1) return;
+                startX = event.touches[0].clientX;
+                startY = event.touches[0].clientY;
+                dx = 0;
+                isDragging = true;
+                isHorizontal = null;
+                hasMoved = false;
+            }, { passive: true });
+
+            container.addEventListener('touchmove', event => {
+                if (!isDragging || event.touches.length !== 1) return;
+
+                const touchX = event.touches[0].clientX;
+                const touchY = event.touches[0].clientY;
+                const diffX = touchX - startX;
+                const diffY = touchY - startY;
+
+                if (isHorizontal === null) {
+                    if (Math.abs(diffX) > 8 || Math.abs(diffY) > 8) {
+                        isHorizontal = Math.abs(diffX) > Math.abs(diffY);
+                    }
+                    if (!isHorizontal) {
+                        isDragging = false;
+                        return;
+                    }
+                }
+
+                if (!isHorizontal) return;
+
+                event.preventDefault();
+                dx = diffX;
+                hasMoved = true;
+
+                const page = document.getElementById('calendarPage');
+                if (page) {
+                    const progress = dx / container.offsetWidth;
+                    const rotate = progress * 3;
+                    const scale = 1 - Math.abs(progress) * 0.03;
+                    page.style.transition = 'none';
+                    page.style.transform = `translateX(${dx}px) rotate(${rotate}deg) scale(${scale})`;
+                    page.style.opacity = 1 - Math.abs(progress) * 0.15;
+                }
+            }, { passive: false });
+
+            container.addEventListener('touchend', () => {
+                if (!isDragging) return;
+                isDragging = false;
+
+                if (!hasMoved) return;
+
+                const page = document.getElementById('calendarPage');
+                const threshold = container.offsetWidth * 0.2;
+                const absDx = Math.abs(dx);
+
+                if (absDx > threshold) {
+                    const dir = dx > 0 ? -1 : 1;
+                    animating = true;
+                    navigateCalendarSwipe(dir);
+                    setTimeout(() => { animating = false; }, 400);
+                } else if (absDx > 10) {
+                    const dir = dx > 0 ? -1 : 1;
+                    animating = true;
+                    navigateCalendarSwipe(dir);
+                    setTimeout(() => { animating = false; }, 400);
+                } else {
+                    if (page) {
+                        page.style.transition = 'transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.3s ease';
+                        page.style.transform = '';
+                        page.style.opacity = '';
+                        setTimeout(() => {
+                            if (page) page.style.transition = '';
+                        }, 300);
+                    }
+                }
+                dx = 0;
+            }, { passive: true });
+
+            container.addEventListener('touchcancel', () => {
+                isDragging = false;
+                const page = document.getElementById('calendarPage');
+                if (page) {
+                    page.style.transition = 'transform 0.3s ease, opacity 0.3s ease';
+                    page.style.transform = '';
+                    page.style.opacity = '';
+                    setTimeout(() => { if (page) page.style.transition = ''; }, 300);
+                }
+            }, { passive: true });
         }
 
         function attachVoiceHoldEvents(button) {
@@ -2047,26 +2608,25 @@
         }
 
         // 初始化渲染
-        window.onload = () => {
+        window.onload = async () => {
             registerPwa();
             updateNotificationPermission();
             loadDemoData();
-            initCloudBackend().then(() => {
-                if (state.appReady && state.familyId && state.backendMode === 'server') {
-                    connectFamily(state.familyId, true).catch(error => {
-                        console.warn('Server family restore failed', error);
-                        const status = '自架家庭恢復失敗，請確認服務器仍在運行';
-                    }).finally(render);
-                    return;
-                }
+            render(); // 先渲染，讓使用者看到畫面
 
-                if (state.appReady && state.familyId && state.backendMode === 'server') {
-                    subscribeFamilyMessages(state.familyId);
-                    subscribeFamilyMemories(state.familyId);
-                }
-                render();
-            });
-            render();
+            // 嘗試連接伺服器
+            const connected = await initCloudBackend();
+            console.log('[beckon] Server connection result:', connected, 'mode:', state.backendMode);
+
+            if (state.appReady && state.familyId && state.backendMode === 'server') {
+                connectFamily(state.familyId, true).catch(error => {
+                    console.warn('[beckon] Server family restore failed', error);
+                }).finally(() => {
+                    render(); // 連接完成後重新渲染
+                });
+            } else {
+                render(); // 重新渲染以更新 backendMode 顯示
+            }
         };
 
         window.addEventListener('beforeinstallprompt', event => {
