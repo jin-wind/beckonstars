@@ -72,6 +72,35 @@ adb install -r android/app/build/outputs/apk/debug/app-debug.apk
 adb shell am start -n hk.beckonstars.app/.MainActivity
 ```
 
+## 🤖 自動化構建 (GitHub Actions)
+
+每次推送到 `main` 分支或提交 Pull Request 時，GitHub Actions 會自動構建 APK。
+
+### 構建觸發條件
+
+- 推送到 `main` 分支
+- Pull Request 到 `main` 分支
+- 手動觸發 (Workflow Dispatch)
+- 修改以下路徑時觸發：
+  - `android/**`
+  - `icons/**`
+  - `.github/workflows/android-build.yml`
+
+### 下載構建成果
+
+1. 進入 [Actions 頁面](../../actions)
+2. 選擇最新的運行記錄
+3. 在 **Artifacts** 下載 `app-debug` (Debug APK)
+
+### 標籤發佈
+
+推送帶版本號的 Git tag 時，自動建立 GitHub Release 並上傳 APK：
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
 ## 🔌 API 伺服器配置
 
 ### 本機開發 API
@@ -185,6 +214,7 @@ netstat -an | grep 8787
 ## 📖 更多文檔
 
 - [APK 構建指南](APK_BUILD.md) - 詳細的 APK 打包流程
+- [Android 簽署指南](ANDROID_SIGNING.md) - 配置 Release APK 簽署
 - [自託管伺服器部署](SELF_HOSTED_SERVER.md) - 遠端伺服器部署說明
 
 ## 📄 許可證
