@@ -81,10 +81,6 @@ adb shell am start -n hk.beckonstars.app/.MainActivity
 - 推送到 `main` 分支
 - Pull Request 到 `main` 分支
 - 手動觸發 (Workflow Dispatch)
-- 修改以下路徑時觸發：
-  - `android/**`
-  - `icons/**`
-  - `.github/workflows/android-build.yml`
 
 ### 下載構建成果
 
@@ -94,12 +90,16 @@ adb shell am start -n hk.beckonstars.app/.MainActivity
 
 ### 標籤發佈
 
-推送帶版本號的 Git tag 時，自動建立 GitHub Release 並上傳 APK：
+推送帶版本號的 Git tag 時，自動建立 GitHub Release：
 
 ```bash
 git tag v1.0.0
 git push origin v1.0.0
 ```
+
+### 故障排除
+
+若構建失敗，查看 [GitHub Actions 故障排除指南](GITHUB_ACTIONS_TROUBLESHOOTING.md)
 
 ## 🔌 API 伺服器配置
 
