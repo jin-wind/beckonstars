@@ -13,10 +13,6 @@
     <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="icons/icon.svg">
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-messaging-compat.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
@@ -120,7 +116,6 @@
             transcribingMessageId: null,
             isForwardingMessage: false,
             backendMode: 'local',
-            firebaseStatus: '未連接雲端',
             authUid: null,
             familyId: null,
             notificationPermission: getRuntimeNotificationPermission(),
@@ -413,25 +408,8 @@
         let deferredInstallPrompt = null;
         let serviceWorkerRegistration = null;
 
-        const firebaseConfig = {
-        apiKey: "AIzaSyBe8IOiotq6hEe_4tLyi6ADZtwg5PIXGWU",
-        authDomain: "beckon-stars.firebaseapp.com",
-        projectId: "beckon-stars",
-        storageBucket: "beckon-stars.firebasestorage.app",
-        messagingSenderId: "838652591035",
-        appId: "1:838652591035:web:1eee865a9316b4ed7ae29e",
-        measurementId: "G-7PWKE7H34J"
-        };
-
-        const firebaseMessagingVapidKey = 'BCJ5uNYRoMvE8Rc2rT6yUnom8peVWkmSQk4DSwM18O2x28KhikX9jMseR3p7ZghC5UM_5_bgbmsKvmq3lwXsmWc';
-        const selfHostedApiBase = localStorage.getItem('beckon-stars-api-base') || 'http://beckonstars.pppjj.dpdns.org:8787';
+        const selfHostedApiBase = localStorage.getItem('beckon-stars-api-base') || 'http://beckonstars.pppjj.dpdns.org';
         const useSelfHostedServer = true;
-
-        const isFirebaseConfigured = () =>
-            firebaseConfig.apiKey &&
-            !firebaseConfig.apiKey.includes('PASTE_') &&
-            firebaseConfig.projectId &&
-            !firebaseConfig.projectId.includes('PASTE_');
 
         function loadDemoData() {
             try {
@@ -445,7 +423,6 @@
                     pendingMemoryType: saved.pendingMemoryType || 'text',
                     isForwardingMessage: false,
                     backendMode: saved.backendMode || 'local',
-                    firebaseStatus: '未連接雲端',
                     authUid: saved.authUid || null,
                     familyId: saved.familyId || saved.calendarCode || null,
                     notificationPermission: getRuntimeNotificationPermission(),
@@ -466,7 +443,6 @@
             data.modalMessage = '';
             data.selectedDate = null;
             data.pendingMemoryImage = '';
-            data.firebaseStatus = '';
             data.pushStatus = '';
             if (data.backendMode !== 'local') {
                 data.messages = [];
@@ -504,16 +480,13 @@
 
         async function initServerBackend() {
             try {
-                state.firebaseStatus = `正在連接自架服務器 ${selfHostedApiBase}...`;
                 state.authUid = state.authUid || getOrCreateServerUid();
                 await serverApi('/api/health');
                 state.backendMode = 'server';
-                state.firebaseStatus = `自架服務器已連接：${selfHostedApiBase}`;
                 return true;
             } catch (error) {
                 console.warn('Self-hosted server connection failed', error);
                 state.backendMode = 'local';
-                state.firebaseStatus = '自架服務器連接失敗，請確認電腦服務器和防火牆';
                 return false;
             }
         }
@@ -573,7 +546,7 @@
                 render();
                 if (granted || state.notificationPermission === 'granted') {
                     showLocalNotification('星喚通知已開啟', 'APK 會由 Android 原生通知處理提示。');
-                    showMessage('APK 通知已開啟；背景遠端推送下一步要接 Android 原生 FCM。');
+                    showMessage('APK 通知已開啟。');
                     return;
                 }
                 showMessage('請在 Android 權限視窗或 App 設定中允許通知。');
@@ -599,124 +572,30 @@
         }
 
         function canUseCloudMessaging() {
-            return isFirebaseConfigured()
-                && window.firebase?.messaging
-                && window.isSecureContext
-                && 'serviceWorker' in navigator
-                && 'PushManager' in window
-                && firebaseMessagingVapidKey
-                && !firebaseMessagingVapidKey.includes('PASTE_')
-                && firebaseMessagingVapidKey.length >= 80;
+            return false;
         }
 
         function getPushSetupProblem() {
-            if (!window.isSecureContext) return '目前不是 HTTPS/localhost。請用 Firebase Hosting 網址測試，file:// 不能連接 FCM 背景推送。';
-            if (!isFirebaseConfigured()) return 'Firebase config 未完整設定。';
-            if (!window.firebase?.messaging) return 'Firebase Messaging SDK 未載入成功。';
-            if (!('serviceWorker' in navigator)) return '此瀏覽器不支援 service worker。';
-            if (!('PushManager' in window)) return '此瀏覽器不支援 Web Push。請用 Android Chrome 測試。';
-            if (!firebaseMessagingVapidKey || firebaseMessagingVapidKey.includes('PASTE_')) return 'Firebase Web Push certificate key 未填好。';
-            if (firebaseMessagingVapidKey.length < 80) return 'Firebase Web Push certificate key 似乎太短，可能只貼了一半。請重新複製 Cloud Messaging 的 Web Push certificates 公開 key。';
-            return '';
+            return '推播通知功能暫未支援。';
         }
 
         function getPushErrorMessage(error) {
-            const code = error?.code || '';
-            const message = error?.message || '';
-            if (code.includes('permission') || message.includes('permission')) return '推送連接失敗：通知權限未允許，請在瀏覽器/手機設定重新允許通知。';
-            if (code.includes('messaging/invalid-vapid-key') || message.includes('vapid')) return '推送連接失敗：VAPID key 不正確，請確認它來自同一個 Firebase project 的 Cloud Messaging Web Push certificates。';
-            if (code.includes('messaging/token-subscribe-failed') || code.includes('messaging/failed-service-worker-registration')) return '推送連接失敗：service worker 或 FCM 註冊失敗，請確認你正在使用 Firebase Hosting 的 HTTPS 網址。';
-            if (code.includes('permission-denied')) return '推送連接失敗：Firestore rules 拒絕寫入 token，請重新部署 firestore.rules。';
-            return `推送連接失敗：${code || message || '請檢查 Firebase Messaging、VAPID key 和瀏覽器環境。'}`;
+            return '推播通知功能暫未支援。';
         }
 
         function getPushStatusSummary() {
-            if (state.backendMode === 'server') {
-                return 'APK 通知權限已處理；目前訊息同步走自架服務器。真正背景遠端推送下一步可接 Android 原生 FCM。';
-            }
-            const tokenLine = state.pushTokenCount > 0
-                ? `\n目前這部裝置已在家庭 ${state.familyId} 寫入 ${state.pushTokenCount} 個 token（${state.pushTokenPreview}...）。`
-                : `\n目前這部裝置在家庭 ${state.familyId || '未連接'} 的 token 數仍是 0。請確認你正在用 Firebase Hosting HTTPS 網址，然後再按一次通知鈴鐺。`;
-            return `${state.pushStatus}${tokenLine}`;
+            return '推播通知功能暫未支援。';
         }
 
         async function refreshCurrentPushTokenInfo() {
-            if (state.backendMode === 'server') {
-                state.pushTokenCount = 0;
-                state.pushTokenPreview = '';
-                return null;
-            }
-            if (!state.familyId || !state.authUid || state.backendMode !== 'firebase') return null;
-            const services = getFirebaseServices();
-            if (!services?.db) return null;
-
-            const memberSnap = await services.db
-                .collection('families')
-                .doc(state.familyId)
-                .collection('members')
-                .doc(state.authUid)
-                .get();
-
-            const tokens = memberSnap.exists ? (memberSnap.data().fcmTokens || []) : [];
-            state.pushTokenCount = Array.isArray(tokens) ? tokens.length : 0;
-            state.pushTokenPreview = state.pushTokenCount > 0 ? String(tokens[tokens.length - 1]).slice(0, 12) : '';
-            return { count: state.pushTokenCount, preview: state.pushTokenPreview };
+            state.pushTokenCount = 0;
+            state.pushTokenPreview = '';
+            return null;
         }
 
         async function registerPushToken() {
-            if (state.backendMode === 'server') {
-                state.pushStatus = '自架服務器模式不使用 Web Push token；APK 通知由 Android 原生層處理。';
-                return null;
-            }
-            if (Notification.permission !== 'granted') {
-                state.pushStatus = '請先允許通知權限。';
-                return null;
-            }
-            if (!state.familyId || !state.authUid || state.backendMode !== 'firebase') {
-                state.pushStatus = '請先完成雲端家庭連接，之後再開啟推送。';
-                return null;
-            }
-            const setupProblem = getPushSetupProblem();
-            if (setupProblem || !canUseCloudMessaging()) {
-                state.pushStatus = `通知權限已開啟；${setupProblem || '目前環境未能啟用真正背景推送。'}`;
-                return null;
-            }
-
-            try {
-                const services = getFirebaseServices();
-                const registration = serviceWorkerRegistration || await navigator.serviceWorker.register('./sw.js');
-                serviceWorkerRegistration = registration;
-                await navigator.serviceWorker.ready;
-                const token = await services.messaging.getToken({
-                    vapidKey: firebaseMessagingVapidKey,
-                    serviceWorkerRegistration: registration
-                });
-
-                if (!token) {
-                    state.pushStatus = '推送連接失敗：Firebase 未回傳 token，請重新整理後再按通知按鈕。';
-                    return null;
-                }
-
-                await services.db
-                    .collection('families')
-                    .doc(state.familyId)
-                    .collection('members')
-                    .doc(state.authUid)
-                    .set({
-                        fcmTokens: firebase.firestore.FieldValue.arrayUnion(token),
-                        pushEnabled: true,
-                        pushUpdatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                    }, { merge: true });
-
-                await refreshCurrentPushTokenInfo();
-                state.pushStatus = `背景推送已連接，token 已寫入家庭 ${state.familyId}。另一部 Android 發訊息時，即使你沒開聊天頁也會收到通知。`;
-                return token;
-            } catch (error) {
-                console.warn('FCM token registration failed', error);
-                state.pushStatus = getPushErrorMessage(error);
-                await refreshCurrentPushTokenInfo().catch(() => null);
-                return null;
-            }
+            state.pushStatus = '推播通知功能暫未支援。';
+            return null;
         }
 
         async function installPwaApp() {
@@ -771,39 +650,8 @@
         // --- 獲取今日隨機提示 ---
         const getDailySuggestion = () => state.suggestions[today.getDate() % state.suggestions.length];
 
-        function getFirebaseServices() {
-            if (!isFirebaseConfigured() || !window.firebase) return null;
-            if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-            return {
-                auth: firebase.auth(),
-                db: firebase.firestore(),
-                messaging: firebase.messaging?.isSupported?.() === false ? null : firebase.messaging?.()
-            };
-        }
-
         async function initCloudBackend() {
-            if (useSelfHostedServer) return initServerBackend();
-
-            const services = getFirebaseServices();
-            if (!services) {
-                state.backendMode = 'local';
-                state.firebaseStatus = '本機 demo 模式：請先填入 Firebase config';
-                return false;
-            }
-
-            try {
-                state.firebaseStatus = '正在連接 Firebase...';
-                if (!services.auth.currentUser) await services.auth.signInAnonymously();
-                state.authUid = services.auth.currentUser.uid;
-                state.backendMode = 'firebase';
-                state.firebaseStatus = 'Firebase 已連接';
-                return true;
-            } catch (error) {
-                console.warn('Firebase connection failed', error);
-                state.backendMode = 'local';
-                state.firebaseStatus = 'Firebase 連接失敗，暫用本機模式';
-                return false;
-            }
+            return initServerBackend();
         }
 
         async function connectFamily(familyId, shouldCreate) {
@@ -813,61 +661,24 @@
             const connected = await initCloudBackend();
             if (!connected) return false;
 
-            if (state.backendMode === 'server') {
-                await serverApi(`/api/families/${encodeURIComponent(familyId)}/connect`, {
-                    method: 'POST',
-                    body: JSON.stringify({
-                        shouldCreate,
-                        member: {
-                            uid: state.authUid,
-                            name: state.userName || '家庭成員',
-                            role: state.role || 'child',
-                            avatar: state.userAvatar || ''
-                        }
-                    })
-                }).catch(error => {
-                    if (error.status === 404) throw new Error('family-not-found');
-                    throw error;
-                });
-                subscribeFamilyMessages(familyId);
-                subscribeFamilyMemories(familyId);
-                return true;
-            }
-
-            const { db } = getFirebaseServices();
-            const familyRef = db.collection('families').doc(familyId);
-            const memberRef = familyRef.collection('members').doc(state.authUid);
-            const familySnap = await familyRef.get();
-
-            if (!familySnap.exists) {
-                if (!shouldCreate) throw new Error('family-not-found');
-                await familyRef.set({
-                    familyId,
-                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                    createdBy: state.authUid
-                });
-            }
-
-            await memberRef.set({
-                uid: state.authUid,
-                name: state.userName || '家庭成員',
-                role: state.role || 'child',
-                avatar: state.userAvatar || '',
-                joinedAt: firebase.firestore.FieldValue.serverTimestamp()
-            }, { merge: true });
-
+            await serverApi(`/api/families/${encodeURIComponent(familyId)}/connect`, {
+                method: 'POST',
+                body: JSON.stringify({
+                    shouldCreate,
+                    member: {
+                        uid: state.authUid,
+                        name: state.userName || '家庭成員',
+                        role: state.role || 'child',
+                        avatar: state.userAvatar || ''
+                    }
+                })
+            }).catch(error => {
+                if (error.status === 404) throw new Error('family-not-found');
+                throw error;
+            });
             subscribeFamilyMessages(familyId);
             subscribeFamilyMemories(familyId);
-            if (state.notificationPermission === 'granted') await registerPushToken();
             return true;
-        }
-
-        async function ensurePushTokenForCurrentFamily() {
-            if (state.notificationPermission !== 'granted') return;
-            if (!state.appReady || !state.familyId || !state.authUid || state.backendMode !== 'firebase') return;
-
-            await registerPushToken();
-            render();
         }
 
         async function refreshServerMessages(familyId) {
@@ -882,69 +693,21 @@
                 });
             }
             const changed = JSON.stringify(state.messages) !== JSON.stringify(incoming);
-            const status = `自架同步中：家庭 ${familyId}`;
-            const statusChanged = state.firebaseStatus !== status || state.isForwardingMessage;
             if (changed) state.messages = incoming;
             state.isForwardingMessage = false;
-            state.firebaseStatus = status;
             hasLoadedCloudMessages = true;
-            if (changed || statusChanged) render();
+            if (changed) render();
         }
 
         function subscribeFamilyMessages(familyId) {
-            if (state.backendMode === 'server') {
-                if (unsubscribeMessages) unsubscribeMessages();
-                refreshServerMessages(familyId).catch(error => {
-                    console.warn('Server message sync failed', error);
-                    const status = '自架訊息同步失敗，請確認服務器仍在運行';
-                    if (state.firebaseStatus !== status) {
-                        state.firebaseStatus = status;
-                        render();
-                    }
-                });
-                const timer = setInterval(() => refreshServerMessages(familyId).catch(error => {
-                    console.warn('Server message sync failed', error);
-                    const status = '自架訊息同步失敗，請確認服務器仍在運行';
-                    if (state.firebaseStatus !== status) {
-                        state.firebaseStatus = status;
-                        render();
-                    }
-                }), 2000);
-                unsubscribeMessages = () => clearInterval(timer);
-                return;
-            }
-
-            const services = getFirebaseServices();
-            if (!services || !familyId) return;
             if (unsubscribeMessages) unsubscribeMessages();
-
-            unsubscribeMessages = services.db
-                .collection('families')
-                .doc(familyId)
-                .collection('messages')
-                .orderBy('createdAt', 'asc')
-                .limit(80)
-                .onSnapshot(snapshot => {
-                    if (snapshot.empty) return;
-                    if (hasLoadedCloudMessages) {
-                        snapshot.docChanges().forEach(change => {
-                            if (change.type !== 'added') return;
-                            const message = normalizeCloudMessage(change.doc.id, change.doc.data());
-                            if (message.senderId !== state.authUid && document.hidden) {
-                                showLocalNotification(`星喚：${message.senderName}`, message.content || '你有新的家庭訊息');
-                            }
-                        });
-                    }
-                    state.messages = snapshot.docs.map(doc => normalizeCloudMessage(doc.id, doc.data()));
-                    state.isForwardingMessage = false;
-                    state.firebaseStatus = `雲端同步中：家庭 ${familyId}`;
-                    hasLoadedCloudMessages = true;
-                    render();
-                }, error => {
-                    console.warn('Message sync failed', error);
-                    state.firebaseStatus = '訊息同步失敗，請檢查 Firestore Rules';
-                    render();
-                });
+            refreshServerMessages(familyId).catch(error => {
+                console.warn('Server message sync failed', error);
+            });
+            const timer = setInterval(() => refreshServerMessages(familyId).catch(error => {
+                console.warn('Server message sync failed', error);
+            }), 2000);
+            unsubscribeMessages = () => clearInterval(timer);
         }
 
         function normalizeCloudMessage(id, data) {
@@ -985,60 +748,14 @@
         }
 
         function subscribeFamilyMemories(familyId) {
-            if (state.backendMode === 'server') {
-                if (unsubscribeMemories) unsubscribeMemories();
-                refreshServerMemories(familyId).catch(error => {
-                    console.warn('Server memory sync failed', error);
-                    const status = '自架回憶同步失敗，請確認服務器仍在運行';
-                    if (state.firebaseStatus !== status) {
-                        state.firebaseStatus = status;
-                        render();
-                    }
-                });
-                const timer = setInterval(() => refreshServerMemories(familyId).catch(error => {
-                    console.warn('Server memory sync failed', error);
-                    const status = '自架回憶同步失敗，請確認服務器仍在運行';
-                    if (state.firebaseStatus !== status) {
-                        state.firebaseStatus = status;
-                        render();
-                    }
-                }), 3000);
-                unsubscribeMemories = () => clearInterval(timer);
-                return;
-            }
-
-            const services = getFirebaseServices();
-            if (!services || !familyId) return;
             if (unsubscribeMemories) unsubscribeMemories();
-
-            try {
-                unsubscribeMemories = services.db
-                    .collection('families')
-                    .doc(familyId)
-                    .collection('memories')
-                    .orderBy('createdAt', 'desc')
-                    .limit(200)
-                    .onSnapshot(snapshot => {
-                        if (hasLoadedCloudMemories) {
-                            snapshot.docChanges().forEach(change => {
-                                if (change.type !== 'added') return;
-                                const memory = normalizeCloudMemory(change.doc.id, change.doc.data());
-                                if (memory.uid !== state.authUid && document.hidden) {
-                                    showLocalNotification(`星喚新回憶：${memory.childName}`, memory.content || '有人記錄了新回憶');
-                                }
-                            });
-                        }
-                        state.memories = snapshot.docs.map(doc => normalizeCloudMemory(doc.id, doc.data()));
-                        hasLoadedCloudMemories = true;
-                        render();
-                    }, error => {
-                        console.warn('Memory sync failed', error);
-                        state.firebaseStatus = `回憶同步失敗：${error.code === 'permission-denied' ? '請重新部署 Firestore Rules' : error.message}`;
-                        render();
-                    });
-            } catch (error) {
-                console.warn('Memory subscription setup failed', error);
-            }
+            refreshServerMemories(familyId).catch(error => {
+                console.warn('Server memory sync failed', error);
+            });
+            const timer = setInterval(() => refreshServerMemories(familyId).catch(error => {
+                console.warn('Server memory sync failed', error);
+            }), 3000);
+            unsubscribeMemories = () => clearInterval(timer);
         }
 
         function normalizeCloudMemory(id, data) {
@@ -1247,7 +964,7 @@
         // 頂部導航列 (加入一鍵刪除按鈕)
         function renderHeader() {
             const titles = { 'calendar': '共用日曆', 'chat': '溫馨對話', 'rewards': '家庭獎勵' };
-            const backendLabel = state.backendMode === 'firebase' ? '雲端' : (state.backendMode === 'server' ? '自架' : '本機');
+            const backendLabel = state.backendMode === 'server' ? '自架' : '本機';
             const backendIcon = state.backendMode === 'local' ? 'fa-laptop' : 'fa-cloud';
             return `
                 <header class="bg-white px-6 pt-12 pb-4 shadow-sm z-10 sticky top-0 flex justify-between items-center rounded-b-2xl">
@@ -1264,7 +981,7 @@
                         <div class="bg-orange-100 text-brand-dark px-3 py-1.5 rounded-full font-bold flex items-center shadow-inner">
                             <i class="fa-solid fa-coins mr-1.5 text-yellow-500"></i> ${state.points}
                         </div>
-                        <div class="hidden sm:flex bg-blue-50 text-blue-700 px-3 py-1.5 rounded-full font-bold items-center text-xs border border-blue-100" title="${state.firebaseStatus}">
+                        <div class="hidden sm:flex bg-blue-50 text-blue-700 px-3 py-1.5 rounded-full font-bold items-center text-xs border border-blue-100">
                             <i class="fa-solid ${backendIcon} mr-1.5"></i> ${backendLabel}
                         </div>
                         <button class="action-btn w-9 h-9 rounded-full ${state.notificationPermission === 'granted' ? 'bg-green-50 text-green-600' : 'bg-yellow-50 text-yellow-600'} flex items-center justify-center hover:bg-yellow-100 transition-colors" data-action="requestNotifications" title="開啟通知提示">
@@ -1444,7 +1161,7 @@
                         <div class="text-center text-xs text-gray-400 mb-4">今天</div>
                         
                         ${visibleMessages.map(msg => {
-                            const isMe = state.backendMode === 'firebase' || state.backendMode === 'server'
+                            const isMe = state.backendMode === 'server'
                                 ? msg.senderId === state.authUid || msg.uid === state.authUid
                                 : (state.role === 'senior' && msg.senderId === 'senior') || (state.role === 'child' && msg.senderId === 'child_1');
                             
@@ -1634,20 +1351,20 @@
                         <div class="w-14 h-14 bg-green-100 text-green-600 rounded-2xl flex items-center justify-center text-2xl mb-4">
                             <i class="fa-solid fa-diagram-project"></i>
                         </div>
-                        <h3 class="text-2xl font-bold text-gray-800 mb-2">雲端同步技術架構</h3>
-                        <p class="text-sm text-gray-500 mb-5">目前版本可接 Firebase Hosting、匿名登入與 Firestore 即時聊天；未填 config 時會保留本機 demo 模式。</p>
+                        <h3 class="text-2xl font-bold text-gray-800 mb-2">技術架構</h3>
+                        <p class="text-sm text-gray-500 mb-5">使用自託管 API 伺服器同步家庭資料。</p>
                         <div class="space-y-3">
                             <div class="bg-orange-50 border border-orange-100 rounded-2xl p-4">
                                 <p class="font-bold text-brand-dark mb-1"><i class="fa-solid fa-display mr-2"></i>目前狀態</p>
-                                <p class="text-sm text-gray-600">${state.firebaseStatus || '等待連接 Firebase'}。家庭碼：${state.familyId || state.calendarCode || '尚未建立'}。</p>
+                                <p class="text-sm text-gray-600">${state.backendMode === 'server' ? '已連接自架服務器' : '本機模式'}。家庭碼：${state.familyId || state.calendarCode || '尚未建立'}。</p>
                             </div>
                             <div class="bg-blue-50 border border-blue-100 rounded-2xl p-4">
-                                <p class="font-bold text-blue-700 mb-1"><i class="fa-brands fa-google mr-2"></i>Firebase MVP</p>
-                                <p class="text-sm text-gray-600">Firebase Auth 匿名登入識別每部手機，Firestore 按 familyId 即時同步聊天室資料。</p>
+                                <p class="font-bold text-blue-700 mb-1"><i class="fa-solid fa-server mr-2"></i>自託管伺服器</p>
+                                <p class="text-sm text-gray-600">使用自架 API 伺服器同步家庭訊息和回憶資料。</p>
                             </div>
                             <div class="bg-gray-50 border border-gray-100 rounded-2xl p-4">
-                                <p class="font-bold text-gray-700 mb-1"><i class="fa-solid fa-shield-halved mr-2"></i>安全方向</p>
-                                <p class="text-sm text-gray-600">Firestore Rules 會檢查 members/{uid}，只容許家庭成員讀寫自己家庭的訊息。</p>
+                                <p class="font-bold text-gray-700 mb-1"><i class="fa-solid fa-shield-halved mr-2"></i>資料安全</p>
+                                <p class="text-sm text-gray-600">資料通過自託管伺服器同步，可自行控制數據存放位置。</p>
                             </div>
                         </div>
                     </div>
@@ -1942,30 +1659,6 @@
                             img: state.pendingMemoryType === 'photo' ? (state.pendingMemoryImage || null) : null
                         };
 
-                        if (state.backendMode === 'firebase' && state.familyId && getFirebaseServices()) {
-                            try {
-                                await getFirebaseServices().db
-                                    .collection('families')
-                                    .doc(state.familyId)
-                                    .collection('memories')
-                                    .add({
-                                        ...memoryData,
-                                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                                    });
-                                state.points += 10;
-                                state.showModal = null;
-                                state.pendingMemoryType = 'text';
-                                state.pendingMemoryContent = '';
-                                state.pendingMemoryImage = '';
-                                render();
-                                setTimeout(() => showMessage('已儲存今日回憶到雲端，並獲得 10 積分。'), 100);
-                            } catch (error) {
-                                console.warn('Memory save failed', error);
-                                showMessage('回憶儲存失敗，請檢查網絡後重試。');
-                            }
-                            return;
-                        }
-
                         if (state.backendMode === 'server' && state.familyId) {
                             try {
                                 await serverApi(`/api/families/${encodeURIComponent(state.familyId)}/memories`, {
@@ -2173,7 +1866,6 @@
                 return;
             }
             state.showModal = null;
-            state.firebaseStatus = transcript ? '語音已轉成文字，正在發送...' : '錄音已完成，正在發送...';
             render();
             await sendChatMessage({
                 type: 'audio',
@@ -2240,7 +1932,6 @@
             }
 
             state.transcribingMessageId = String(messageId);
-            state.firebaseStatus = '正在交給 AI 轉譯錄音...';
             render();
             try {
                 await serverApi(`/api/families/${encodeURIComponent(state.familyId)}/messages/${encodeURIComponent(messageId)}/transcribe`, {
@@ -2260,7 +1951,6 @@
 
         async function summarizeVoiceMessage(messageId) {
             if (!messageId || state.backendMode !== 'server' || !state.familyId) return;
-            state.firebaseStatus = '正在請求服務器總結錄音...';
             render();
             try {
                 await serverApi(`/api/families/${encodeURIComponent(state.familyId)}/messages/${encodeURIComponent(messageId)}/summarize`, {
@@ -2303,36 +1993,6 @@
             };
             state.dailyMessages = Math.min(state.dailyMessages + 1, 5);
             state.points += 5;
-
-            if (state.backendMode === 'firebase' && state.familyId && getFirebaseServices()) {
-                if (chatInput) chatInput.value = '';
-                state.isForwardingMessage = true;
-                shouldStickChatToBottom = true;
-                render();
-                try {
-                    await getFirebaseServices().db
-                        .collection('families')
-                        .doc(state.familyId)
-                        .collection('messages')
-                        .add({
-                            ...message,
-                            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                        });
-                    state.isForwardingMessage = false;
-                    shouldStickChatToBottom = true;
-                    render();
-                } catch (error) {
-                    console.warn('Firebase message send failed', error);
-                    state.isForwardingMessage = false;
-                    if (isTextMessage) {
-                        chatDraft = content;
-                        shouldRestoreChatInputFocus = true;
-                    }
-                    showMessage('訊息送出失敗，請檢查雲端連線。');
-                    render();
-                }
-                return;
-            }
 
             if (state.backendMode === 'server' && state.familyId) {
                 if (chatInput) chatInput.value = '';
@@ -2396,15 +2056,13 @@
                     connectFamily(state.familyId, true).catch(error => {
                         console.warn('Server family restore failed', error);
                         const status = '自架家庭恢復失敗，請確認服務器仍在運行';
-                        if (state.firebaseStatus !== status) state.firebaseStatus = status;
                     }).finally(render);
                     return;
                 }
 
-                if (state.appReady && state.familyId && state.backendMode === 'firebase') {
+                if (state.appReady && state.familyId && state.backendMode === 'server') {
                     subscribeFamilyMessages(state.familyId);
                     subscribeFamilyMemories(state.familyId);
-                    ensurePushTokenForCurrentFamily().catch(error => console.warn('Push auto-registration failed', error));
                 }
                 render();
             });

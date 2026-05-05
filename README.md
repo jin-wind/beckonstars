@@ -118,20 +118,10 @@ git push origin v1.0.0
 Android APK 預設連接遠端伺服器：
 
 ```javascript
-const selfHostedApiBase = 'http://beckonstars.pppjj.dpdns.org:8787';
+const selfHostedApiBase = 'http://beckonstars.pppjj.dpdns.org';
 ```
 
 如需修改伺服器地址，編輯 `android/app/src/main/assets/index.html` 中的配置。
-
-## � 推送通知（本機推送服務）
-
-啟動本機推送服務：
-
-```bash
-npm run push-worker
-```
-
-此服務從 `scripts/local-push-worker.js` 執行。
 
 ## 📂 項目結構
 
@@ -147,7 +137,6 @@ npm run push-worker
 │
 ├── scripts/
 │   ├── local-api-server.js   # 本機 API 伺服器
-│   └── local-push-worker.js  # 本機推送監聽服務
 │
 ├── icons/                    # App 圖標素材
 └── package.json              # npm 依賴
