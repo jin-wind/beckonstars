@@ -678,9 +678,15 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(port, host, () => {
+server.listen(port, host, async () => {
   console.log(`Beckon Stars local API listening on http://${host}:${port}`);
-  console.log(`Public test URL: http://113.253.204.130:8787/api/health`);
+  try {
+    const res = await fetch('https://api.ipify.org?format=json');
+    const { ip } = await res.json();
+    console.log(`Public test URL: http://${ip}:${port}/api/health`);
+  } catch {
+    console.log(`Public test URL: (cannot detect public IP, use local IP)`);
+  }
   console.log(`LLM summary endpoint: ${llmBaseUrl}/chat/completions (${llmModel})`);
   console.log(`LLM transcription model: ${llmTranscribeModel}`);
   console.log(`Database: ${dbPath}`);
