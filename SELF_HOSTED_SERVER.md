@@ -3,7 +3,7 @@
 目前 APK 會連到：
 
 ```text
-http://beckonstars.pppjj.dpdns.org
+http://144.79.170.102:8787
 ```
 
 ## 啟動
@@ -22,13 +22,13 @@ data\server-db.json
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8787/api/health
-Invoke-RestMethod http://beckonstars.pppjj.dpdns.org/api/health
+Invoke-RestMethod http://144.79.170.102:8787/api/health
 ```
 
 手機可以用瀏覽器打開：
 
 ```text
-http://beckonstars.pppjj.dpdns.org/api/health
+http://144.79.170.102:8787/api/health
 ```
 
 如果手機不是同一個網絡而連不到，通常是 Windows 防火牆或路由器沒有放行 TCP 8787。

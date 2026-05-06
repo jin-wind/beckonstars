@@ -118,7 +118,7 @@ git push origin v1.0.0
 Android APK 預設連接遠端伺服器：
 
 ```javascript
-const selfHostedApiBase = 'http://beckonstars.pppjj.dpdns.org';
+const selfHostedApiBase = 'http://144.79.170.102:8787';
 ```
 
 如需修改伺服器地址，編輯 `android/app/src/main/assets/index.html` 中的配置。

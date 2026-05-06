@@ -26,6 +26,6 @@ adb shell am start -n hk.beckonstars.app/.MainActivity
 
 - UI 保持原本 `index.html`。
 - APK 以 Android WebView 載入本地 assets。
-- APK 目前會連到自架 API：`http://beckonstars.pppjj.dpdns.org`。
+- APK 目前會連到自架 API：`http://144.79.170.102:8787`。
 - PWA 安裝流程在 APK 中會自動停用。
 - 通知按鈕已接到 Android 原生通知權限和本機通知橋接。
