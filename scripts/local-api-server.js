@@ -4,6 +4,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
+const { Lunar, Solar } = require('lunar-javascript');
 
 const host = process.env.API_HOST || '0.0.0.0';
 const port = Number(process.env.API_PORT || 8787);
@@ -402,6 +403,44 @@ const server = http.createServer(async (req, res) => {
         ok: true,
         name: 'beckon-stars-local-api',
         time: new Date().toISOString()
+      });
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/almanac') {
+      const urlObj = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+      const dateParam = urlObj.searchParams.get('date');
+      const d = dateParam ? new Date(dateParam) : new Date();
+      const solar = Solar.fromDate(d);
+      const lunar = solar.getLunar();
+      const jieQi = lunar.getJieQi();
+      const dayGanZhi = lunar.getDayInGanZhi();
+      const monthGanZhi = lunar.getMonthInGanZhi();
+      const yearGanZhi = lunar.getYearInGanZhi();
+      const yearShengXiao = lunar.getYearShengXiao();
+      const yiList = lunar.getDayYi();
+      const jiList = lunar.getDayJi();
+      const xiu = lunar.getXiu();
+      const xiuLuck = lunar.getXiuLuck();
+      const pw = lunar.getPengZuGan();
+      const pzZhi = lunar.getPengZuZhi();
+      sendJson(res, 200, {
+        ok: true,
+        solar: { year: solar.getYear(), month: solar.getMonth(), day: solar.getDay(), weekDay: solar.getWeekInChinese() },
+        lunar: {
+          year: lunar.getYearInChinese(),
+          month: lunar.getMonthInChinese(),
+          day: lunar.getDayInChinese(),
+          yearGanZhi, monthGanZhi, dayGanZhi,
+          yearShengXiao,
+          jieQi: jieQi || null,
+          xiu, xiuLuck,
+          pengZu: `${pw}${pzZhi}`
+        },
+        yi: yiList,
+        ji: jiList,
+        yiDisplay: yiList.slice(0, 5).join('、'),
+        jiDisplay: jiList.slice(0, 5).join('、')
       });
       return;
     }

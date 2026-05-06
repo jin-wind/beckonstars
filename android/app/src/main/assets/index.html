@@ -146,6 +146,7 @@
             videoGenerating: false,
             videoUrl: null,
             videoError: null,
+            almanac: null,
             selectedDate: null,
             modalMessage: '',        // 通用彈窗訊息
             pendingMemoryType: 'text',
@@ -158,7 +159,7 @@
             },
             transcribingMessageId: null,
             isForwardingMessage: false,
-            backendMode: 'local',
+            backendMode: 'server',
             authUid: null,
             familyId: null,
             notificationPermission: getRuntimeNotificationPermission(),
@@ -544,7 +545,7 @@
         let deferredInstallPrompt = null;
         let serviceWorkerRegistration = null;
 
-        const selfHostedApiBase = localStorage.getItem('beckon-stars-api-base') || 'http://144.79.170.102:8787/';
+        const selfHostedApiBase = 'http://144.79.170.102:8787';
         const useSelfHostedServer = true;
 
         function loadDemoData() {
@@ -558,7 +559,7 @@
                     selectedDate: null,
                     pendingMemoryType: saved.pendingMemoryType || 'text',
                     isForwardingMessage: false,
-                    backendMode: saved.backendMode || 'local',
+                    backendMode: 'server',
                     authUid: saved.authUid || null,
                     familyId: saved.familyId || saved.calendarCode || null,
                     notificationPermission: getRuntimeNotificationPermission(),
@@ -580,10 +581,8 @@
             data.selectedDate = null;
             data.pendingMemoryImage = '';
             data.pushStatus = '';
-            if (data.backendMode !== 'local') {
-                data.messages = [];
-                data.memories = [];
-            }
+            data.messages = [];
+            data.memories = [];
             data.voiceRecording = { active: false, cancel: false, startY: 0 };
             localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
         }
@@ -624,8 +623,19 @@
                 return true;
             } catch (error) {
                 console.warn('[beckon] Self-hosted server connection failed', error);
-                state.backendMode = 'local';
                 return false;
+            }
+        }
+
+        async function fetchAlmanac(dateStr) {
+            try {
+                const dateParam = dateStr ? `?date=${dateStr}` : '';
+                const data = await serverApi(`/api/almanac${dateParam}`);
+                state.almanac = data;
+                return data;
+            } catch (e) {
+                console.warn('Almanac fetch failed', e);
+                return null;
             }
         }
 
@@ -1103,8 +1113,8 @@
         // 頂部導航列 (加入一鍵刪除按鈕)
         function renderHeader() {
             const titles = { 'calendar': '共用日曆', 'chat': '溫馨對話', 'rewards': '家庭獎勵' };
-            const backendLabel = state.backendMode === 'server' ? '自架' : '本機';
-            const backendIcon = state.backendMode === 'local' ? 'fa-laptop' : 'fa-cloud';
+            const backendLabel = '自架';
+            const backendIcon = 'fa-cloud';
             return `
                 <header class="bg-white px-6 pt-12 pb-4 shadow-sm z-10 sticky top-0 flex justify-between items-center rounded-b-2xl">
                     <div class="flex items-center">
@@ -1232,16 +1242,49 @@
             const dayNames = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
             const displayDate = new Date(displayYear, displayMonth - 1, displayDay);
             const isCurrentMonth = displayYear === today.getFullYear() && displayMonth === today.getMonth() + 1;
+            const isToday = isCurrentMonth && displayDay === today.getDate();
             const dayMemories = memories.filter(m => m.date === displayDay && m.month === displayMonth);
+            const almanac = state.almanac;
+            const hasAlmanac = almanac && almanac.ok;
+
+            // 農曆日期顯示
+            let lunarDisplay = '';
+            if (hasAlmanac) {
+                const lunar = almanac.lunar;
+                lunarDisplay = `<p class="text-xs text-gray-400 mt-1">${lunar.dayGanZhi}日 · 農曆${lunar.month}月${lunar.day}${lunar.jieQi ? ' · ' + lunar.jieQi : ''}</p>`;
+            }
+
+            // 宜忌顯示
+            let yiJiHtml = '';
+            if (hasAlmanac) {
+                yiJiHtml = `
+                    <div class="bg-[#FFF8F0] border border-orange-200 rounded-xl p-4 shadow-sm inline-block text-left">
+                        <div class="mb-2">
+                            <span class="bg-orange-100 text-brand-dark px-2 py-1 rounded text-sm font-bold mr-2">${isToday ? '今日宜' : '宜'}</span>
+                            <span class="text-gray-700 font-medium">${almanac.yiDisplay}</span>
+                        </div>
+                        <div>
+                            <span class="bg-red-50 text-red-600 px-2 py-1 rounded text-sm font-bold mr-2">忌</span>
+                            <span class="text-gray-500 font-medium">${almanac.jiDisplay}</span>
+                        </div>
+                        <p class="text-xs text-gray-400 mt-2">${almanac.lunar.pengZu} · ${almanac.lunar.xiu}宿${almanac.lunar.xiuLuck ? ' · ' + almanac.lunar.xiuLuck : ''}</p>
+                    </div>
+                `;
+            } else {
+                yiJiHtml = `
+                    <div class="bg-[#FFF8F0] border border-orange-200 rounded-xl p-4 shadow-sm inline-block">
+                        <span class="bg-orange-100 text-brand-dark px-2 py-1 rounded text-sm font-bold mr-2">${isToday ? '今日宜' : '宜'}</span>
+                        <span class="text-gray-700 font-medium">${getDailySuggestion()}</span>
+                    </div>
+                `;
+            }
 
             return `
                 <div class="p-8 text-center relative tear-off-bg">
                     <h3 class="text-2xl font-medium text-gray-500 mb-2">${dayNames[displayDate.getDay()]}</h3>
-                    <h1 class="text-8xl font-bold text-gray-800 mb-6 font-serif">${displayDay}</h1>
-                    <div class="bg-[#FFF8F0] border border-orange-200 rounded-xl p-4 shadow-sm inline-block">
-                        <span class="bg-orange-100 text-brand-dark px-2 py-1 rounded text-sm font-bold mr-2">${isCurrentMonth && displayDay === today.getDate() ? '今日宜' : '宜'}</span>
-                        <span class="text-gray-700 font-medium">${getDailySuggestion()}</span>
-                    </div>
+                    <h1 class="text-8xl font-bold text-gray-800 mb-2 font-serif">${displayDay}</h1>
+                    ${lunarDisplay}
+                    <div class="mt-4">${yiJiHtml}</div>
                 </div>
                 ${dayMemories.length > 0 ? `
                     <div class="bg-orange-50 p-4 border-t border-orange-100">
@@ -1349,19 +1392,13 @@
         // 聊天視圖
         function renderChat() {
             let visibleMessages = state.messages;
-            if (state.backendMode === 'local' && state.role === 'child') {
-                visibleMessages = state.messages.filter(m => m.childId === 'child_1');
-            }
-
             return `
                 <div class="flex flex-col h-full min-h-0 bg-[#FFF8F0]">
                     <div id="chatMessages" class="flex-1 min-h-0 px-4 pt-4 pb-3 space-y-6 overflow-y-auto no-scrollbar">
                         <div class="text-center text-xs text-gray-400 mb-4">今天</div>
-                        
+
                         ${visibleMessages.map(msg => {
-                            const isMe = state.backendMode === 'server'
-                                ? msg.senderId === state.authUid || msg.uid === state.authUid
-                                : (state.role === 'senior' && msg.senderId === 'senior') || (state.role === 'child' && msg.senderId === 'child_1');
+                            const isMe = msg.senderId === state.authUid || msg.uid === state.authUid;
                             
                             // 更新為使用者自己設定的名字和頭像 (僅限當前使用者發送的訊息)
                             const displayAvatar = isMe ? state.userAvatar : (msg.senderName[0] || '👤');
@@ -1554,7 +1591,7 @@
                         <div class="space-y-3">
                             <div class="bg-orange-50 border border-orange-100 rounded-2xl p-4">
                                 <p class="font-bold text-brand-dark mb-1"><i class="fa-solid fa-display mr-2"></i>目前狀態</p>
-                                <p class="text-sm text-gray-600">${state.backendMode === 'server' ? '已連接自架服務器' : '本機模式'}。家庭碼：${state.familyId || state.calendarCode || '尚未建立'}。</p>
+                                <p class="text-sm text-gray-600">已連接自架服務器。家庭碼：${state.familyId || state.calendarCode || '尚未建立'}。</p>
                             </div>
                             <div class="bg-blue-50 border border-blue-100 rounded-2xl p-4">
                                 <p class="font-bold text-blue-700 mb-1"><i class="fa-solid fa-server mr-2"></i>自託管伺服器</p>
@@ -1828,7 +1865,7 @@
                             await connectFamily(joinCodeInput.value, false);
                             state.appReady = true;
                             render();
-                            setTimeout(() => showMessage(state.backendMode === 'local' ? '成功加入本機家庭日曆！' : '成功加入同步家庭日曆！'), 500);
+                            setTimeout(() => showMessage('成功加入同步家庭日曆！'), 500);
                         } catch (error) {
                             state.errorMsg = error.message === 'family-not-found' ? '找不到這個家庭碼，請確認家人已建立。' : '加入失敗，請稍後再試。';
                             render();
@@ -1839,7 +1876,7 @@
                         await connectFamily(state.calendarCode, true);
                         state.appReady = true;
                         render();
-                        setTimeout(() => showMessage(`${state.backendMode === 'local' ? '已建立本機家庭日曆' : '已建立同步家庭日曆'}！邀請碼是 ${state.calendarCode}。`), 500);
+                        setTimeout(() => showMessage(`已建立同步家庭日曆！邀請碼是 ${state.calendarCode}。`), 500);
                     }
                     // 主應用程式操作
                     else if (action === 'switchTab') {
@@ -2539,7 +2576,7 @@
             const message = {
                 id: Date.now().toString(),
                 uid: state.authUid || null,
-                senderId: state.backendMode === 'local' ? (state.role === 'child' ? 'child_1' : 'senior') : state.authUid,
+                senderId: state.authUid,
                 senderName: state.userName || '我',
                 type: override?.type || 'text',
                 content,
@@ -2617,6 +2654,9 @@
             // 嘗試連接伺服器
             const connected = await initCloudBackend();
             console.log('[beckon] Server connection result:', connected, 'mode:', state.backendMode);
+
+            // 載入今日黃曆
+            fetchAlmanac().then(() => render());
 
             if (state.appReady && state.familyId && state.backendMode === 'server') {
                 connectFamily(state.familyId, true).catch(error => {

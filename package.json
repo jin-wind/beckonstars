@@ -3,5 +3,6 @@
     "api-server": "node scripts/local-api-server.js"
   },
   "dependencies": {
+    "lunar-javascript": "^1.7.7"
   }
 }
