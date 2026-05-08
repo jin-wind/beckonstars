@@ -14,6 +14,7 @@
     <link rel="apple-touch-icon" href="icons/icon.svg">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
         html {
@@ -125,13 +126,17 @@
         };
         const state = {
             appReady: false,         // 是否已完成引導流程
-            onboardingStep: 1,       // 1:選擇角色, 2:設定檔案, 3:綁定日曆
+            onboardingStep: 1,       // 1:Google登入, 2:選擇角色, 3:設定檔案, 4:綁定日曆
             role: null,              // 'senior' 或 'child'
             userName: '',            // 使用者名稱
             userAvatar: null,        // 使用者頭像
             connectionMode: null,    // 'select', 'create', 'join'
             calendarCode: null,      // 系統生成的6位數邀請碼
             errorMsg: '',            // 介面錯誤提示
+
+            // Google 認證
+            authToken: null,         // JWT Token
+            googleUser: null,        // Google 用戶資訊 { userId, email, name, picture, families }
 
             currentTab: 'calendar',  // 'calendar', 'chat', 'rewards'
             calendarMode: 'tear-off',// 'tear-off', 'monthly'
@@ -611,12 +616,16 @@
         }
 
         async function serverApi(path, options = {}) {
+            const headers = {
+                'Content-Type': 'application/json',
+                ...(options.headers || {})
+            };
+            if (state.authToken) {
+                headers['Authorization'] = `Bearer ${state.authToken}`;
+            }
             const response = await fetch(`${selfHostedApiBase}${path}`, {
                 ...options,
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...(options.headers || {})
-                }
+                headers
             });
             if (!response.ok) {
                 const error = new Error(`server-${response.status}`);
@@ -624,6 +633,100 @@
                 throw error;
             }
             return response.status === 204 ? null : response.json();
+        }
+
+        // Google 登入
+        const GOOGLE_CLIENT_ID = '747682384006-3qn591l4dj0ou1kqs3cr32ehr1vgqboo.apps.googleusercontent.com';
+
+        function initGoogleSignIn() {
+            if (typeof google === 'undefined' || !google.accounts) {
+                console.warn('[auth] Google Identity Services not loaded');
+                return;
+            }
+            google.accounts.id.initialize({
+                client_id: GOOGLE_CLIENT_ID,
+                callback: handleGoogleCredentialResponse,
+                auto_select: true
+            });
+        }
+
+        async function handleGoogleCredentialResponse(response) {
+            try {
+                console.log('[auth] Google Sign-In successful');
+                const result = await serverApi('/api/auth/google', {
+                    method: 'POST',
+                    body: JSON.stringify({ idToken: response.credential })
+                });
+
+                state.authToken = result.token;
+                state.googleUser = result.user;
+                state.authUid = result.user.userId;
+                state.userName = result.user.name;
+                state.userAvatar = '👤';
+
+                // 保存到 localStorage
+                localStorage.setItem('beckon-stars-auth-token', result.token);
+                localStorage.setItem('beckon-stars-google-user', JSON.stringify(result.user));
+
+                console.log('[auth] Logged in as:', result.user.name, result.user.email);
+
+                // 如果用戶已有家庭，直接進入
+                if (result.user.families && result.user.families.length > 0) {
+                    state.familyId = result.user.families[0];
+                    state.calendarCode = state.familyId;
+                    state.appReady = true;
+                    state.role = 'child'; // 預設角色，之後可改
+                    subscribeFamilyMessages(state.familyId);
+                    subscribeFamilyMemories(state.familyId);
+                    render();
+                    setTimeout(() => showMessage(`歡迎回來，${result.user.name}！`), 500);
+                } else {
+                    // 新用戶，進入角色選擇
+                    state.onboardingStep = 2;
+                    render();
+                }
+            } catch (error) {
+                console.error('[auth] Google login failed:', error);
+                state.errorMsg = 'Google 登入失敗，請稍後再試。';
+                render();
+            }
+        }
+
+        function signInWithGoogle() {
+            if (typeof google === 'undefined' || !google.accounts) {
+                state.errorMsg = 'Google 登入服務未載入，請檢查網絡連接。';
+                render();
+                return;
+            }
+            google.accounts.id.prompt();
+        }
+
+        function restoreAuthState() {
+            const token = localStorage.getItem('beckon-stars-auth-token');
+            const userJson = localStorage.getItem('beckon-stars-google-user');
+            if (token && userJson) {
+                try {
+                    state.authToken = token;
+                    state.googleUser = JSON.parse(userJson);
+                    state.authUid = state.googleUser.userId;
+                    state.userName = state.googleUser.name;
+                    return true;
+                } catch (e) {
+                    console.warn('[auth] Failed to restore auth state:', e);
+                }
+            }
+            return false;
+        }
+
+        function signOut() {
+            state.authToken = null;
+            state.googleUser = null;
+            state.authUid = null;
+            localStorage.removeItem('beckon-stars-auth-token');
+            localStorage.removeItem('beckon-stars-google-user');
+            if (typeof google !== 'undefined' && google.accounts) {
+                google.accounts.id.disableAutoSelect();
+            }
         }
 
         async function initServerBackend() {
@@ -827,21 +930,25 @@
             const connected = await initCloudBackend();
             if (!connected) return false;
 
-            await serverApi(`/api/families/${encodeURIComponent(familyId)}/connect`, {
+            const result = await serverApi(`/api/families/${encodeURIComponent(familyId)}/connect`, {
                 method: 'POST',
                 body: JSON.stringify({
                     shouldCreate,
-                    member: {
-                        uid: state.authUid,
-                        name: state.userName || '家庭成員',
-                        role: state.role || 'child',
-                        avatar: state.userAvatar || ''
-                    }
+                    name: state.userName || '家庭成員',
+                    role: state.role || 'child',
+                    avatar: state.userAvatar || ''
                 })
             }).catch(error => {
                 if (error.status === 404) throw new Error('family-not-found');
+                if (error.status === 401) throw new Error('unauthorized');
                 throw error;
             });
+
+            // 更新用戶資訊
+            if (result?.member) {
+                state.authUid = result.member.uid;
+            }
+
             subscribeFamilyMessages(familyId);
             subscribeFamilyMemories(familyId);
             return true;
@@ -1111,13 +1218,42 @@
 
         // --- 登入/註冊引導流程 (Onboarding) ---
         function renderOnboardingFlow() {
-            if (state.onboardingStep === 1) return renderStep1Role();
-            if (state.onboardingStep === 2) return renderStep2Profile();
-            if (state.onboardingStep === 3) return renderStep3Connect();
+            if (state.onboardingStep === 1) return renderStep1GoogleLogin();
+            if (state.onboardingStep === 2) return renderStep2Role();
+            if (state.onboardingStep === 3) return renderStep3Profile();
+            if (state.onboardingStep === 4) return renderStep4Connect();
         }
 
-        // 步驟 1: 選擇角色
-        function renderStep1Role() {
+        // 步驟 1: Google 登入
+        function renderStep1GoogleLogin() {
+            return `
+                <div class="flex flex-col items-center justify-center h-full p-8 text-center bg-gradient-to-b from-[#FFF8F0] to-[#FFE5D0] animate-fadeIn">
+                    <div class="w-28 h-28 bg-white rounded-full flex items-center justify-center shadow-lg mb-6">
+                        <i class="fa-solid fa-star text-5xl text-brand"></i>
+                    </div>
+                    <h1 class="text-4xl font-bold text-gray-800 mb-2 tracking-wider">星喚</h1>
+                    <p class="text-lg text-gray-600 mb-10">Beckon Stars</p>
+
+                    <h2 class="text-xl font-medium text-gray-700 mb-6">使用 Google 帳號登入</h2>
+                    <p class="text-sm text-gray-500 mb-8">登入後即可與家人同步日曆、聊天和回憶</p>
+
+                    <button class="action-btn w-full bg-white text-gray-700 text-xl font-bold py-4 px-6 rounded-2xl shadow-md mb-4 hover:bg-gray-50 transition-colors flex items-center justify-center gap-3 border border-gray-200" data-action="googleLogin">
+                        <svg width="24" height="24" viewBox="0 0 24 24">
+                            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
+                            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                        </svg>
+                        使用 Google 登入
+                    </button>
+
+                    ${state.errorMsg ? `<p class="text-red-500 text-sm mt-4 animate-shake">${state.errorMsg}</p>` : ''}
+                </div>
+            `;
+        }
+
+        // 步驟 2: 選擇角色
+        function renderStep2Role() {
             return `
                 <div class="flex flex-col items-center justify-center h-full p-8 text-center bg-gradient-to-b from-[#FFF8F0] to-[#FFE5D0] animate-fadeIn">
                     <div class="w-28 h-28 bg-white rounded-full flex items-center justify-center shadow-lg mb-6">
@@ -1139,7 +1275,7 @@
         }
 
         // 步驟 2: 設定檔案
-        function renderStep2Profile() {
+        function renderStep3Profile() {
             const avatarOptions = state.role === 'senior' ? avatars.senior : avatars.child;
             if (!state.userAvatar || !avatarOptions.includes(state.userAvatar)) {
                 state.userAvatar = avatarOptions[0]; // 設置預設頭像
@@ -1178,7 +1314,7 @@
         }
 
         // 步驟 3: 綁定日曆
-        function renderStep3Connect() {
+        function renderStep4Connect() {
             if (!state.connectionMode || state.connectionMode === 'select') {
                 return `
                     <div class="flex flex-col h-full p-8 bg-[#FFF8F0] animate-fadeIn">
@@ -1978,10 +2114,13 @@
                     }
 
                     // Onboarding 操作
-                    if (action === 'setRole') {
+                    if (action === 'googleLogin') {
+                        signInWithGoogle();
+                    }
+                    else if (action === 'setRole') {
                         state.role = newBtn.getAttribute('data-role');
                         state.userAvatar = null; // 重置頭像確保切換角色時重新賦予預設值
-                        state.onboardingStep = 2;
+                        state.onboardingStep = 3;
                         render();
                     } 
                     else if (action === 'backStep') {
@@ -2003,7 +2142,7 @@
                             return;
                         }
                         state.userName = nameInput.value.trim();
-                        state.onboardingStep = 3;
+                        state.onboardingStep = 4;
                         render();
                     }
                     else if (action === 'setConnectionMode') {
@@ -2028,16 +2167,33 @@
                             render();
                             setTimeout(() => showMessage('成功加入同步家庭日曆！'), 500);
                         } catch (error) {
-                            state.errorMsg = error.message === 'family-not-found' ? '找不到這個家庭碼，請確認家人已建立。' : '加入失敗，請稍後再試。';
+                            if (error.message === 'unauthorized') {
+                                state.errorMsg = '登入已過期，請重新登入。';
+                                state.onboardingStep = 1;
+                                signOut();
+                            } else {
+                                state.errorMsg = error.message === 'family-not-found' ? '找不到這個家庭碼，請確認家人已建立。' : '加入失敗，請稍後再試。';
+                            }
                             render();
                         }
                     }
                     else if (action === 'finishOnboarding') {
                         if (!state.calendarCode) state.calendarCode = Math.floor(100000 + Math.random() * 900000).toString();
-                        await connectFamily(state.calendarCode, true);
-                        state.appReady = true;
-                        render();
-                        setTimeout(() => showMessage(`已建立同步家庭日曆！邀請碼是 ${state.calendarCode}。`), 500);
+                        try {
+                            await connectFamily(state.calendarCode, true);
+                            state.appReady = true;
+                            render();
+                            setTimeout(() => showMessage(`已建立同步家庭日曆！邀請碼是 ${state.calendarCode}。`), 500);
+                        } catch (error) {
+                            if (error.message === 'unauthorized') {
+                                state.errorMsg = '登入已過期，請重新登入。';
+                                state.onboardingStep = 1;
+                                signOut();
+                            } else {
+                                state.errorMsg = '建立家庭失敗，請稍後再試。';
+                            }
+                            render();
+                        }
                     }
                     // 主應用程式操作
                     else if (action === 'switchTab') {
@@ -2818,6 +2974,13 @@
             registerPwa();
             updateNotificationPermission();
             loadDemoData();
+
+            // 初始化 Google Sign-In
+            setTimeout(() => initGoogleSignIn(), 1000);
+
+            // 嘗試恢復登入狀態
+            const hasAuth = restoreAuthState();
+
             render(); // 先渲染，讓使用者看到畫面
 
             // 嘗試連接伺服器
@@ -2827,14 +2990,31 @@
             // 載入今日黃曆
             fetchAlmanac().then(() => render());
 
-            if (state.appReady && state.familyId && state.backendMode === 'server') {
+            if (hasAuth && state.googleUser) {
+                // 已登入，檢查是否有家庭
+                if (state.googleUser.families && state.googleUser.families.length > 0) {
+                    state.familyId = state.googleUser.families[0];
+                    state.calendarCode = state.familyId;
+                    state.appReady = true;
+                    if (!state.role) state.role = 'child';
+                    subscribeFamilyMessages(state.familyId);
+                    subscribeFamilyMemories(state.familyId);
+                    render();
+                    setTimeout(() => showMessage(`歡迎回來，${state.googleUser.name}！`), 500);
+                } else {
+                    // 已登入但無家庭，進入角色選擇
+                    state.onboardingStep = 2;
+                    render();
+                }
+            } else if (state.appReady && state.familyId && state.backendMode === 'server') {
+                // 舊版相容：無 Google 登入但有家庭
                 connectFamily(state.familyId, true).catch(error => {
                     console.warn('[beckon] Server family restore failed', error);
                 }).finally(() => {
-                    render(); // 連接完成後重新渲染
+                    render();
                 });
             } else {
-                render(); // 重新渲染以更新 backendMode 顯示
+                render();
             }
         };
 

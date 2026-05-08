@@ -6,3 +6,5 @@ android/build/
 android/app/build/
 android/local.properties
 serviceAccountKey.json
+client_secret_*.json
+server_secret_*.json

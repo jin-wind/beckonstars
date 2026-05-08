@@ -5,6 +5,59 @@ const path = require('path');
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 const { Lunar, Solar } = require('lunar-javascript');
+const jwt = require('jsonwebtoken');
+
+// Google OAuth 配置
+const GOOGLE_WEB_CLIENT_ID = '747682384006-3qn591l4dj0ou1kqs3cr32ehr1vgqboo.apps.googleusercontent.com';
+const GOOGLE_ANDROID_CLIENT_ID = '747682384006-aqpl430pqtf1fbrnco67hup2unr8u2qe.apps.googleusercontent.com';
+const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
+const JWT_EXPIRES_IN = '30d';
+
+// 驗證 Google ID Token
+async function verifyGoogleToken(idToken) {
+  try {
+    const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
+    if (!response.ok) return null;
+    const payload = await response.json();
+    // 驗證 audience 是否為我們的 Client ID
+    if (payload.aud !== GOOGLE_WEB_CLIENT_ID && payload.aud !== GOOGLE_ANDROID_CLIENT_ID) {
+      console.warn('[auth] Invalid audience:', payload.aud);
+      return null;
+    }
+    return {
+      googleId: payload.sub,
+      email: payload.email,
+      name: payload.name || payload.email.split('@')[0],
+      picture: payload.picture || '',
+      emailVerified: payload.email_verified === 'true'
+    };
+  } catch (error) {
+    console.error('[auth] Google token verification failed:', error.message);
+    return null;
+  }
+}
+
+// 生成 JWT Token
+function generateToken(userId, email) {
+  return jwt.sign({ userId, email }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+}
+
+// 驗證 JWT Token
+function verifyToken(token) {
+  try {
+    return jwt.verify(token, JWT_SECRET);
+  } catch (error) {
+    return null;
+  }
+}
+
+// 從請求中提取用戶身份
+function getAuthUser(req) {
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  if (!token) return null;
+  return verifyToken(token);
+}
 
 // 簡體轉繁體映射（黃曆宜忌常用詞）
 const SIMP_TO_TRAD = {
@@ -454,7 +507,80 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 200, {
         ok: true,
         name: 'beckon-stars-local-api',
-        time: new Date().toISOString()
+        time: new Date().toISOString(),
+        auth: true
+      });
+      return;
+    }
+
+    // Google 登入
+    if (req.method === 'POST' && pathname === '/api/auth/google') {
+      const body = await readBody(req);
+      const googleUser = await verifyGoogleToken(body.idToken);
+      if (!googleUser) {
+        sendJson(res, 401, { error: 'invalid-token', message: 'Google 登入驗證失敗' });
+        return;
+      }
+
+      const db = await readDb();
+      if (!db.users) db.users = {};
+
+      // 查找或建立用戶
+      let user = db.users[googleUser.googleId];
+      if (!user) {
+        user = {
+          userId: googleUser.googleId,
+          email: googleUser.email,
+          name: googleUser.name,
+          picture: googleUser.picture,
+          createdAt: new Date().toISOString(),
+          families: []
+        };
+        db.users[googleUser.googleId] = user;
+        await writeDb(db);
+        console.log(`[auth] 🆕 新用戶註冊: ${user.name} (${user.email})`);
+      } else {
+        user.name = googleUser.name;
+        user.picture = googleUser.picture;
+        user.lastLoginAt = new Date().toISOString();
+        await writeDb(db);
+        console.log(`[auth] 🔑 用戶登入: ${user.name} (${user.email})`);
+      }
+
+      const token = generateToken(user.userId, user.email);
+      sendJson(res, 200, {
+        ok: true,
+        token,
+        user: {
+          userId: user.userId,
+          email: user.email,
+          name: user.name,
+          picture: user.picture,
+          families: user.families || []
+        }
+      });
+      return;
+    }
+
+    // 取得用戶資訊（需要登入）
+    if (req.method === 'GET' && pathname === '/api/auth/me') {
+      const authUser = getAuthUser(req);
+      if (!authUser) {
+        sendJson(res, 401, { error: 'unauthorized' });
+        return;
+      }
+      const db = await readDb();
+      const user = db.users?.[authUser.userId];
+      if (!user) {
+        sendJson(res, 404, { error: 'user-not-found' });
+        return;
+      }
+      sendJson(res, 200, {
+        userId: user.userId,
+        email: user.email,
+        name: user.name,
+        picture: user.picture,
+        families: user.families || []
       });
       return;
     }
@@ -512,34 +638,61 @@ const server = http.createServer(async (req, res) => {
     const familyId = parts[2];
 
     if (req.method === 'POST' && parts[3] === 'connect') {
+      const authUser = getAuthUser(req);
+      if (!authUser) {
+        sendJson(res, 401, { error: 'unauthorized', message: '請先登入 Google 帳號' });
+        return;
+      }
+
       const body = await readBody(req);
       const db = await readDb();
-      const member = body.member || {};
+      const user = db.users?.[authUser.userId];
+      if (!user) {
+        sendJson(res, 404, { error: 'user-not-found' });
+        return;
+      }
+
       let family = getFamily(db, familyId);
       if (!family) {
         if (!body.shouldCreate) {
           sendJson(res, 404, { error: 'family-not-found' });
           return;
         }
-        family = createFamily(db, familyId, member.uid || 'unknown');
+        family = createFamily(db, familyId, authUser.userId);
       }
 
-      if (member.uid) {
-        family.members[member.uid] = {
-          uid: member.uid,
-          name: cleanText(member.name, '家庭成員'),
-          role: cleanText(member.role, 'child'),
-          avatar: cleanText(member.avatar),
-          joinedAt: family.members[member.uid]?.joinedAt || new Date().toISOString(),
-          lastSeenAt: new Date().toISOString()
-        };
+      const memberRole = cleanText(body.role, 'child');
+      const memberName = cleanText(body.name, user.name || '家庭成員');
+
+      family.members[authUser.userId] = {
+        uid: authUser.userId,
+        name: memberName,
+        role: memberRole,
+        avatar: cleanText(body.avatar),
+        email: user.email,
+        picture: user.picture,
+        joinedAt: family.members[authUser.userId]?.joinedAt || new Date().toISOString(),
+        lastSeenAt: new Date().toISOString()
+      };
+
+      // 將家庭加入用戶的家庭列表
+      if (!user.families) user.families = [];
+      if (!user.families.includes(familyId)) {
+        user.families.push(familyId);
       }
 
       writeDb(db);
       const memberCount = Object.keys(family.members).length;
-      const isNew = !family.members[member.uid]?.joinedAt || family.members[member.uid].joinedAt === family.members[member.uid].lastSeenAt;
-      console.log(`[data] 🔗 ${isNew ? '新成員加入' : '成員連線'} [${familyId}] ${member.name} (${member.role}) - 共 ${memberCount} 位成員`);
-      sendJson(res, 200, { familyId, member: family.members[member.uid] || null });
+      const isNew = family.members[authUser.userId].joinedAt === family.members[authUser.userId].lastSeenAt;
+      console.log(`[data] 🔗 ${isNew ? '新成員加入' : '成員連線'} [${familyId}] ${memberName} (${memberRole}) - 共 ${memberCount} 位成員`);
+      sendJson(res, 200, {
+        familyId,
+        member: family.members[authUser.userId],
+        family: {
+          familyId: family.familyId,
+          members: Object.values(family.members).map(m => ({ uid: m.uid, name: m.name, role: m.role, avatar: m.avatar }))
+        }
+      });
       return;
     }
 
