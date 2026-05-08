@@ -627,11 +627,16 @@
             }
         }
 
+        const almanacCache = {};
+
         async function fetchAlmanac(dateStr) {
+            const key = dateStr || 'today';
+            if (almanacCache[key]) return almanacCache[key];
             try {
                 const dateParam = dateStr ? `?date=${dateStr}` : '';
                 const data = await serverApi(`/api/almanac${dateParam}`);
-                state.almanac = data;
+                almanacCache[key] = data;
+                if (!dateStr) state.almanac = data;
                 return data;
             } catch (e) {
                 console.warn('Almanac fetch failed', e);
@@ -936,6 +941,7 @@
                     <main class="flex-1 min-h-0 ${state.currentTab === 'chat' ? 'overflow-hidden pb-[calc(5.75rem+env(safe-area-inset-bottom))]' : 'overflow-y-auto no-scrollbar pb-[calc(5.75rem+env(safe-area-inset-bottom))]'} animate-fadeIn">
                         ${state.currentTab === 'calendar' ? renderCalendar() : ''}
                         ${state.currentTab === 'chat' ? renderChat() : ''}
+                        ${state.currentTab === 'leaderboard' ? renderLeaderboard() : ''}
                         ${state.currentTab === 'rewards' ? renderRewards() : ''}
                     </main>
                     ${renderBottomNav()}
@@ -1112,7 +1118,7 @@
 
         // 頂部導航列 (加入一鍵刪除按鈕)
         function renderHeader() {
-            const titles = { 'calendar': '共用日曆', 'chat': '溫馨對話', 'rewards': '家庭獎勵' };
+            const titles = { 'calendar': '共用日曆', 'chat': '溫馨對話', 'rewards': '家庭獎勵', 'leaderboard': '活躍度排行榜' };
             const backendLabel = '自架';
             const backendIcon = 'fa-cloud';
             return `
@@ -1157,6 +1163,7 @@
             const tabs = [
                 { id: 'calendar', icon: 'fa-calendar-days', label: '日曆' },
                 { id: 'chat', icon: 'fa-comments', label: '聊天' },
+                { id: 'leaderboard', icon: 'fa-ranking-star', label: '排行榜' },
                 { id: 'rewards', icon: 'fa-gift', label: '獎勵' }
             ];
 
@@ -1244,7 +1251,8 @@
             const isCurrentMonth = displayYear === today.getFullYear() && displayMonth === today.getMonth() + 1;
             const isToday = isCurrentMonth && displayDay === today.getDate();
             const dayMemories = memories.filter(m => m.date === displayDay && m.month === displayMonth);
-            const almanac = state.almanac;
+            const dateKey = `${displayYear}-${String(displayMonth).padStart(2, '0')}-${String(displayDay).padStart(2, '0')}`;
+            const almanac = almanacCache[dateKey] || state.almanac;
             const hasAlmanac = almanac && almanac.ok;
 
             // 農曆日期顯示
@@ -1306,6 +1314,9 @@
             const daysInMonth = new Date(state.calendarYear, state.calendarMonth, 0).getDate();
             const displayDay = Math.min(state.calendarDay || today.getDate(), daysInMonth);
             const isCurrentMonth = state.calendarYear === today.getFullYear() && state.calendarMonth === today.getMonth() + 1;
+            // 預取當前顯示日期的黃曆
+            const dateKey = `${state.calendarYear}-${String(state.calendarMonth).padStart(2, '0')}-${String(displayDay).padStart(2, '0')}`;
+            if (!almanacCache[dateKey]) fetchAlmanac(dateKey);
 
             return `
                 <div class="bg-white rounded-3xl shadow-xl overflow-hidden border-2 border-gray-100 relative" id="tearOffCalendar">
@@ -1392,6 +1403,9 @@
         // 聊天視圖
         function renderChat() {
             let visibleMessages = state.messages;
+            if (state.role === 'child') {
+                visibleMessages = state.messages.filter(m => m.childId === 'senior' || m.senderId === state.authUid);
+            }
             return `
                 <div class="flex flex-col h-full min-h-0 bg-[#FFF8F0]">
                     <div id="chatMessages" class="flex-1 min-h-0 px-4 pt-4 pb-3 space-y-6 overflow-y-auto no-scrollbar">
@@ -1486,6 +1500,93 @@
                             <p class="text-xs opacity-80 mt-1">按住說話；手指向上滑到取消區即可取消</p>
                         </div>
                     ` : ''}
+                </div>
+            `;
+        }
+
+        // 排行榜視圖
+        function renderLeaderboard() {
+            // 計算每個成員的活躍度分數
+            const memberScores = {};
+            state.messages.forEach(msg => {
+                const key = msg.senderId || msg.uid || 'unknown';
+                if (!memberScores[key]) {
+                    memberScores[key] = {
+                        id: key,
+                        name: msg.senderName || '家庭成員',
+                        avatar: (msg.senderName || '家')[0],
+                        score: 0,
+                        messageCount: 0
+                    };
+                }
+                memberScores[key].score += 10;
+                memberScores[key].messageCount++;
+            });
+
+            // 計算回憶貢獻
+            state.memories.forEach(mem => {
+                const key = mem.uid || mem.childId || 'unknown';
+                if (!memberScores[key]) {
+                    memberScores[key] = {
+                        id: key,
+                        name: mem.childName || '家庭成員',
+                        avatar: (mem.childName || '家')[0],
+                        score: 0,
+                        messageCount: 0
+                    };
+                }
+                memberScores[key].score += 15;
+            });
+
+            // 排序
+            const sorted = Object.values(memberScores).sort((a, b) => b.score - a.score);
+
+            // 如果沒有數據，顯示提示
+            if (sorted.length === 0) {
+                return `
+                    <div class="flex flex-col items-center justify-center h-full p-8 text-center">
+                        <div class="w-20 h-20 bg-orange-100 rounded-full flex items-center justify-center mb-4">
+                            <i class="fa-solid fa-ranking-star text-3xl text-brand"></i>
+                        </div>
+                        <h3 class="text-xl font-bold text-gray-800 mb-2">排行榜暫無數據</h3>
+                        <p class="text-gray-500">開始聊天和分享回憶後，排行榜會自動更新！</p>
+                    </div>
+                `;
+            }
+
+            // 生成排行榜項目
+            const rankIcons = ['👑', '2', '3'];
+            const subtitles = ['本週互動最熱烈！', '繼續保持～', '加油追上去！'];
+            const defaultSubtitles = ['潛水中...', '等你加入！', '一起來聊天吧'];
+
+            const rankItems = sorted.map((member, index) => {
+                const rank = index + 1;
+                const rankClass = rank <= 3 ? `rank-${rank}` : '';
+                const icon = rank <= 3 ? rankIcons[index] : String(rank);
+                const subtitle = rank <= 3 ? subtitles[index] : (member.messageCount > 0 ? `${member.messageCount} 則訊息` : defaultSubtitles[index % defaultSubtitles.length]);
+                const avatarBg = rank === 1 ? 'bg-[#f6d1aa] text-[#b66122]' : (rank <= 3 ? 'bg-orange-100 text-brand-dark' : 'bg-gray-100 text-gray-500');
+
+                return `
+                    <div class="flex items-center py-4 px-5 border-b border-gray-50 ${rankClass}">
+                        <div class="w-8 text-center mr-4 ${rank === 1 ? 'text-2xl' : rank === 2 ? 'text-xl' : rank === 3 ? 'text-lg' : 'text-base'} ${rank === 1 ? 'text-yellow-400' : rank === 2 ? 'text-gray-400' : rank === 3 ? 'text-amber-600' : 'text-gray-400'} font-bold">${icon}</div>
+                        <div class="w-12 h-12 rounded-full ${avatarBg} flex items-center justify-center text-xl font-bold mr-4">${member.avatar}</div>
+                        <div class="flex-1">
+                            <div class="font-bold text-gray-800 text-base">${member.name}</div>
+                            <div class="text-xs text-gray-400">${subtitle}</div>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-lg font-bold text-brand">${member.score.toLocaleString()}</div>
+                            <div class="text-xs text-gray-400">分</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            return `
+                <div class="p-6">
+                    <div class="bg-white rounded-3xl shadow-sm overflow-hidden">
+                        ${rankItems}
+                    </div>
                 </div>
             `;
         }
@@ -1644,14 +1745,13 @@
             if (state.showModal === 'addMemory') {
                 const memoryTypes = [
                     { id: 'photo', label: '相片', icon: 'fa-image', classes: 'bg-blue-50 border-blue-100 text-blue-500' },
-                    { id: 'audio', label: '錄音', icon: 'fa-microphone', classes: 'bg-orange-50 border-orange-100 text-orange-500' },
                     { id: 'text', label: '文字', icon: 'fa-pencil', classes: 'bg-green-50 border-green-100 text-green-500' }
                 ];
                 modalContent = `
                     <div class="bg-white w-full rounded-t-3xl p-6 transform transition-transform animate-slideUp">
                         <div class="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6"></div>
                         <h3 class="text-2xl font-bold text-gray-800 mb-6 text-center">記錄今日點滴</h3>
-                        <div class="grid grid-cols-3 gap-4 mb-8">
+                        <div class="grid grid-cols-2 gap-4 mb-8">
                             ${memoryTypes.map(type => `
                                 <button class="action-btn flex flex-col items-center p-4 rounded-2xl border hover:shadow-sm ${type.classes} ${state.pendingMemoryType === type.id ? 'ring-2 ring-brand shadow-md' : ''}" data-action="selectMemoryType" data-type="${type.id}">
                                     <i class="fa-solid ${type.icon} text-3xl mb-2"></i><span class="font-bold text-gray-700">${type.label}</span>
@@ -1984,7 +2084,7 @@
                             childId: state.role === 'child' ? 'child_1' : 'senior',
                             childName: state.userName || (state.role === 'child' ? '我' : '媽媽'),
                             type: state.pendingMemoryType,
-                            content: state.pendingMemoryType === 'audio' ? `錄音分享：${content}` : content,
+                            content,
                             img: state.pendingMemoryType === 'photo' ? (state.pendingMemoryImage || null) : null
                         };
 
@@ -2107,7 +2207,7 @@
                     const file = event.target.files?.[0];
                     if (!file) return;
                     const img = await readFileAsDataUrl(file);
-                    await sendChatMessage({ type: 'photo', content: '傳送了一張相片', img });
+                    await sendChatMessage({ type: 'photo', content: '', img });
                 });
             }
 
@@ -2144,8 +2244,12 @@
 
             let visibleMemories = state.memories;
             if (state.role === 'child') visibleMemories = visibleMemories.filter(m => m.childId === 'child_1');
+            // 預取新月份的黃曆
+            const targetDay = Math.min(state.calendarDay || today.getDate(), new Date(newYear, newMonth, 0).getDate());
+            const newDateKey = `${newYear}-${String(newMonth).padStart(2, '0')}-${String(targetDay).padStart(2, '0')}`;
+            fetchAlmanac(newDateKey);
             const newHtml = state.calendarMode === 'tear-off'
-                ? tearOffPageHtml(Math.min(state.calendarDay || today.getDate(), new Date(newYear, newMonth, 0).getDate()), newYear, newMonth, visibleMemories)
+                ? tearOffPageHtml(targetDay, newYear, newMonth, visibleMemories)
                 : monthlyPageHtml(newYear, newMonth, visibleMemories);
 
             doCalendarTransition(page, container, dir, newHtml, () => {
@@ -2190,6 +2294,9 @@
                     if (newMonth > 12) { newMonth = 1; newYear++; }
                     newDay = 1;
                 }
+                // 預取新日期的黃曆
+                const newDateKey = `${newYear}-${String(newMonth).padStart(2, '0')}-${String(newDay).padStart(2, '0')}`;
+                fetchAlmanac(newDateKey);
                 let visibleMemories = state.memories;
                 if (state.role === 'child') visibleMemories = visibleMemories.filter(m => m.childId === 'child_1');
                 newHtml = tearOffPageHtml(newDay, newYear, newMonth, visibleMemories);
