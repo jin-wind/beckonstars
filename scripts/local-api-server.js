@@ -661,7 +661,7 @@ const server = http.createServer(async (req, res) => {
         childId: cleanText(body.childId, 'child_1'),
         createdAt: now.toISOString()
       };
-      if (!message.content) {
+      if (!message.content && !message.img && !message.audio) {
         sendJson(res, 400, { error: 'empty-content' });
         return;
       }
