@@ -583,9 +583,19 @@
                 data.selectedDate = null;
                 data.pendingMemoryImage = '';
                 data.pushStatus = '';
-                data.messages = [];
-                data.memories = [];
                 data.voiceRecording = { active: false, cancel: false, startY: 0 };
+                // 保留最近的數據，避免 localStorage 過大
+                data.messages = (state.messages || []).slice(-50).map(m => ({
+                    id: m.id, senderId: m.senderId, senderName: m.senderName,
+                    type: m.type, content: m.content, time: m.time, childId: m.childId,
+                    uid: m.uid, img: m.img ? '(saved)' : null, audio: null,
+                    transcript: m.transcript || '', aiSummary: m.aiSummary || null
+                }));
+                data.memories = (state.memories || []).slice(-20).map(m => ({
+                    id: m.id, date: m.date, month: m.month, year: m.year,
+                    uid: m.uid, childId: m.childId, childName: m.childName,
+                    type: m.type, content: m.content, img: m.img ? '(saved)' : null
+                }));
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
             }, 500);
         }
@@ -948,7 +958,7 @@
                     let appended = 0;
                     for (const msg of visibleMessages) {
                         if (existingIds.has(String(msg.id))) continue;
-                        const isMe = msg.senderId === state.authUid;
+                        const isMe = msg.senderId === state.authUid || msg.uid === state.authUid;
                         const tempDiv = document.createElement('div');
                         tempDiv.innerHTML = renderSingleChatMessage(msg, isMe);
                         const newEl = tempDiv.firstElementChild;

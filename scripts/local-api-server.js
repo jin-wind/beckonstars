@@ -55,13 +55,17 @@ function ensureDb() {
   }
 }
 
-function readDb() {
+async function readDb() {
   ensureDb();
-  return JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+  const data = await fs.promises.readFile(dbPath, 'utf8');
+  return JSON.parse(data);
 }
 
+let _writeLock = Promise.resolve();
 function writeDb(db) {
-  fs.writeFileSync(dbPath, JSON.stringify(db, null, 2));
+  const payload = JSON.stringify(db, null, 2);
+  _writeLock = _writeLock.then(() => fs.promises.writeFile(dbPath, payload)).catch(() => {});
+  return _writeLock;
 }
 
 function sendJson(res, status, payload) {
@@ -497,7 +501,7 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'POST' && parts[3] === 'connect') {
       const body = await readBody(req);
-      const db = readDb();
+      const db = await readDb();
       const member = body.member || {};
       let family = getFamily(db, familyId);
       if (!family) {
@@ -524,7 +528,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    const db = readDb();
+    const db = await readDb();
     const family = getFamily(db, familyId);
     if (!family) {
       sendJson(res, 404, { error: 'family-not-found' });
@@ -537,7 +541,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'POST' && parts[3] === 'messages' && parts[4] && parts[5] === 'summarize') {
-      const latestDb = readDb();
+      const latestDb = await readDb();
       const latestFamily = getFamily(latestDb, familyId);
       if (!latestFamily) {
         sendJson(res, 404, { error: 'family-not-found' });
@@ -569,7 +573,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'POST' && parts[3] === 'messages' && parts[4] && parts[5] === 'transcribe') {
-      const latestDb = readDb();
+      const latestDb = await readDb();
       const latestFamily = getFamily(latestDb, familyId);
       if (!latestFamily) {
         sendJson(res, 404, { error: 'family-not-found' });
@@ -611,7 +615,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      const latestDb = readDb();
+      const latestDb = await readDb();
       const latestFamily = getFamily(latestDb, familyId);
       if (!latestFamily) {
         sendJson(res, 404, { error: 'family-not-found' });
@@ -637,7 +641,7 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'POST' && parts[3] === 'messages') {
       const body = await readBody(req);
-      const latestDb = readDb();
+      const latestDb = await readDb();
       const latestFamily = getFamily(latestDb, familyId);
       if (!latestFamily) {
         sendJson(res, 404, { error: 'family-not-found' });
@@ -683,7 +687,7 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'POST' && parts[3] === 'memories') {
       const body = await readBody(req);
-      const latestDb = readDb();
+      const latestDb = await readDb();
       const latestFamily = getFamily(latestDb, familyId);
       if (!latestFamily) {
         sendJson(res, 404, { error: 'family-not-found' });
@@ -716,7 +720,7 @@ const server = http.createServer(async (req, res) => {
 
     // --- 影片生成 ---
     if (req.method === 'POST' && parts[3] === 'summary-video') {
-      const latestDb = readDb();
+      const latestDb = await readDb();
       const latestFamily = getFamily(latestDb, familyId);
       if (!latestFamily) {
         sendJson(res, 404, { error: 'family-not-found' });
