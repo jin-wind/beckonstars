@@ -719,6 +719,14 @@
             render();
         }
 
+        // Android 原生 Google 登入回調（Base64 編碼）
+        window.handleNativeGoogleSignInBase64 = async function(encodedToken, encodedEmail, encodedName) {
+            const idToken = atob(encodedToken);
+            const email = atob(encodedEmail);
+            const name = atob(encodedName);
+            return window.handleNativeGoogleSignIn(idToken, email, name);
+        };
+
         // Android 原生 Google 登入回調
         window.handleNativeGoogleSignIn = async function(idToken, email, name) {
             try {

@@ -181,20 +181,42 @@ public class MainActivity extends Activity {
                 String email = account.getEmail();
                 String displayName = account.getDisplayName();
                 Log.i(TAG, "Google Sign-In success: " + email);
+                Log.i(TAG, "ID Token length: " + (idToken != null ? idToken.length() : 0));
+
+                if (idToken == null || idToken.isEmpty()) {
+                    Log.e(TAG, "ID Token is null or empty!");
+                    webView.post(() -> webView.evaluateJavascript(
+                        "window.handleNativeGoogleSignInError && window.handleNativeGoogleSignInError('取得 ID Token 失敗，請確認 Google Cloud Console 設定正確。')",
+                        null
+                    ));
+                    return;
+                }
 
                 // 傳送 ID Token 到 WebView
-                String escapedToken = idToken.replace("\\", "\\\\").replace("'", "\\'");
-                String escapedEmail = (email != null ? email : "").replace("\\", "\\\\").replace("'", "\\'");
-                String escapedName = (displayName != null ? displayName : "").replace("\\", "\\\\").replace("'", "\\'");
+                // 使用 Base64 編碼避免轉義問題
+                String encodedToken = Base64.encodeToString(idToken.getBytes(), Base64.NO_WRAP);
+                String encodedEmail = Base64.encodeToString((email != null ? email : "").getBytes(), Base64.NO_WRAP);
+                String encodedName = Base64.encodeToString((displayName != null ? displayName : "").getBytes(), Base64.NO_WRAP);
 
                 webView.post(() -> webView.evaluateJavascript(
-                    "window.handleNativeGoogleSignIn && window.handleNativeGoogleSignIn('" + escapedToken + "', '" + escapedEmail + "', '" + escapedName + "')",
+                    "window.handleNativeGoogleSignInBase64 && window.handleNativeGoogleSignInBase64('" + encodedToken + "', '" + encodedEmail + "', '" + encodedName + "')",
                     null
                 ));
             } catch (ApiException e) {
-                Log.w(TAG, "Google Sign-In failed: " + e.getStatusCode());
+                Log.e(TAG, "Google Sign-In failed with status code: " + e.getStatusCode());
+                Log.e(TAG, "Error message: " + e.getMessage());
+                String errorMsg;
+                switch (e.getStatusCode()) {
+                    case 10: errorMsg = "開發者錯誤：SHA-1 或套件名稱設定不正確 (DEVELOPER_ERROR)"; break;
+                    case 12500: errorMsg = "Google 登入被取消或發生錯誤"; break;
+                    case 12501: errorMsg = "Google 登入被取消"; break;
+                    case 12502: errorMsg = "Google 登入進行中"; break;
+                    case 7: errorMsg = "網絡連接失敗，請檢查網絡"; break;
+                    default: errorMsg = "Google 登入失敗，錯誤碼: " + e.getStatusCode(); break;
+                }
+                final String finalErrorMsg = errorMsg;
                 webView.post(() -> webView.evaluateJavascript(
-                    "window.handleNativeGoogleSignInError && window.handleNativeGoogleSignInError('Google 登入失敗，錯誤碼: " + e.getStatusCode() + "')",
+                    "window.handleNativeGoogleSignInError && window.handleNativeGoogleSignInError(" + JSONObject.quote(finalErrorMsg) + ")",
                     null
                 ));
             }
