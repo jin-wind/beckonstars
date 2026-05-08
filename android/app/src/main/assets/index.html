@@ -731,10 +731,14 @@
         window.handleNativeGoogleSignIn = async function(idToken, email, name) {
             try {
                 console.log('[auth] Native Google Sign-In success:', email);
+                console.log('[auth] Token length:', idToken.length);
+
                 const result = await serverApi('/api/auth/google', {
                     method: 'POST',
                     body: JSON.stringify({ idToken: idToken })
                 });
+
+                console.log('[auth] Server response:', JSON.stringify(result));
 
                 state.authToken = result.token;
                 state.googleUser = result.user;
@@ -765,7 +769,16 @@
                 }
             } catch (error) {
                 console.error('[auth] Google login failed:', error);
-                state.errorMsg = 'Google 登入失敗，請稍後再試。';
+                console.error('[auth] Error details:', error.message, error.status);
+                let errorMsg = 'Google 登入失敗';
+                if (error.status === 401) {
+                    errorMsg = 'Google 驗證失敗，請確認 Google Cloud Console 設定正確。';
+                } else if (error.status === 0) {
+                    errorMsg = '無法連接到伺服器，請檢查網絡連接。';
+                } else if (error.message) {
+                    errorMsg = `登入失敗: ${error.message}`;
+                }
+                state.errorMsg = errorMsg;
                 render();
             }
         };
