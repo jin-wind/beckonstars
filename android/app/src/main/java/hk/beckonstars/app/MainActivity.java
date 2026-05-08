@@ -604,6 +604,25 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void startGoogleSignIn() {
             runOnUiThread(() -> {
+                // 檢查 Google Play Services 是否可用
+                try {
+                    com.google.android.gms.common.GoogleApiAvailability apiAvailability =
+                        com.google.android.gms.common.GoogleApiAvailability.getInstance();
+                    int resultCode = apiAvailability.isGooglePlayServicesAvailable(MainActivity.this);
+                    if (resultCode != com.google.android.gms.common.ConnectionResult.SUCCESS) {
+                        Log.e(TAG, "Google Play Services not available, code: " + resultCode);
+                        webView.post(() -> webView.evaluateJavascript(
+                            "window.handleNativeGoogleSignInError && window.handleNativeGoogleSignInError('Google Play Services 不可用，請更新 Google Play 服務。錯誤碼: " + resultCode + "')",
+                            null
+                        ));
+                        return;
+                    }
+                } catch (Exception e) {
+                    Log.w(TAG, "Could not check Google Play Services", e);
+                }
+
+                Log.i(TAG, "Starting Google Sign-In...");
+                Log.i(TAG, "Client ID: " + GOOGLE_WEB_CLIENT_ID);
                 Intent signInIntent = googleSignInClient.getSignInIntent();
                 startActivityForResult(signInIntent, REQUEST_GOOGLE_SIGN_IN);
             });
