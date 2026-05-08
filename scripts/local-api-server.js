@@ -408,7 +408,19 @@ function routeParts(req) {
   };
 }
 
+function logRequest(req, status, startTime) {
+  const duration = Date.now() - startTime;
+  const ts = new Date().toISOString().slice(11, 19);
+  console.log(`[${ts}] ${req.method} ${req.url} → ${status} (${duration}ms)`);
+}
+
 const server = http.createServer(async (req, res) => {
+  const startTime = Date.now();
+  const origEnd = res.end.bind(res);
+  res.end = function(...args) {
+    logRequest(req, res.statusCode, startTime);
+    return origEnd(...args);
+  };
   try {
     // 靜態文件：影片
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
@@ -524,6 +536,9 @@ const server = http.createServer(async (req, res) => {
       }
 
       writeDb(db);
+      const memberCount = Object.keys(family.members).length;
+      const isNew = !family.members[member.uid]?.joinedAt || family.members[member.uid].joinedAt === family.members[member.uid].lastSeenAt;
+      console.log(`[data] 🔗 ${isNew ? '新成員加入' : '成員連線'} [${familyId}] ${member.name} (${member.role}) - 共 ${memberCount} 位成員`);
       sendJson(res, 200, { familyId, member: family.members[member.uid] || null });
       return;
     }
@@ -672,6 +687,7 @@ const server = http.createServer(async (req, res) => {
       latestFamily.messages.push(message);
       latestFamily.messages = latestFamily.messages.slice(-500);
       writeDb(latestDb);
+      console.log(`[data] 💬 新訊息 [${familyId}] ${message.senderName}: ${message.type === 'photo' ? '📷 圖片' : message.type === 'audio' ? '🎤 語音' : message.content.slice(0, 50)}`);
       sendJson(res, 201, { message });
       return;
     }
@@ -714,6 +730,7 @@ const server = http.createServer(async (req, res) => {
       latestFamily.memories.push(memory);
       latestFamily.memories = latestFamily.memories.slice(-1000);
       writeDb(latestDb);
+      console.log(`[data] 📝 新回憶 [${familyId}] ${memory.childName}: ${memory.type === 'photo' ? '📷 圖片' : memory.content.slice(0, 50)}`);
       sendJson(res, 201, { memory });
       return;
     }
@@ -767,15 +784,37 @@ server.on('error', (err) => {
 });
 
 server.listen(port, host, async () => {
-  console.log(`Beckon Stars local API listening on http://${host}:${port}`);
+  console.log(`\n${'='.repeat(50)}`);
+  console.log(`🌟 星喚 Beckon Stars API Server`);
+  console.log(`${'='.repeat(50)}`);
+  console.log(`📡 監聽: http://${host}:${port}`);
   try {
     const res = await fetch('https://api.ipify.org?format=json');
     const { ip } = await res.json();
-    console.log(`Public test URL: http://${ip}:${port}/api/health`);
+    console.log(`🌐 公網: http://${ip}:${port}/api/health`);
   } catch {
-    console.log(`Public test URL: (cannot detect public IP, use local IP)`);
+    console.log(`🌐 公網: (無法偵測公網 IP)`);
   }
-  console.log(`LLM summary endpoint: ${llmBaseUrl}/chat/completions (${llmModel})`);
-  console.log(`LLM transcription model: ${llmTranscribeModel}`);
-  console.log(`Database: ${dbPath}`);
+
+  // 顯示資料庫統計
+  try {
+    const db = await readDb();
+    const families = Object.keys(db.families || {});
+    let totalMessages = 0, totalMemories = 0, totalMembers = 0;
+    for (const fid of families) {
+      const f = db.families[fid];
+      totalMessages += (f.messages || []).length;
+      totalMemories += (f.memories || []).length;
+      totalMembers += Object.keys(f.members || {}).length;
+    }
+    console.log(`\n📊 資料庫統計:`);
+    console.log(`   家庭: ${families.length} | 成員: ${totalMembers} | 訊息: ${totalMessages} | 回憶: ${totalMemories}`);
+  } catch (e) {
+    console.log(`📊 資料庫: (讀取統計失敗)`);
+  }
+
+  console.log(`\n🤖 LLM 摘要: ${llmBaseUrl} (${llmModel})`);
+  console.log(`🎤 LLM 轉譯: ${llmTranscribeModel}`);
+  console.log(`💾 資料庫: ${dbPath}`);
+  console.log(`${'='.repeat(50)}\n`);
 });
