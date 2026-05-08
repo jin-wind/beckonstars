@@ -979,6 +979,24 @@
             }
         }
 
+        function appendMessageToChat(msg) {
+            const chatMessages = document.getElementById('chatMessages');
+            if (!chatMessages) return;
+            const isMe = msg.senderId === state.authUid || msg.uid === state.authUid;
+            const anchor = document.getElementById('chatBottomAnchor');
+            const shouldAutoScroll = !isUserScrolledUp();
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = renderSingleChatMessage(msg, isMe);
+            const newEl = tempDiv.firstElementChild;
+            if (newEl && anchor) {
+                chatMessages.insertBefore(newEl, anchor);
+                syncVoicePlayerUi();
+                if (shouldAutoScroll) {
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }
+            }
+        }
+
         function isUserScrolledUp() {
             const container = getChatMessagesContainer();
             if (!container) return false;
@@ -2740,15 +2758,12 @@
                     chatInput.focus({ preventScroll: true });
                 }
                 state.messages.push(message);
-                shouldStickChatToBottom = true;
-                refreshVisibleContent();
+                appendMessageToChat(message);
                 try {
                     await serverApi(`/api/families/${encodeURIComponent(state.familyId)}/messages`, {
                         method: 'POST',
                         body: JSON.stringify(message)
                     });
-                    shouldStickChatToBottom = true;
-                    await refreshServerMessages(state.familyId);
                 } catch (error) {
                     console.warn('Server message send failed', error);
                     if (isTextMessage) {
@@ -2756,7 +2771,6 @@
                         shouldRestoreChatInputFocus = true;
                     }
                     showMessage('訊息送出失敗，請檢查自架服務器。');
-                    refreshVisibleContent();
                 }
                 return;
             }
@@ -2774,7 +2788,7 @@
 
         function addSystemReply(content) {
             const now = new Date();
-            state.messages.push({
+            const msg = {
                 id: Date.now().toString(),
                 senderId: state.role === 'child' ? 'senior' : 'child_1',
                 senderName: state.role === 'child' ? '媽媽' : '大仔 (阿強)',
@@ -2782,10 +2796,10 @@
                 content,
                 time: `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`,
                 childId: 'child_1'
-            });
+            };
+            state.messages.push(msg);
             if (state.currentTab === 'chat') {
-                shouldStickChatToBottom = true;
-                refreshVisibleContent();
+                appendMessageToChat(msg);
             }
         }
 
