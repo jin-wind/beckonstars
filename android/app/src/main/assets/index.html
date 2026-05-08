@@ -158,7 +158,6 @@
                 startY: 0
             },
             transcribingMessageId: null,
-            isForwardingMessage: false,
             backendMode: 'server',
             authUid: null,
             familyId: null,
@@ -558,7 +557,6 @@
                     modalMessage: '',
                     selectedDate: null,
                     pendingMemoryType: saved.pendingMemoryType || 'text',
-                    isForwardingMessage: false,
                     backendMode: 'server',
                     authUid: saved.authUid || null,
                     familyId: saved.familyId || saved.calendarCode || null,
@@ -852,7 +850,6 @@
             }
             const changed = incoming.length !== state.messages.length || (incoming.length > 0 && incoming[incoming.length - 1].id !== state.messages[state.messages.length - 1]?.id);
             if (changed) state.messages = incoming;
-            state.isForwardingMessage = false;
             hasLoadedCloudMessages = true;
             if (changed) refreshVisibleContent();
         }
@@ -934,14 +931,39 @@
 
         // --- 局部刷新（避免全頁閃屏） ---
         function refreshVisibleContent() {
-            // 更新聊天訊息
+            // 更新聊天訊息（增量追加，避免閃爍）
             if (state.currentTab === 'chat') {
                 const chatMessages = document.getElementById('chatMessages');
                 if (chatMessages) {
-                    const snapshot = readChatScrollSnapshot();
-                    chatMessages.innerHTML = renderChatMessages();
-                    applyChatScrollAfterRender(snapshot);
-                    syncVoicePlayerUi();
+                    let visibleMessages = state.messages;
+                    if (state.role === 'child') {
+                        visibleMessages = state.messages.filter(m => m.childId === 'senior' || m.senderId === state.authUid);
+                    }
+                    const existingMsgs = chatMessages.querySelectorAll('[data-msg-id]');
+                    const existingIds = new Set(Array.from(existingMsgs).map(el => el.getAttribute('data-msg-id')));
+                    const anchor = document.getElementById('chatBottomAnchor');
+                    const shouldAutoScroll = !isUserScrolledUp();
+
+                    // 只追加新訊息，不替換整個 innerHTML
+                    let appended = 0;
+                    for (const msg of visibleMessages) {
+                        if (existingIds.has(String(msg.id))) continue;
+                        const isMe = msg.senderId === state.authUid;
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = renderSingleChatMessage(msg, isMe);
+                        const newEl = tempDiv.firstElementChild;
+                        if (newEl && anchor) {
+                            chatMessages.insertBefore(newEl, anchor);
+                            appended++;
+                        }
+                    }
+
+                    if (appended > 0) {
+                        syncVoicePlayerUi();
+                        if (shouldAutoScroll) {
+                            chatMessages.scrollTop = chatMessages.scrollHeight;
+                        }
+                    }
                 }
             }
             // 更新排行榜
@@ -957,6 +979,31 @@
             }
         }
 
+        function isUserScrolledUp() {
+            const container = getChatMessagesContainer();
+            if (!container) return false;
+            return container.scrollHeight - container.scrollTop - container.clientHeight > 80;
+        }
+
+        function renderSingleChatMessage(msg, isMe) {
+            const displayAvatar = isMe ? state.userAvatar : (msg.senderName[0] || '👤');
+            const displayName = isMe ? state.userName : msg.senderName;
+            return `
+                <div data-msg-id="${msg.id}" class="flex ${isMe ? 'justify-end' : 'justify-start'} animate-fadeIn">
+                    ${!isMe ? `<div class="w-10 h-10 rounded-full bg-orange-200 flex items-center justify-center text-brand-dark font-bold mr-2 flex-shrink-0 text-xl">${displayAvatar}</div>` : ''}
+                    <div class="max-w-[75%] flex flex-col ${isMe ? 'items-end' : 'items-start'}">
+                        ${!isMe ? `<span class="text-xs text-gray-500 mb-1 ml-1">${displayName}</span>` : ''}
+                        <div class="p-3 rounded-2xl shadow-sm ${isMe ? 'bg-brand text-white rounded-tr-none' : 'bg-white text-gray-800 rounded-tl-none border border-gray-100'}">
+                            ${msg.type === 'text' ? `<p class="text-lg">${msg.content}</p>` : ''}
+                            ${msg.type === 'photo' && msg.img ? `<img src="${msg.img}" class="max-w-56 max-h-56 rounded-xl object-cover">${msg.content ? `<p class="text-base mt-2">${msg.content}</p>` : ''}` : ''}
+                            ${msg.type === 'audio' ? `<div class="space-y-2 w-60 max-w-[68vw]">${renderVoicePlayer(msg, isMe)}<div class="${isMe ? 'bg-white/10' : 'bg-gray-50'} rounded-xl p-2"><p class="text-[11px] opacity-70 mb-1">語音轉譯</p>${msg.transcript ? `<p class="text-base">${msg.transcript}</p>` : `<p class="text-sm opacity-80">未取得轉譯文字</p>`}</div></div>` : ''}
+                        </div>
+                        <span class="text-[10px] text-gray-400 mt-1 ${isMe ? 'mr-1' : 'ml-1'}">${msg.time}</span>
+                    </div>
+                </div>
+            `;
+        }
+
         function renderChatMessages() {
             let visibleMessages = state.messages;
             if (state.role === 'child') {
@@ -966,22 +1013,7 @@
                 <div class="text-center text-xs text-gray-400 mb-4">今天</div>
                 ${visibleMessages.map(msg => {
                     const isMe = msg.senderId === state.authUid || msg.uid === state.authUid;
-                    const displayAvatar = isMe ? state.userAvatar : (msg.senderName[0] || '👤');
-                    const displayName = isMe ? state.userName : msg.senderName;
-                    return `
-                        <div class="flex ${isMe ? 'justify-end' : 'justify-start'} animate-fadeIn">
-                            ${!isMe ? `<div class="w-10 h-10 rounded-full bg-orange-200 flex items-center justify-center text-brand-dark font-bold mr-2 flex-shrink-0 text-xl">${displayAvatar}</div>` : ''}
-                            <div class="max-w-[75%] flex flex-col ${isMe ? 'items-end' : 'items-start'}">
-                                ${!isMe ? `<span class="text-xs text-gray-500 mb-1 ml-1">${displayName}</span>` : ''}
-                                <div class="p-3 rounded-2xl shadow-sm ${isMe ? 'bg-brand text-white rounded-tr-none' : 'bg-white text-gray-800 rounded-tl-none border border-gray-100'}">
-                                    ${msg.type === 'text' ? `<p class="text-lg">${msg.content}</p>` : ''}
-                                    ${msg.type === 'photo' && msg.img ? `<img src="${msg.img}" class="max-w-56 max-h-56 rounded-xl object-cover">${msg.content ? `<p class="text-base mt-2">${msg.content}</p>` : ''}` : ''}
-                                    ${msg.type === 'audio' ? `<div class="space-y-2 w-60 max-w-[68vw]">${renderVoicePlayer(msg, isMe)}<div class="${isMe ? 'bg-white/10' : 'bg-gray-50'} rounded-xl p-2"><p class="text-[11px] opacity-70 mb-1">語音轉譯</p>${msg.transcript ? `<p class="text-base">${msg.transcript}</p>` : `<p class="text-sm opacity-80">未取得轉譯文字</p>`}</div></div>` : ''}
-                                </div>
-                                <span class="text-[10px] text-gray-400 mt-1 ${isMe ? 'mr-1' : 'ml-1'}">${msg.time}</span>
-                            </div>
-                        </div>
-                    `;
+                    return renderSingleChatMessage(msg, isMe);
                 }).join('')}
             `;
         }
@@ -1560,15 +1592,6 @@
                                 </div>
                             `;
                         }).join('')}
-                        ${state.isForwardingMessage ? `
-                            <div class="flex justify-start animate-fadeIn">
-                                <div class="w-10 h-10 rounded-full bg-orange-200 flex items-center justify-center text-brand-dark font-bold mr-2 flex-shrink-0 text-xl">媽</div>
-                                <div class="bg-white text-gray-500 border border-gray-100 px-4 py-3 rounded-2xl rounded-tl-none shadow-sm flex items-center gap-2">
-                                    <span class="w-2 h-2 bg-brand rounded-full animate-pulse"></span>
-                                    <span class="text-sm font-medium">訊息轉發中...</span>
-                                </div>
-                            </div>
-                        ` : ''}
                         <div id="chatBottomAnchor" aria-hidden="true" class="h-px"></div>
                     </div>
 
@@ -2216,6 +2239,7 @@
                 chatImageInput.addEventListener('change', async event => {
                     const file = event.target.files?.[0];
                     if (!file) return;
+                    event.target.value = '';
                     const img = await readFileAsDataUrl(file);
                     await sendChatMessage({ type: 'photo', content: '', img });
                 });
@@ -2683,7 +2707,8 @@
             const chatInput = document.getElementById('chatInput');
             const isTextMessage = !override;
             const content = override ? (override.content || '') : (chatInput?.value || chatDraft).trim();
-            if (!content) return;
+            const hasImage = override?.img;
+            if (!content && !hasImage) return;
             if (isTextMessage) {
                 chatDraft = '';
                 shouldRestoreChatInputFocus = true;
@@ -2710,10 +2735,13 @@
             state.points += 5;
 
             if (state.backendMode === 'server' && state.familyId) {
-                if (chatInput) chatInput.value = '';
-                state.isForwardingMessage = true;
+                if (chatInput) {
+                    chatInput.value = '';
+                    chatInput.focus({ preventScroll: true });
+                }
+                state.messages.push(message);
                 shouldStickChatToBottom = true;
-                render();
+                refreshVisibleContent();
                 try {
                     await serverApi(`/api/families/${encodeURIComponent(state.familyId)}/messages`, {
                         method: 'POST',
@@ -2723,21 +2751,19 @@
                     await refreshServerMessages(state.familyId);
                 } catch (error) {
                     console.warn('Server message send failed', error);
-                    state.isForwardingMessage = false;
                     if (isTextMessage) {
                         chatDraft = content;
                         shouldRestoreChatInputFocus = true;
                     }
                     showMessage('訊息送出失敗，請檢查自架服務器。');
-                    render();
+                    refreshVisibleContent();
                 }
                 return;
             }
 
             state.messages.push(message);
-            state.isForwardingMessage = true;
             shouldStickChatToBottom = true;
-            render();
+            refreshVisibleContent();
             setTimeout(() => {
                 const replies = state.role === 'child'
                     ? ['收到呀，記得食飯同早啲休息。', '好開心收到你訊息，得閒再打俾我啦。', '見到你分享我好放心，今晚等你。']
@@ -2748,7 +2774,6 @@
 
         function addSystemReply(content) {
             const now = new Date();
-            state.isForwardingMessage = false;
             state.messages.push({
                 id: Date.now().toString(),
                 senderId: state.role === 'child' ? 'senior' : 'child_1',
@@ -2758,7 +2783,10 @@
                 time: `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`,
                 childId: 'child_1'
             });
-            render();
+            if (state.currentTab === 'chat') {
+                shouldStickChatToBottom = true;
+                refreshVisibleContent();
+            }
         }
 
         // 初始化渲染
