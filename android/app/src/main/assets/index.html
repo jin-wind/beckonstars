@@ -573,18 +573,23 @@
             }
         }
 
+        let _saveTimer = null;
         function saveDemoData() {
-            const data = JSON.parse(JSON.stringify(state));
-            data.errorMsg = '';
-            data.showModal = null;
-            data.modalMessage = '';
-            data.selectedDate = null;
-            data.pendingMemoryImage = '';
-            data.pushStatus = '';
-            data.messages = [];
-            data.memories = [];
-            data.voiceRecording = { active: false, cancel: false, startY: 0 };
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+            if (_saveTimer) return;
+            _saveTimer = setTimeout(() => {
+                _saveTimer = null;
+                const data = JSON.parse(JSON.stringify(state));
+                data.errorMsg = '';
+                data.showModal = null;
+                data.modalMessage = '';
+                data.selectedDate = null;
+                data.pendingMemoryImage = '';
+                data.pushStatus = '';
+                data.messages = [];
+                data.memories = [];
+                data.voiceRecording = { active: false, cancel: false, startY: 0 };
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+            }, 500);
         }
 
         function getOrCreateServerUid() {
@@ -845,11 +850,11 @@
                     }
                 });
             }
-            const changed = JSON.stringify(state.messages) !== JSON.stringify(incoming);
+            const changed = incoming.length !== state.messages.length || (incoming.length > 0 && incoming[incoming.length - 1].id !== state.messages[state.messages.length - 1]?.id);
             if (changed) state.messages = incoming;
             state.isForwardingMessage = false;
             hasLoadedCloudMessages = true;
-            if (changed) render();
+            if (changed) refreshVisibleContent();
         }
 
         function subscribeFamilyMessages(familyId) {
@@ -859,7 +864,7 @@
             });
             const timer = setInterval(() => refreshServerMessages(familyId).catch(error => {
                 console.warn('Server message sync failed', error);
-            }), 2000);
+            }), 3000);
             unsubscribeMessages = () => clearInterval(timer);
         }
 
@@ -894,10 +899,10 @@
                     }
                 });
             }
-            const changed = JSON.stringify(state.memories) !== JSON.stringify(incoming);
+            const changed = incoming.length !== state.memories.length || (incoming.length > 0 && incoming[incoming.length - 1].id !== state.memories[state.memories.length - 1]?.id);
             if (changed) state.memories = incoming;
             hasLoadedCloudMemories = true;
-            if (changed) render();
+            if (changed) refreshVisibleContent();
         }
 
         function subscribeFamilyMemories(familyId) {
@@ -907,7 +912,7 @@
             });
             const timer = setInterval(() => refreshServerMemories(familyId).catch(error => {
                 console.warn('Server memory sync failed', error);
-            }), 3000);
+            }), 5000);
             unsubscribeMemories = () => clearInterval(timer);
         }
 
@@ -925,6 +930,93 @@
                 content: data.content || '',
                 img: data.img || null
             };
+        }
+
+        // --- 局部刷新（避免全頁閃屏） ---
+        function refreshVisibleContent() {
+            // 更新聊天訊息
+            if (state.currentTab === 'chat') {
+                const chatMessages = document.getElementById('chatMessages');
+                if (chatMessages) {
+                    const snapshot = readChatScrollSnapshot();
+                    chatMessages.innerHTML = renderChatMessages();
+                    applyChatScrollAfterRender(snapshot);
+                    syncVoicePlayerUi();
+                }
+            }
+            // 更新排行榜
+            if (state.currentTab === 'leaderboard') {
+                const lb = document.querySelector('.p-6 > .bg-white.rounded-3xl');
+                if (lb) {
+                    lb.outerHTML = renderLeaderboardCard();
+                }
+            }
+            // 更新日曆回憶
+            if (state.currentTab === 'calendar' && state.calendarMode === 'tear-off') {
+                updateCalendarContent();
+            }
+        }
+
+        function renderChatMessages() {
+            let visibleMessages = state.messages;
+            if (state.role === 'child') {
+                visibleMessages = state.messages.filter(m => m.childId === 'senior' || m.senderId === state.authUid);
+            }
+            return `
+                <div class="text-center text-xs text-gray-400 mb-4">今天</div>
+                ${visibleMessages.map(msg => {
+                    const isMe = msg.senderId === state.authUid || msg.uid === state.authUid;
+                    const displayAvatar = isMe ? state.userAvatar : (msg.senderName[0] || '👤');
+                    const displayName = isMe ? state.userName : msg.senderName;
+                    return `
+                        <div class="flex ${isMe ? 'justify-end' : 'justify-start'} animate-fadeIn">
+                            ${!isMe ? `<div class="w-10 h-10 rounded-full bg-orange-200 flex items-center justify-center text-brand-dark font-bold mr-2 flex-shrink-0 text-xl">${displayAvatar}</div>` : ''}
+                            <div class="max-w-[75%] flex flex-col ${isMe ? 'items-end' : 'items-start'}">
+                                ${!isMe ? `<span class="text-xs text-gray-500 mb-1 ml-1">${displayName}</span>` : ''}
+                                <div class="p-3 rounded-2xl shadow-sm ${isMe ? 'bg-brand text-white rounded-tr-none' : 'bg-white text-gray-800 rounded-tl-none border border-gray-100'}">
+                                    ${msg.type === 'text' ? `<p class="text-lg">${msg.content}</p>` : ''}
+                                    ${msg.type === 'photo' && msg.img ? `<img src="${msg.img}" class="max-w-56 max-h-56 rounded-xl object-cover">${msg.content ? `<p class="text-base mt-2">${msg.content}</p>` : ''}` : ''}
+                                    ${msg.type === 'audio' ? `<div class="space-y-2 w-60 max-w-[68vw]">${renderVoicePlayer(msg, isMe)}<div class="${isMe ? 'bg-white/10' : 'bg-gray-50'} rounded-xl p-2"><p class="text-[11px] opacity-70 mb-1">語音轉譯</p>${msg.transcript ? `<p class="text-base">${msg.transcript}</p>` : `<p class="text-sm opacity-80">未取得轉譯文字</p>`}</div></div>` : ''}
+                                </div>
+                                <span class="text-[10px] text-gray-400 mt-1 ${isMe ? 'mr-1' : 'ml-1'}">${msg.time}</span>
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            `;
+        }
+
+        function renderLeaderboardCard() {
+            const memberScores = {};
+            state.messages.forEach(msg => {
+                const key = msg.senderId || msg.uid || 'unknown';
+                if (!memberScores[key]) {
+                    memberScores[key] = { id: key, name: msg.senderName || '家庭成員', avatar: (msg.senderName || '家')[0], score: 0, messageCount: 0 };
+                }
+                memberScores[key].score += 10;
+                memberScores[key].messageCount++;
+            });
+            state.memories.forEach(mem => {
+                const key = mem.uid || mem.childId || 'unknown';
+                if (!memberScores[key]) {
+                    memberScores[key] = { id: key, name: mem.childName || '家庭成員', avatar: (mem.childName || '家')[0], score: 0, messageCount: 0 };
+                }
+                memberScores[key].score += 15;
+            });
+            const sorted = Object.values(memberScores).sort((a, b) => b.score - a.score);
+            if (sorted.length === 0) {
+                return `<div class="bg-white rounded-3xl shadow-sm overflow-hidden"><div class="flex flex-col items-center justify-center py-12 text-center"><div class="w-20 h-20 bg-orange-100 rounded-full flex items-center justify-center mb-4"><i class="fa-solid fa-ranking-star text-3xl text-brand"></i></div><h3 class="text-xl font-bold text-gray-800 mb-2">排行榜暫無數據</h3><p class="text-gray-500">開始聊天和分享回憶後，排行榜會自動更新！</p></div></div>`;
+            }
+            const rankIcons = ['👑', '2', '3'];
+            const subtitles = ['本週互動最熱烈！', '繼續保持～', '加油追上去！'];
+            const rankItems = sorted.map((member, index) => {
+                const rank = index + 1;
+                const icon = rank <= 3 ? rankIcons[index] : String(rank);
+                const subtitle = rank <= 3 ? subtitles[index] : (member.messageCount > 0 ? `${member.messageCount} 則訊息` : '潛水中...');
+                const avatarBg = rank === 1 ? 'bg-[#f6d1aa] text-[#b66122]' : (rank <= 3 ? 'bg-orange-100 text-brand-dark' : 'bg-gray-100 text-gray-500');
+                return `<div class="flex items-center py-4 px-5 border-b border-gray-50"><div class="w-8 text-center mr-4 ${rank <= 3 ? (rank===1?'text-2xl text-yellow-400':rank===2?'text-xl text-gray-400':'text-lg text-amber-600') : 'text-base text-gray-400'} font-bold">${icon}</div><div class="w-12 h-12 rounded-full ${avatarBg} flex items-center justify-center text-xl font-bold mr-4">${member.avatar}</div><div class="flex-1"><div class="font-bold text-gray-800 text-base">${member.name}</div><div class="text-xs text-gray-400">${subtitle}</div></div><div class="text-right"><div class="text-lg font-bold text-brand">${member.score.toLocaleString()}</div><div class="text-xs text-gray-400">分</div></div></div>`;
+            }).join('');
+            return `<div class="bg-white rounded-3xl shadow-sm overflow-hidden">${rankItems}</div>`;
         }
 
         // --- 核心渲染引擎 ---
@@ -1252,7 +1344,7 @@
             const isToday = isCurrentMonth && displayDay === today.getDate();
             const dayMemories = memories.filter(m => m.date === displayDay && m.month === displayMonth);
             const dateKey = `${displayYear}-${String(displayMonth).padStart(2, '0')}-${String(displayDay).padStart(2, '0')}`;
-            const almanac = almanacCache[dateKey] || state.almanac;
+            const almanac = almanacCache[dateKey] || null;
             const hasAlmanac = almanac && almanac.ok;
 
             // 農曆日期顯示
@@ -1506,89 +1598,7 @@
 
         // 排行榜視圖
         function renderLeaderboard() {
-            // 計算每個成員的活躍度分數
-            const memberScores = {};
-            state.messages.forEach(msg => {
-                const key = msg.senderId || msg.uid || 'unknown';
-                if (!memberScores[key]) {
-                    memberScores[key] = {
-                        id: key,
-                        name: msg.senderName || '家庭成員',
-                        avatar: (msg.senderName || '家')[0],
-                        score: 0,
-                        messageCount: 0
-                    };
-                }
-                memberScores[key].score += 10;
-                memberScores[key].messageCount++;
-            });
-
-            // 計算回憶貢獻
-            state.memories.forEach(mem => {
-                const key = mem.uid || mem.childId || 'unknown';
-                if (!memberScores[key]) {
-                    memberScores[key] = {
-                        id: key,
-                        name: mem.childName || '家庭成員',
-                        avatar: (mem.childName || '家')[0],
-                        score: 0,
-                        messageCount: 0
-                    };
-                }
-                memberScores[key].score += 15;
-            });
-
-            // 排序
-            const sorted = Object.values(memberScores).sort((a, b) => b.score - a.score);
-
-            // 如果沒有數據，顯示提示
-            if (sorted.length === 0) {
-                return `
-                    <div class="flex flex-col items-center justify-center h-full p-8 text-center">
-                        <div class="w-20 h-20 bg-orange-100 rounded-full flex items-center justify-center mb-4">
-                            <i class="fa-solid fa-ranking-star text-3xl text-brand"></i>
-                        </div>
-                        <h3 class="text-xl font-bold text-gray-800 mb-2">排行榜暫無數據</h3>
-                        <p class="text-gray-500">開始聊天和分享回憶後，排行榜會自動更新！</p>
-                    </div>
-                `;
-            }
-
-            // 生成排行榜項目
-            const rankIcons = ['👑', '2', '3'];
-            const subtitles = ['本週互動最熱烈！', '繼續保持～', '加油追上去！'];
-            const defaultSubtitles = ['潛水中...', '等你加入！', '一起來聊天吧'];
-
-            const rankItems = sorted.map((member, index) => {
-                const rank = index + 1;
-                const rankClass = rank <= 3 ? `rank-${rank}` : '';
-                const icon = rank <= 3 ? rankIcons[index] : String(rank);
-                const subtitle = rank <= 3 ? subtitles[index] : (member.messageCount > 0 ? `${member.messageCount} 則訊息` : defaultSubtitles[index % defaultSubtitles.length]);
-                const avatarBg = rank === 1 ? 'bg-[#f6d1aa] text-[#b66122]' : (rank <= 3 ? 'bg-orange-100 text-brand-dark' : 'bg-gray-100 text-gray-500');
-
-                return `
-                    <div class="flex items-center py-4 px-5 border-b border-gray-50 ${rankClass}">
-                        <div class="w-8 text-center mr-4 ${rank === 1 ? 'text-2xl' : rank === 2 ? 'text-xl' : rank === 3 ? 'text-lg' : 'text-base'} ${rank === 1 ? 'text-yellow-400' : rank === 2 ? 'text-gray-400' : rank === 3 ? 'text-amber-600' : 'text-gray-400'} font-bold">${icon}</div>
-                        <div class="w-12 h-12 rounded-full ${avatarBg} flex items-center justify-center text-xl font-bold mr-4">${member.avatar}</div>
-                        <div class="flex-1">
-                            <div class="font-bold text-gray-800 text-base">${member.name}</div>
-                            <div class="text-xs text-gray-400">${subtitle}</div>
-                        </div>
-                        <div class="text-right">
-                            <div class="text-lg font-bold text-brand">${member.score.toLocaleString()}</div>
-                            <div class="text-xs text-gray-400">分</div>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-
-            return `
-                <div class="p-6">
-                    <div class="bg-white rounded-3xl shadow-sm overflow-hidden">
-                        ${rankItems}
-                    </div>
-                </div>
-            `;
+            return `<div class="p-6">${renderLeaderboardCard()}</div>`;
         }
 
         // 獎勵視圖
@@ -1982,13 +1992,13 @@
                     else if (action === 'switchTab') {
                         state.currentTab = newBtn.getAttribute('data-tab');
                         if (state.currentTab === 'chat') shouldStickChatToBottom = true;
+                        render();
                         if (state.backendMode === 'server' && state.familyId && state.currentTab === 'calendar') {
-                            await refreshServerMemories(state.familyId).catch(error => console.warn('Calendar refresh failed', error));
+                            refreshServerMemories(state.familyId).catch(() => {});
                         }
                         if (state.backendMode === 'server' && state.familyId && state.currentTab === 'chat') {
-                            await refreshServerMessages(state.familyId).catch(error => console.warn('Chat refresh failed', error));
+                            refreshServerMessages(state.familyId).catch(() => {});
                         }
-                        render();
                     }
                     else if (action === 'switchCalendar') {
                         state.calendarMode = newBtn.getAttribute('data-mode');
@@ -2740,7 +2750,7 @@
             const now = new Date();
             state.isForwardingMessage = false;
             state.messages.push({
-                id: Date.now() + 1,
+                id: Date.now().toString(),
                 senderId: state.role === 'child' ? 'senior' : 'child_1',
                 senderName: state.role === 'child' ? '媽媽' : '大仔 (阿強)',
                 type: 'text',

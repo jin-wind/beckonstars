@@ -159,6 +159,8 @@ function convertAudioToWavBase64(audio) {
       data: fs.readFileSync(outputPath).toString('base64'),
       format: 'wav'
     };
+  } catch (err) {
+    throw new Error('音訊轉換失敗，請確保 ffmpeg 已安裝且音訊格式正確');
   } finally {
     fs.rmSync(inputPath, { force: true });
     fs.rmSync(outputPath, { force: true });
@@ -294,6 +296,7 @@ async function generateSummaryVideo(memories, year, month, familyId) {
       const imgPath = path.join(tmpDir, `img_${String(i).padStart(3, '0')}.jpg`);
       try {
         let imgData;
+        if (typeof mem.img !== 'string') continue;
         if (mem.img.startsWith('data:')) {
           const base64 = mem.img.split(',')[1];
           imgData = Buffer.from(base64, 'base64');
@@ -687,7 +690,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      const body = await readBody(req).catch(() => ({}));
+      const body = await readBody(req).catch(e => { console.warn('[video] body read failed:', e.message); return {}; });
       const targetMonth = Number(body.month) || new Date().getMonth() + 1;
       const targetYear = Number(body.year) || new Date().getFullYear();
 
@@ -715,6 +718,15 @@ const server = http.createServer(async (req, res) => {
     console.error('[api] request failed', error);
     sendJson(res, error.message === 'invalid-json' ? 400 : 500, { error: error.message || 'server-error' });
   }
+});
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`[fatal] Port ${port} is already in use. Stop the other process or change API_PORT.`);
+  } else {
+    console.error('[fatal] Server error:', err);
+  }
+  process.exit(1);
 });
 
 server.listen(port, host, async () => {
