@@ -6,6 +6,39 @@ const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 const { Lunar, Solar } = require('lunar-javascript');
 
+// 簡體轉繁體映射（黃曆宜忌常用詞）
+const SIMP_TO_TRAD = {
+  '嫁娶': '嫁娶', '出行': '出行', '搬家': '搬家', '搬新房': '搬新房',
+  '祈福': '祈福', '安床': '安床', '祭祀': '祭祀', '造庙': '造廟',
+  '造车器': '造車器', '造屋': '造屋', '起基': '起基', '上樑': '上樑',
+  '开光': '開光', '开池': '開池', '开仓': '開倉', '开市': '開市',
+  '开业': '開業', '交易': '交易', '立券': '立券', '纳财': '納財',
+  '纳畜': '納畜', '牧养': '牧養', '进人口': '進人口',
+  '竖柱': '豎柱', '盖屋': '蓋屋', '合帳': '合帳',
+  '栽种': '栽種', '作灶': '作灶', '安机械': '安機械',
+  '安葬': '安葬', '入殮': '入殮', '移柩': '移柩',
+  '破土': '破土', '谢土': '謝土', '修坟': '修墳',
+  '修造': '修造', '装修': '裝修', '动土': '動土',
+  '掘井': '掘井', '伐木': '伐木', '造船': '造船',
+  '行丧': '行喪', '伐木': '伐木', '作梁': '作梁',
+  '放水': '放水', '造桥': '造橋', '筑堤': '築堤',
+  '补垣': '補垣', '塞穴': '塞穴', '合寿木': '合壽木',
+  '成服': '成服', '除服': '除服', '遷徙': '遷徙',
+  '徙遷': '徙遷', '求嗣': '求嗣', '求医': '求醫',
+  '治病': '治病', '针灸': '針灸', '会亲友': '會親友',
+  '问名': '問名', '订盟': '訂盟', '纳采': '納采',
+  '裁衣': '裁衣', '合帳': '合帳', '冠笄': '冠笄',
+  '进人口': '進人口', '经络': '經络', '開渠': '開渠',
+  '掘井': '掘井', '平治道涂': '平治道塗',
+  '修饰垣墙': '修飾垣牆', '修饰墙壁': '修飾牆壁',
+  '教牛马': '教牛馬', '教牛': '教牛',
+  '遠回': '遠回', '远回': '遠回',
+};
+
+function toTraditional(arr) {
+  return arr.map(item => SIMP_TO_TRAD[item] || item);
+}
+
 const host = process.env.API_HOST || '0.0.0.0';
 const port = Number(process.env.API_PORT || 8787);
 const dbPath = process.env.API_DB_PATH || path.join(process.cwd(), 'data', 'server-db.json');
@@ -421,8 +454,8 @@ const server = http.createServer(async (req, res) => {
       const monthGanZhi = lunar.getMonthInGanZhi();
       const yearGanZhi = lunar.getYearInGanZhi();
       const yearShengXiao = lunar.getYearShengXiao();
-      const yiList = lunar.getDayYi();
-      const jiList = lunar.getDayJi();
+      const yiList = toTraditional(lunar.getDayYi());
+      const jiList = toTraditional(lunar.getDayJi());
       const xiu = lunar.getXiu();
       const xiuLuck = lunar.getXiuLuck();
       const pw = lunar.getPengZuGan();
