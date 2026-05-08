@@ -705,30 +705,68 @@
         }
 
         function signInWithGoogle() {
-            if (typeof google === 'undefined' || !google.accounts) {
-                // 嘗試重新載入
-                state.errorMsg = '正在載入 Google 登入服務，請稍候...';
-                render();
-                _googleInitRetries = 0;
-                initGoogleSignIn();
-                // 等待載入後自動觸發
-                const checkAndPrompt = () => {
-                    if (typeof google !== 'undefined' && google.accounts) {
-                        state.errorMsg = '';
-                        render();
-                        google.accounts.id.prompt();
-                    } else if (_googleInitRetries < 15) {
-                        setTimeout(checkAndPrompt, 1000);
-                    } else {
-                        state.errorMsg = 'Google 登入服務載入失敗，請檢查網絡連接或使用其他網絡。';
-                        render();
-                    }
-                };
-                setTimeout(checkAndPrompt, 2000);
+            // 優先使用 Android 原生 Google 登入
+            if (window.BeckonStarsAndroid && window.BeckonStarsAndroid.startGoogleSignIn) {
+                window.BeckonStarsAndroid.startGoogleSignIn();
                 return;
             }
-            google.accounts.id.prompt();
+            // 備用：JavaScript SDK（WebView 中可能不穩定）
+            if (typeof google !== 'undefined' && google.accounts) {
+                google.accounts.id.prompt();
+                return;
+            }
+            state.errorMsg = 'Google 登入服務不可用，請確認應用已正確安裝。';
+            render();
         }
+
+        // Android 原生 Google 登入回調
+        window.handleNativeGoogleSignIn = async function(idToken, email, name) {
+            try {
+                console.log('[auth] Native Google Sign-In success:', email);
+                const result = await serverApi('/api/auth/google', {
+                    method: 'POST',
+                    body: JSON.stringify({ idToken: idToken })
+                });
+
+                state.authToken = result.token;
+                state.googleUser = result.user;
+                state.authUid = result.user.userId;
+                state.userName = result.user.name || name;
+                state.userAvatar = '👤';
+
+                // 保存到 localStorage
+                localStorage.setItem('beckon-stars-auth-token', result.token);
+                localStorage.setItem('beckon-stars-google-user', JSON.stringify(result.user));
+
+                console.log('[auth] Logged in as:', result.user.name, result.user.email);
+
+                // 如果用戶已有家庭，直接進入
+                if (result.user.families && result.user.families.length > 0) {
+                    state.familyId = result.user.families[0];
+                    state.calendarCode = state.familyId;
+                    state.appReady = true;
+                    state.role = 'child';
+                    subscribeFamilyMessages(state.familyId);
+                    subscribeFamilyMemories(state.familyId);
+                    render();
+                    setTimeout(() => showMessage(`歡迎回來，${result.user.name}！`), 500);
+                } else {
+                    // 新用戶，進入角色選擇
+                    state.onboardingStep = 2;
+                    render();
+                }
+            } catch (error) {
+                console.error('[auth] Google login failed:', error);
+                state.errorMsg = 'Google 登入失敗，請稍後再試。';
+                render();
+            }
+        };
+
+        window.handleNativeGoogleSignInError = function(message) {
+            console.error('[auth] Native Google Sign-In error:', message);
+            state.errorMsg = message;
+            render();
+        };
 
         function restoreAuthState() {
             const token = localStorage.getItem('beckon-stars-auth-token');
@@ -753,8 +791,9 @@
             state.authUid = null;
             localStorage.removeItem('beckon-stars-auth-token');
             localStorage.removeItem('beckon-stars-google-user');
-            if (typeof google !== 'undefined' && google.accounts) {
-                google.accounts.id.disableAutoSelect();
+            // Android 原生登出
+            if (window.BeckonStarsAndroid && window.BeckonStarsAndroid.signOutGoogle) {
+                window.BeckonStarsAndroid.signOutGoogle();
             }
         }
 

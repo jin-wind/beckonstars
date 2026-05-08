@@ -33,15 +33,25 @@ import java.io.FileInputStream;
 import java.util.ArrayList;
 import org.json.JSONObject;
 
+import com.google.android.gms.auth.api.signin.GoogleSignIn;
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
+import com.google.android.gms.auth.api.signin.GoogleSignInClient;
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
+import com.google.android.gms.common.api.ApiException;
+import com.google.android.gms.tasks.Task;
+
 public class MainActivity extends Activity {
     private static final String TAG = "BeckonStars";
     private static final String CHANNEL_ID = "beckon_stars_default";
     private static final int REQUEST_POST_NOTIFICATIONS = 1001;
     private static final int REQUEST_RECORD_AUDIO = 1002;
     private static final int REQUEST_FILE_CHOOSER = 1003;
+    private static final int REQUEST_GOOGLE_SIGN_IN = 1004;
     private static final String SPEECH_LANGUAGE = "zh-HK";
+    private static final String GOOGLE_WEB_CLIENT_ID = "747682384006-3qn591l4dj0ou1kqs3cr32ehr1vgqboo.apps.googleusercontent.com";
     private WebView webView;
     private ValueCallback<Uri[]> filePathCallback;
+    private GoogleSignInClient googleSignInClient;
     private SpeechRecognizer speechRecognizer;
     private MediaRecorder mediaRecorder;
     private MediaPlayer transcriptionPlayer;
@@ -59,6 +69,14 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         createNotificationChannel();
+
+        // 初始化 Google Sign-In
+        GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestIdToken(GOOGLE_WEB_CLIENT_ID)
+            .requestEmail()
+            .requestProfile()
+            .build();
+        googleSignInClient = GoogleSignIn.getClient(this, gso);
 
         webView = new WebView(this);
         setContentView(webView);
@@ -154,6 +172,35 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+
+        if (requestCode == REQUEST_GOOGLE_SIGN_IN) {
+            Task<GoogleSignInAccount> task = GoogleSignIn.getSignedInAccountFromIntent(data);
+            try {
+                GoogleSignInAccount account = task.getResult(ApiException.class);
+                String idToken = account.getIdToken();
+                String email = account.getEmail();
+                String displayName = account.getDisplayName();
+                Log.i(TAG, "Google Sign-In success: " + email);
+
+                // 傳送 ID Token 到 WebView
+                String escapedToken = idToken.replace("\\", "\\\\").replace("'", "\\'");
+                String escapedEmail = (email != null ? email : "").replace("\\", "\\\\").replace("'", "\\'");
+                String escapedName = (displayName != null ? displayName : "").replace("\\", "\\\\").replace("'", "\\'");
+
+                webView.post(() -> webView.evaluateJavascript(
+                    "window.handleNativeGoogleSignIn && window.handleNativeGoogleSignIn('" + escapedToken + "', '" + escapedEmail + "', '" + escapedName + "')",
+                    null
+                ));
+            } catch (ApiException e) {
+                Log.w(TAG, "Google Sign-In failed: " + e.getStatusCode());
+                webView.post(() -> webView.evaluateJavascript(
+                    "window.handleNativeGoogleSignInError && window.handleNativeGoogleSignInError('Google 登入失敗，錯誤碼: " + e.getStatusCode() + "')",
+                    null
+                ));
+            }
+            return;
+        }
+
         if (requestCode != REQUEST_FILE_CHOOSER || filePathCallback == null) return;
 
         Uri[] results = null;
@@ -532,6 +579,19 @@ public class MainActivity extends Activity {
     }
 
     public class AndroidBridge {
+        @JavascriptInterface
+        public void startGoogleSignIn() {
+            runOnUiThread(() -> {
+                Intent signInIntent = googleSignInClient.getSignInIntent();
+                startActivityForResult(signInIntent, REQUEST_GOOGLE_SIGN_IN);
+            });
+        }
+
+        @JavascriptInterface
+        public void signOutGoogle() {
+            runOnUiThread(() -> googleSignInClient.signOut());
+        }
+
         @JavascriptInterface
         public String getNotificationPermission() {
             return hasNotificationPermission() ? "granted" : "default";
