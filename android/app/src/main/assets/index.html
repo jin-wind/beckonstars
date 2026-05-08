@@ -14,7 +14,7 @@
     <link rel="apple-touch-icon" href="icons/icon.svg">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="https://accounts.google.com/gsi/client" async defer onload="window._googleLoaded=true"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
         html {
@@ -637,17 +637,29 @@
 
         // Google 登入
         const GOOGLE_CLIENT_ID = '747682384006-3qn591l4dj0ou1kqs3cr32ehr1vgqboo.apps.googleusercontent.com';
+        let _googleInitRetries = 0;
 
         function initGoogleSignIn() {
             if (typeof google === 'undefined' || !google.accounts) {
-                console.warn('[auth] Google Identity Services not loaded');
+                _googleInitRetries++;
+                if (_googleInitRetries < 10) {
+                    console.log(`[auth] Waiting for Google SDK... attempt ${_googleInitRetries}`);
+                    setTimeout(initGoogleSignIn, 1000);
+                } else {
+                    console.warn('[auth] Google Identity Services failed to load after 10 attempts');
+                }
                 return;
             }
-            google.accounts.id.initialize({
-                client_id: GOOGLE_CLIENT_ID,
-                callback: handleGoogleCredentialResponse,
-                auto_select: true
-            });
+            try {
+                google.accounts.id.initialize({
+                    client_id: GOOGLE_CLIENT_ID,
+                    callback: handleGoogleCredentialResponse,
+                    auto_select: false
+                });
+                console.log('[auth] Google Sign-In initialized');
+            } catch (e) {
+                console.error('[auth] Google Sign-In init failed:', e);
+            }
         }
 
         async function handleGoogleCredentialResponse(response) {
@@ -694,8 +706,25 @@
 
         function signInWithGoogle() {
             if (typeof google === 'undefined' || !google.accounts) {
-                state.errorMsg = 'Google 登入服務未載入，請檢查網絡連接。';
+                // 嘗試重新載入
+                state.errorMsg = '正在載入 Google 登入服務，請稍候...';
                 render();
+                _googleInitRetries = 0;
+                initGoogleSignIn();
+                // 等待載入後自動觸發
+                const checkAndPrompt = () => {
+                    if (typeof google !== 'undefined' && google.accounts) {
+                        state.errorMsg = '';
+                        render();
+                        google.accounts.id.prompt();
+                    } else if (_googleInitRetries < 15) {
+                        setTimeout(checkAndPrompt, 1000);
+                    } else {
+                        state.errorMsg = 'Google 登入服務載入失敗，請檢查網絡連接或使用其他網絡。';
+                        render();
+                    }
+                };
+                setTimeout(checkAndPrompt, 2000);
                 return;
             }
             google.accounts.id.prompt();
