@@ -1270,8 +1270,8 @@
 
                     <div class="w-full max-w-sm">
                         <div class="flex mb-6 bg-gray-100 rounded-xl p-1">
-                            <button class="flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${isLogin ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}" data-action="switchAuthMode" data-mode="login">登入</button>
-                            <button class="flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${!isLogin ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}" data-action="switchAuthMode" data-mode="register">註冊</button>
+                            <button class="action-btn flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${isLogin ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}" data-action="switchAuthMode" data-mode="login">登入</button>
+                            <button class="action-btn flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${!isLogin ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}" data-action="switchAuthMode" data-mode="register">註冊</button>
                         </div>
 
                         ${!isLogin ? `
@@ -1294,7 +1294,7 @@
 
                         ${state.errorMsg ? `<p class="text-red-500 text-sm mt-3 text-center animate-shake">${state.errorMsg}</p>` : ''}
 
-                        <p class="text-xs text-gray-400 text-center mt-4">${isLogin ? '還沒有帳號？' : '已有帳號？'} <button class="text-brand font-medium" data-action="switchAuthMode" data-mode="${isLogin ? 'register' : 'login'}">${isLogin ? '立即註冊' : '返回登入'}</button></p>
+                        <p class="text-xs text-gray-400 text-center mt-4">${isLogin ? '還沒有帳號？' : '已有帳號？'} <button class="action-btn text-brand font-medium" data-action="switchAuthMode" data-mode="${isLogin ? 'register' : 'login'}">${isLogin ? '立即註冊' : '返回登入'}</button></p>
                     </div>
                 </div>
             `;
