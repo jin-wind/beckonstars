@@ -6,36 +6,11 @@ const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 const { Lunar, Solar } = require('lunar-javascript');
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 
-// Google OAuth 配置
-const GOOGLE_WEB_CLIENT_ID = '747682384006-3qn591l4dj0ou1kqs3cr32ehr1vgqboo.apps.googleusercontent.com';
-const GOOGLE_ANDROID_CLIENT_ID = '747682384006-aqpl430pqtf1fbrnco67hup2unr8u2qe.apps.googleusercontent.com';
 const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
 const JWT_EXPIRES_IN = '30d';
-
-// 驗證 Google ID Token
-async function verifyGoogleToken(idToken) {
-  try {
-    const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
-    if (!response.ok) return null;
-    const payload = await response.json();
-    // 驗證 audience 是否為我們的 Client ID
-    if (payload.aud !== GOOGLE_WEB_CLIENT_ID && payload.aud !== GOOGLE_ANDROID_CLIENT_ID) {
-      console.warn('[auth] Invalid audience:', payload.aud);
-      return null;
-    }
-    return {
-      googleId: payload.sub,
-      email: payload.email,
-      name: payload.name || payload.email.split('@')[0],
-      picture: payload.picture || '',
-      emailVerified: payload.email_verified === 'true'
-    };
-  } catch (error) {
-    console.error('[auth] Google token verification failed:', error.message);
-    return null;
-  }
-}
+const BCRYPT_ROUNDS = 10;
 
 // 生成 JWT Token
 function generateToken(userId, email) {
@@ -513,39 +488,89 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // Google 登入
-    if (req.method === 'POST' && pathname === '/api/auth/google') {
+    // 註冊新用戶
+    if (req.method === 'POST' && pathname === '/api/auth/register') {
       const body = await readBody(req);
-      const googleUser = await verifyGoogleToken(body.idToken);
-      if (!googleUser) {
-        sendJson(res, 401, { error: 'invalid-token', message: 'Google 登入驗證失敗' });
+      const email = (body.email || '').trim().toLowerCase();
+      const password = body.password || '';
+      const name = (body.name || '').trim();
+
+      if (!email || !email.includes('@')) {
+        sendJson(res, 400, { error: 'invalid-email', message: '請輸入有效的電郵地址' });
+        return;
+      }
+      if (password.length < 6) {
+        sendJson(res, 400, { error: 'weak-password', message: '密碼長度至少 6 個字元' });
+        return;
+      }
+      if (!name) {
+        sendJson(res, 400, { error: 'missing-name', message: '請輸入用戶名稱' });
         return;
       }
 
       const db = await readDb();
       if (!db.users) db.users = {};
+      if (!db.usersByEmail) db.usersByEmail = {};
 
-      // 查找或建立用戶
-      let user = db.users[googleUser.googleId];
-      if (!user) {
-        user = {
-          userId: googleUser.googleId,
-          email: googleUser.email,
-          name: googleUser.name,
-          picture: googleUser.picture,
-          createdAt: new Date().toISOString(),
-          families: []
-        };
-        db.users[googleUser.googleId] = user;
-        await writeDb(db);
-        console.log(`[auth] 🆕 新用戶註冊: ${user.name} (${user.email})`);
-      } else {
-        user.name = googleUser.name;
-        user.picture = googleUser.picture;
-        user.lastLoginAt = new Date().toISOString();
-        await writeDb(db);
-        console.log(`[auth] 🔑 用戶登入: ${user.name} (${user.email})`);
+      if (db.usersByEmail[email]) {
+        sendJson(res, 409, { error: 'email-exists', message: '此電郵已註冊，請直接登入' });
+        return;
       }
+
+      const userId = crypto.randomUUID();
+      const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+      const user = {
+        userId,
+        email,
+        passwordHash,
+        name,
+        picture: '',
+        createdAt: new Date().toISOString(),
+        families: []
+      };
+      db.users[userId] = user;
+      db.usersByEmail[email] = userId;
+      await writeDb(db);
+      console.log(`[auth] 🆕 新用戶註冊: ${name} (${email})`);
+
+      const token = generateToken(userId, email);
+      sendJson(res, 201, {
+        ok: true,
+        token,
+        user: { userId, email, name, picture: '', families: [] }
+      });
+      return;
+    }
+
+    // 用戶登入
+    if (req.method === 'POST' && pathname === '/api/auth/login') {
+      const body = await readBody(req);
+      const email = (body.email || '').trim().toLowerCase();
+      const password = body.password || '';
+
+      if (!email || !password) {
+        sendJson(res, 400, { error: 'missing-fields', message: '請輸入電郵和密碼' });
+        return;
+      }
+
+      const db = await readDb();
+      const userId = db.usersByEmail?.[email];
+      const user = userId ? db.users?.[userId] : null;
+
+      if (!user) {
+        sendJson(res, 401, { error: 'invalid-credentials', message: '電郵或密碼不正確' });
+        return;
+      }
+
+      const valid = await bcrypt.compare(password, user.passwordHash);
+      if (!valid) {
+        sendJson(res, 401, { error: 'invalid-credentials', message: '電郵或密碼不正確' });
+        return;
+      }
+
+      user.lastLoginAt = new Date().toISOString();
+      await writeDb(db);
+      console.log(`[auth] 🔑 用戶登入: ${user.name} (${user.email})`);
 
       const token = generateToken(user.userId, user.email);
       sendJson(res, 200, {
@@ -555,7 +580,7 @@ const server = http.createServer(async (req, res) => {
           userId: user.userId,
           email: user.email,
           name: user.name,
-          picture: user.picture,
+          picture: user.picture || '',
           families: user.families || []
         }
       });
@@ -640,7 +665,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && parts[3] === 'connect') {
       const authUser = getAuthUser(req);
       if (!authUser) {
-        sendJson(res, 401, { error: 'unauthorized', message: '請先登入 Google 帳號' });
+        sendJson(res, 401, { error: 'unauthorized', message: '請先登入' });
         return;
       }
 
