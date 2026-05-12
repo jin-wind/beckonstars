@@ -642,7 +642,7 @@
             state.currentUser = result.user;
             state.authUid = result.user.userId;
             state.userName = result.user.name;
-            state.userAvatar = '👤';
+            state.userAvatar = result.user.picture || '👤';
 
             localStorage.setItem('beckon-stars-auth-token', result.token);
             localStorage.setItem('beckon-stars-user', JSON.stringify(result.user));
@@ -746,6 +746,7 @@
                     state.currentUser = JSON.parse(userJson);
                     state.authUid = state.currentUser.userId;
                     state.userName = state.currentUser.name;
+                    state.userAvatar = state.currentUser.picture || '👤';
                     return true;
                 } catch (e) {
                     console.warn('[auth] Failed to restore auth state:', e);
@@ -2354,9 +2355,8 @@
                         state.connectionMode = newBtn.getAttribute('data-mode');
                         render();
                     }
-                    else if (action === 'copyCode') {
-                        // 模擬複製功能
-                        navigator.clipboard?.writeText(state.calendarCode).catch(() => {});
+                    else if (action === 'copyCode' || action === 'copyFamilyCode') {
+                        navigator.clipboard?.writeText(state.calendarCode || '').catch(() => {});
                         showMessage('已複製邀請碼！分享給家人吧。');
                     }
                     else if (action === 'submitJoinCode') {
@@ -2401,10 +2401,6 @@
                         }
                     }
                     // 個人資料操作
-                    else if (action === 'copyFamilyCode') {
-                        navigator.clipboard?.writeText(state.calendarCode || '').catch(() => {});
-                        showMessage('已複製邀請碼！分享給家人吧。');
-                    }
                     else if (action === 'logout') {
                         state.showModal = 'confirmLogout';
                         render();
@@ -2448,7 +2444,6 @@
                             state.currentUser = result.user;
                             localStorage.setItem('beckon-stars-user', JSON.stringify(result.user));
                             state.showModal = null;
-                            state.errorMsg = '';
                             render();
                             showMessage('個人資料已更新！');
                         } catch (error) {
@@ -2481,7 +2476,6 @@
                                 body: JSON.stringify({ oldPassword: oldPwd, newPassword: newPwd })
                             });
                             state.showModal = null;
-                            state.errorMsg = '';
                             render();
                             showMessage('密碼已成功修改！');
                         } catch (error) {
