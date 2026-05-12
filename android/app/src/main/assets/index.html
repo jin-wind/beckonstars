@@ -2462,6 +2462,8 @@
                             render();
                             return;
                         }
+                        console.log('[saveProfile] authToken:', state.authToken ? state.authToken.slice(0, 20) + '...' : 'null');
+                        console.log('[saveProfile] avatar length:', (state.userAvatar || '').length);
                         try {
                             const result = await serverApi('/api/auth/profile', {
                                 method: 'PUT',

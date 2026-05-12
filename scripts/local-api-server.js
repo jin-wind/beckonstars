@@ -612,8 +612,10 @@ const server = http.createServer(async (req, res) => {
 
     // 更新個人資料（需要登入）
     if (req.method === 'PUT' && pathname === '/api/auth/profile') {
+      console.log('[profile] headers:', JSON.stringify(req.headers));
       const authUser = getAuthUser(req);
       if (!authUser) {
+        console.log('[profile] auth failed - no valid token');
         sendJson(res, 401, { error: 'unauthorized' });
         return;
       }
