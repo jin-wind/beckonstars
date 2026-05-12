@@ -962,6 +962,29 @@ const server = http.createServer(async (req, res) => {
       writeDb(latestDb);
       console.log(`[data] 💬 新訊息 [${familyId}] ${message.senderName}: ${message.type === 'photo' ? '📷 圖片' : message.type === 'audio' ? '🎤 語音' : message.content.slice(0, 50)}`);
       sendJson(res, 201, { message });
+
+      // 背景自動轉譯語音訊息
+      if (message.type === 'audio' && message.audio && !message.transcript) {
+        (async () => {
+          try {
+            const transcript = await transcribeAudioWithLlm(message.audio);
+            if (transcript) {
+              const db = await readDb();
+              const family = getFamily(db, familyId);
+              const msg = family?.messages?.find(m => m.id === message.id);
+              if (msg) {
+                msg.transcript = transcript;
+                if (!msg.content || msg.content === '語音訊息') msg.content = transcript;
+                msg.transcriptUpdatedAt = new Date().toISOString();
+                await writeDb(db);
+                console.log(`[transcribe] ✅ 語音轉譯完成 [${familyId}] ${transcript.slice(0, 50)}`);
+              }
+            }
+          } catch (err) {
+            console.warn('[transcribe] 語音自動轉譯失敗:', err.message);
+          }
+        })();
+      }
       return;
     }
 
