@@ -1488,8 +1488,8 @@
             return `
                 <header class="bg-white px-6 pt-12 pb-4 shadow-sm z-10 sticky top-0 flex justify-between items-center rounded-b-2xl">
                     <div class="flex items-center">
-                        <div class="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-2xl mr-3 border-2 border-brand-light shadow-sm">
-                            ${state.userAvatar}
+                        <div class="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-2xl mr-3 border-2 border-brand-light shadow-sm overflow-hidden">
+                            ${(state.userAvatar && (state.userAvatar.startsWith('data:') || state.userAvatar.startsWith('http'))) ? `<img src="${state.userAvatar}" class="w-full h-full object-cover">` : `<span>${state.userAvatar || '👤'}</span>`}
                         </div>
                         <h2 class="text-2xl font-bold text-gray-800">${titles[state.currentTab]}</h2>
                     </div>
