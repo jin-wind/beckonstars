@@ -1235,6 +1235,7 @@
                         ${state.currentTab === 'chat' ? renderChat() : ''}
                         ${state.currentTab === 'leaderboard' ? renderLeaderboard() : ''}
                         ${state.currentTab === 'rewards' ? renderRewards() : ''}
+                        ${state.currentTab === 'profile' ? renderProfile() : ''}
                     </main>
                     ${renderBottomNav()}
                     ${renderModals()}
@@ -1500,7 +1501,8 @@
                 { id: 'calendar', icon: 'fa-calendar-days', label: '日曆' },
                 { id: 'chat', icon: 'fa-comments', label: '聊天' },
                 { id: 'leaderboard', icon: 'fa-ranking-star', label: '排行榜' },
-                { id: 'rewards', icon: 'fa-gift', label: '獎勵' }
+                { id: 'rewards', icon: 'fa-gift', label: '獎勵' },
+                { id: 'profile', icon: 'fa-user', label: '我' }
             ];
 
             return `
@@ -1886,6 +1888,59 @@
             `;
         }
 
+        // --- 個人資料視圖 ---
+        function renderProfile() {
+            const avatar = state.userAvatar || '👤';
+            const isImage = avatar.startsWith('data:') || avatar.startsWith('http');
+            const roleLabel = state.role === 'senior' ? '長輩' : state.role === 'child' ? '子女' : '未設定';
+
+            return `
+                <div class="p-6 space-y-4">
+                    <!-- 頭像和基本資訊 -->
+                    <div class="bg-white rounded-3xl shadow-sm p-6 text-center">
+                        <div class="w-24 h-24 mx-auto mb-4 rounded-full bg-orange-100 flex items-center justify-center overflow-hidden border-4 border-orange-200">
+                            ${isImage ? `<img src="${avatar}" class="w-full h-full object-cover" alt="avatar">` : `<span class="text-5xl">${avatar}</span>`}
+                        </div>
+                        <h2 class="text-2xl font-bold text-gray-800">${state.userName || '用戶'}</h2>
+                        <p class="text-gray-500 text-sm mt-1">${state.currentUser?.email || ''}</p>
+                        <span class="inline-block mt-2 px-3 py-1 rounded-full text-xs font-medium bg-orange-100 text-brand-dark">${roleLabel}</span>
+                    </div>
+
+                    <!-- 家庭邀請碼 -->
+                    <div class="bg-white rounded-3xl shadow-sm p-6">
+                        <h3 class="text-lg font-bold text-gray-800 mb-3"><i class="fa-solid fa-users mr-2 text-brand"></i>家庭邀請碼</h3>
+                        <div class="flex items-center justify-center gap-3 bg-orange-50 rounded-2xl p-4">
+                            <span class="text-3xl font-bold tracking-[0.3em] text-gray-800">${state.calendarCode || '------'}</span>
+                            <button class="action-btn px-4 py-2 bg-brand text-white rounded-xl text-sm font-bold shadow-md hover:bg-brand-dark transition-colors" data-action="copyFamilyCode">
+                                <i class="fa-regular fa-copy mr-1"></i>複製
+                            </button>
+                        </div>
+                        <p class="text-xs text-gray-400 text-center mt-2">分享此碼給家人加入</p>
+                    </div>
+
+                    <!-- 操作按鈕 -->
+                    <div class="bg-white rounded-3xl shadow-sm p-2">
+                        <button class="action-btn w-full flex items-center px-4 py-4 rounded-2xl hover:bg-gray-50 transition-colors" data-action="openModal" data-modal="editProfile">
+                            <i class="fa-solid fa-pen-to-square text-brand text-lg w-8"></i>
+                            <span class="text-gray-800 font-medium">編輯個人資料</span>
+                            <i class="fa-solid fa-chevron-right text-gray-300 ml-auto"></i>
+                        </button>
+                        <div class="border-t border-gray-100 mx-4"></div>
+                        <button class="action-btn w-full flex items-center px-4 py-4 rounded-2xl hover:bg-gray-50 transition-colors" data-action="openModal" data-modal="changePassword">
+                            <i class="fa-solid fa-lock text-brand text-lg w-8"></i>
+                            <span class="text-gray-800 font-medium">修改密碼</span>
+                            <i class="fa-solid fa-chevron-right text-gray-300 ml-auto"></i>
+                        </button>
+                    </div>
+
+                    <!-- 登出 -->
+                    <button class="action-btn w-full bg-red-50 text-red-500 font-bold py-4 rounded-2xl hover:bg-red-100 transition-colors" data-action="logout">
+                        <i class="fa-solid fa-right-from-bracket mr-2"></i>登出
+                    </button>
+                </div>
+            `;
+        }
+
         // --- 彈出視窗 ---
         function renderModals() {
             if (!state.showModal) return '';
@@ -2127,6 +2182,100 @@
                 }
             }
 
+            // 登出確認
+            if (state.showModal === 'confirmLogout') {
+                modalContent = `
+                    <div class="bg-white w-full max-w-sm rounded-3xl p-6 text-center relative animate-fadeIn">
+                        <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <i class="fa-solid fa-right-from-bracket text-2xl text-red-500"></i>
+                        </div>
+                        <h3 class="text-xl font-bold text-gray-800 mb-2">確認登出？</h3>
+                        <p class="text-gray-500 text-sm mb-6">登出後需要重新輸入電郵和密碼登入</p>
+                        <div class="flex gap-3">
+                            <button class="action-btn flex-1 bg-gray-100 text-gray-600 font-bold py-3 rounded-2xl hover:bg-gray-200 transition-colors" data-action="closeModal">取消</button>
+                            <button class="action-btn flex-1 bg-red-500 text-white font-bold py-3 rounded-2xl shadow-md hover:bg-red-600 transition-colors" data-action="confirmLogout">登出</button>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // 編輯個人資料
+            if (state.showModal === 'editProfile') {
+                const avatarOptions = state.role === 'senior' ? avatars.senior : avatars.child;
+                const currentAvatar = state.userAvatar || '👤';
+                const isCustomImage = currentAvatar.startsWith('data:') || currentAvatar.startsWith('http');
+                modalContent = `
+                    <div class="bg-white w-full max-w-md rounded-3xl p-6 relative animate-fadeIn max-h-[85vh] overflow-y-auto">
+                        <button class="action-btn absolute top-4 right-4 w-8 h-8 bg-gray-100 rounded-full text-gray-500 flex items-center justify-center" data-action="closeModal">
+                            <i class="fa-solid fa-times"></i>
+                        </button>
+                        <h2 class="text-xl font-bold text-gray-800 mb-6">編輯個人資料</h2>
+
+                        <!-- 頭像 -->
+                        <div class="text-center mb-4">
+                            <div class="w-20 h-20 mx-auto rounded-full bg-orange-100 flex items-center justify-center overflow-hidden border-4 border-orange-200 mb-2" id="editAvatarPreview">
+                                ${isCustomImage ? `<img src="${currentAvatar}" class="w-full h-full object-cover" id="editAvatarImg">` : `<span class="text-4xl" id="editAvatarEmoji">${currentAvatar}</span>`}
+                            </div>
+                            <button class="action-btn text-sm text-brand font-medium" data-action="uploadAvatar">
+                                <i class="fa-solid fa-camera mr-1"></i>上傳照片
+                            </button>
+                            <input type="file" id="avatarFileInput" accept="image/*" class="hidden">
+                        </div>
+
+                        <!-- Emoji 頭像選擇 -->
+                        <p class="text-sm text-gray-500 mb-2">或選擇 Emoji：</p>
+                        <div class="grid grid-cols-6 gap-2 mb-4">
+                            ${avatarOptions.map(a => `
+                                <button class="action-btn text-2xl p-2 rounded-xl transition-all ${!isCustomImage && currentAvatar === a ? 'bg-brand shadow-md scale-105' : 'bg-gray-50 border border-gray-200 opacity-60'}" data-action="editSelectAvatar" data-avatar="${a}">${a}</button>
+                            `).join('')}
+                        </div>
+
+                        <!-- 名稱 -->
+                        <div class="mb-6">
+                            <label class="text-sm text-gray-500 mb-1 block">名稱</label>
+                            <input id="editNameInput" type="text" value="${state.userName || ''}" class="w-full px-4 py-3 rounded-xl border border-gray-200 text-base focus:outline-none focus:border-brand bg-white" placeholder="輸入您的稱呼">
+                        </div>
+
+                        <button class="action-btn w-full bg-brand text-white font-bold py-3 rounded-2xl shadow-md hover:bg-brand-dark transition-colors" data-action="saveProfile">
+                            儲存
+                        </button>
+                    </div>
+                `;
+            }
+
+            // 修改密碼
+            if (state.showModal === 'changePassword') {
+                modalContent = `
+                    <div class="bg-white w-full max-w-md rounded-3xl p-6 relative animate-fadeIn">
+                        <button class="action-btn absolute top-4 right-4 w-8 h-8 bg-gray-100 rounded-full text-gray-500 flex items-center justify-center" data-action="closeModal">
+                            <i class="fa-solid fa-times"></i>
+                        </button>
+                        <h2 class="text-xl font-bold text-gray-800 mb-6">修改密碼</h2>
+
+                        <div class="space-y-4 mb-6">
+                            <div>
+                                <label class="text-sm text-gray-500 mb-1 block">舊密碼</label>
+                                <input id="oldPasswordInput" type="password" class="w-full px-4 py-3 rounded-xl border border-gray-200 text-base focus:outline-none focus:border-brand bg-white" placeholder="輸入舊密碼" autocomplete="current-password">
+                            </div>
+                            <div>
+                                <label class="text-sm text-gray-500 mb-1 block">新密碼</label>
+                                <input id="newPasswordInput" type="password" class="w-full px-4 py-3 rounded-xl border border-gray-200 text-base focus:outline-none focus:border-brand bg-white" placeholder="至少 6 個字元" autocomplete="new-password">
+                            </div>
+                            <div>
+                                <label class="text-sm text-gray-500 mb-1 block">確認新密碼</label>
+                                <input id="confirmPasswordInput" type="password" class="w-full px-4 py-3 rounded-xl border border-gray-200 text-base focus:outline-none focus:border-brand bg-white" placeholder="再次輸入新密碼" autocomplete="new-password">
+                            </div>
+                        </div>
+
+                        ${state.errorMsg ? `<p class="text-red-500 text-sm mb-4 text-center animate-shake">${state.errorMsg}</p>` : ''}
+
+                        <button class="action-btn w-full bg-brand text-white font-bold py-3 rounded-2xl shadow-md hover:bg-brand-dark transition-colors" data-action="savePassword">
+                            確認修改
+                        </button>
+                    </div>
+                `;
+            }
+
             return `
                 <div class="absolute inset-0 z-50 flex items-${state.showModal === 'addMemory' ? 'end' : 'center'} justify-center bg-black/40 backdrop-blur-sm">
                     ${modalContent}
@@ -2247,6 +2396,99 @@
                                 signOut();
                             } else {
                                 state.errorMsg = '建立家庭失敗，請稍後再試。';
+                            }
+                            render();
+                        }
+                    }
+                    // 個人資料操作
+                    else if (action === 'copyFamilyCode') {
+                        navigator.clipboard?.writeText(state.calendarCode || '').catch(() => {});
+                        showMessage('已複製邀請碼！分享給家人吧。');
+                    }
+                    else if (action === 'logout') {
+                        state.showModal = 'confirmLogout';
+                        render();
+                    }
+                    else if (action === 'confirmLogout') {
+                        state.appReady = false;
+                        state.onboardingStep = 1;
+                        state.showModal = null;
+                        signOut();
+                        render();
+                    }
+                    else if (action === 'uploadAvatar') {
+                        const fileInput = document.getElementById('avatarFileInput');
+                        if (fileInput) fileInput.click();
+                    }
+                    else if (action === 'editSelectAvatar') {
+                        state.userAvatar = newBtn.getAttribute('data-avatar');
+                        const preview = document.getElementById('editAvatarPreview');
+                        if (preview) preview.innerHTML = `<span class="text-4xl">${state.userAvatar}</span>`;
+                        // 更新按鈕選中狀態
+                        document.querySelectorAll('[data-action="editSelectAvatar"]').forEach(b => {
+                            const isSelected = b.getAttribute('data-avatar') === state.userAvatar;
+                            b.className = `action-btn text-2xl p-2 rounded-xl transition-all ${isSelected ? 'bg-brand shadow-md scale-105' : 'bg-gray-50 border border-gray-200 opacity-60'}`;
+                        });
+                    }
+                    else if (action === 'saveProfile') {
+                        const nameInput = document.getElementById('editNameInput');
+                        const newName = nameInput ? nameInput.value.trim() : '';
+                        if (!newName) {
+                            state.errorMsg = '名稱不能為空';
+                            render();
+                            return;
+                        }
+                        try {
+                            const result = await serverApi('/api/auth/profile', {
+                                method: 'PUT',
+                                body: JSON.stringify({ name: newName, avatar: state.userAvatar })
+                            });
+                            state.userName = result.user.name;
+                            state.userAvatar = result.user.picture || state.userAvatar;
+                            state.currentUser = result.user;
+                            localStorage.setItem('beckon-stars-user', JSON.stringify(result.user));
+                            state.showModal = null;
+                            state.errorMsg = '';
+                            render();
+                            showMessage('個人資料已更新！');
+                        } catch (error) {
+                            state.errorMsg = '更新失敗，請稍後再試';
+                            render();
+                        }
+                    }
+                    else if (action === 'savePassword') {
+                        const oldPwd = document.getElementById('oldPasswordInput')?.value || '';
+                        const newPwd = document.getElementById('newPasswordInput')?.value || '';
+                        const confirmPwd = document.getElementById('confirmPasswordInput')?.value || '';
+                        if (!oldPwd || !newPwd || !confirmPwd) {
+                            state.errorMsg = '請填寫所有欄位';
+                            render();
+                            return;
+                        }
+                        if (newPwd.length < 6) {
+                            state.errorMsg = '新密碼長度至少 6 個字元';
+                            render();
+                            return;
+                        }
+                        if (newPwd !== confirmPwd) {
+                            state.errorMsg = '兩次輸入的新密碼不一致';
+                            render();
+                            return;
+                        }
+                        try {
+                            await serverApi('/api/auth/password', {
+                                method: 'PUT',
+                                body: JSON.stringify({ oldPassword: oldPwd, newPassword: newPwd })
+                            });
+                            state.showModal = null;
+                            state.errorMsg = '';
+                            render();
+                            showMessage('密碼已成功修改！');
+                        } catch (error) {
+                            if (error.status === 401) {
+                                state.errorMsg = '舊密碼不正確';
+                            } else {
+                                state.errorMsg = '修改失敗，請稍後再試';
                             }
                             render();
                         }
@@ -2482,6 +2724,23 @@
                     event.target.value = '';
                     const img = await readFileAsDataUrl(file);
                     await sendChatMessage({ type: 'photo', content: '', img });
+                });
+            }
+
+            const avatarFileInput = document.getElementById('avatarFileInput');
+            if (avatarFileInput) {
+                avatarFileInput.addEventListener('change', async event => {
+                    const file = event.target.files?.[0];
+                    if (!file) return;
+                    event.target.value = '';
+                    const dataUrl = await readFileAsDataUrl(file);
+                    state.userAvatar = dataUrl;
+                    const preview = document.getElementById('editAvatarPreview');
+                    if (preview) preview.innerHTML = `<img src="${dataUrl}" class="w-full h-full object-cover">`;
+                    // 取消 emoji 選中狀態
+                    document.querySelectorAll('[data-action="editSelectAvatar"]').forEach(b => {
+                        b.className = 'action-btn text-2xl p-2 rounded-xl transition-all bg-gray-50 border border-gray-200 opacity-60';
+                    });
                 });
             }
 

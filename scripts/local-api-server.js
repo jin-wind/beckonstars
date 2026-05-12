@@ -610,6 +610,101 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // 更新個人資料（需要登入）
+    if (req.method === 'PUT' && pathname === '/api/auth/profile') {
+      const authUser = getAuthUser(req);
+      if (!authUser) {
+        sendJson(res, 401, { error: 'unauthorized' });
+        return;
+      }
+      const body = await readBody(req);
+      const db = await readDb();
+      const user = db.users?.[authUser.userId];
+      if (!user) {
+        sendJson(res, 404, { error: 'user-not-found' });
+        return;
+      }
+
+      if (body.name !== undefined) {
+        const newName = (body.name || '').trim();
+        if (!newName) {
+          sendJson(res, 400, { error: 'missing-name', message: '名稱不能為空' });
+          return;
+        }
+        user.name = newName;
+      }
+      if (body.avatar !== undefined) {
+        user.picture = body.avatar;
+      }
+      user.updatedAt = new Date().toISOString();
+
+      // 同步更新家庭成員資訊
+      if (user.families && user.families.length > 0) {
+        for (const fid of user.families) {
+          const family = getFamily(db, fid);
+          if (family?.members?.[authUser.userId]) {
+            if (body.name !== undefined) family.members[authUser.userId].name = user.name;
+            if (body.avatar !== undefined) family.members[authUser.userId].avatar = user.picture;
+          }
+        }
+      }
+
+      await writeDb(db);
+      console.log(`[auth] 📝 用戶更新資料: ${user.name} (${user.email})`);
+      sendJson(res, 200, {
+        ok: true,
+        user: {
+          userId: user.userId,
+          email: user.email,
+          name: user.name,
+          picture: user.picture || '',
+          families: user.families || []
+        }
+      });
+      return;
+    }
+
+    // 修改密碼（需要登入）
+    if (req.method === 'PUT' && pathname === '/api/auth/password') {
+      const authUser = getAuthUser(req);
+      if (!authUser) {
+        sendJson(res, 401, { error: 'unauthorized' });
+        return;
+      }
+      const body = await readBody(req);
+      const oldPassword = body.oldPassword || '';
+      const newPassword = body.newPassword || '';
+
+      if (!oldPassword || !newPassword) {
+        sendJson(res, 400, { error: 'missing-fields', message: '請輸入舊密碼和新密碼' });
+        return;
+      }
+      if (newPassword.length < 6) {
+        sendJson(res, 400, { error: 'weak-password', message: '新密碼長度至少 6 個字元' });
+        return;
+      }
+
+      const db = await readDb();
+      const user = db.users?.[authUser.userId];
+      if (!user) {
+        sendJson(res, 404, { error: 'user-not-found' });
+        return;
+      }
+
+      const valid = await bcrypt.compare(oldPassword, user.passwordHash);
+      if (!valid) {
+        sendJson(res, 401, { error: 'wrong-password', message: '舊密碼不正確' });
+        return;
+      }
+
+      user.passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+      user.updatedAt = new Date().toISOString();
+      await writeDb(db);
+      console.log(`[auth] 🔒 用戶修改密碼: ${user.email}`);
+      sendJson(res, 200, { ok: true, message: '密碼已更新' });
+      return;
+    }
+
     if (req.method === 'GET' && pathname === '/api/almanac') {
       const urlObj = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
       const dateParam = urlObj.searchParams.get('date');
