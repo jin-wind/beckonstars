@@ -1112,10 +1112,7 @@
             if (state.currentTab === 'chat') {
                 const chatMessages = document.getElementById('chatMessages');
                 if (chatMessages) {
-                    let visibleMessages = state.messages;
-                    if (state.role === 'child') {
-                        visibleMessages = state.messages.filter(m => m.childId === 'senior' || m.senderId === state.authUid);
-                    }
+                    const visibleMessages = state.messages;
                     const existingMsgs = chatMessages.querySelectorAll('[data-msg-id]');
                     const existingIds = new Set(Array.from(existingMsgs).map(el => el.getAttribute('data-msg-id')));
                     const anchor = document.getElementById('chatBottomAnchor');
@@ -1200,10 +1197,7 @@
         }
 
         function renderChatMessages() {
-            let visibleMessages = state.messages;
-            if (state.role === 'child') {
-                visibleMessages = state.messages.filter(m => m.childId === 'senior' || m.senderId === state.authUid);
-            }
+            const visibleMessages = state.messages;
             return `
                 <div class="text-center text-xs text-gray-400 mb-4">今天</div>
                 ${visibleMessages.map(msg => {
@@ -1767,10 +1761,7 @@
 
         // 聊天視圖
         function renderChat() {
-            let visibleMessages = state.messages;
-            if (state.role === 'child') {
-                visibleMessages = state.messages.filter(m => m.childId === 'senior' || m.senderId === state.authUid);
-            }
+            const visibleMessages = state.messages;
             return `
                 <div class="flex flex-col h-full min-h-0 bg-[#FFF8F0]">
                     <div id="chatMessages" class="flex-1 min-h-0 px-4 pt-4 pb-3 space-y-6 overflow-y-auto no-scrollbar">
@@ -3127,7 +3118,7 @@
             }
             state.showModal = null;
             render();
-            await sendChatMessage({
+            const sentMessage = await sendChatMessage({
                 type: 'audio',
                 content: transcript || '語音訊息',
                 transcript,
@@ -3136,6 +3127,14 @@
                 audioDurationMs: recording.durationMs || 0,
                 aiSummary: null
             });
+            if (sentMessage && sentMessage.id) {
+                serverApi(`/api/families/${encodeURIComponent(state.familyId)}/messages/${encodeURIComponent(sentMessage.id)}/transcribe`, {
+                    method: 'POST',
+                    body: JSON.stringify({})
+                }).then(async () => {
+                    await refreshServerMessages(state.familyId);
+                }).catch(err => console.warn('[voice] auto-transcribe failed', err));
+            }
         };
 
         window.handleAndroidVoiceError = message => {
@@ -3275,7 +3274,7 @@
                     }
                     showMessage('訊息送出失敗，請檢查自架服務器。');
                 }
-                return;
+                return message;
             }
 
             state.messages.push(message);
@@ -3287,6 +3286,7 @@
                     : ['收到，今晚返嚟陪你食飯。', '我睇到啦，等陣打俾你。', '多謝提醒，我會安排時間返嚟。'];
                 addSystemReply(replies[Math.floor(Math.random() * replies.length)]);
             }, 900);
+            return message;
         }
 
         function addSystemReply(content) {
