@@ -2077,15 +2077,19 @@
                             `).join('')}
                         </div>
                         <div class="space-y-3 mb-5">
-                            <textarea id="memoryContentInput" rows="3" placeholder="寫低今日想分享的事..." class="w-full bg-gray-50 rounded-2xl border-2 ${state.errorMsg ? 'border-red-400' : 'border-gray-100'} p-4 outline-none focus:border-brand resize-none text-lg">${state.pendingMemoryContent || ''}</textarea>
+                            <textarea id="memoryContentInput" rows="3" placeholder="${state.pendingMemoryType === 'photo' ? '寫低想說的話（可選）...' : '寫低今日想分享的事...'}" class="w-full bg-gray-50 rounded-2xl border-2 ${state.errorMsg ? 'border-red-400' : 'border-gray-100'} p-4 outline-none focus:border-brand resize-none text-lg">${state.pendingMemoryContent || ''}</textarea>
                             ${state.pendingMemoryType === 'photo' ? `
-                                <label class="block">
-                                    <input id="memoryImageInput" type="file" accept="image/*" class="hidden">
-                                    <button type="button" class="action-btn w-full bg-blue-50 text-blue-600 border-2 border-blue-100 rounded-2xl p-4 font-bold flex items-center justify-center" data-action="chooseMemoryImage">
-                                        <i class="fa-solid fa-image mr-2"></i>${state.pendingMemoryImage ? '重新選擇相片' : '選擇手機相片'}
+                                <input id="memoryImageInput" type="file" accept="image/*" class="hidden">
+                                <input id="memoryCameraInput" type="file" accept="image/*" capture="environment" class="hidden">
+                                <div class="grid grid-cols-2 gap-3">
+                                    <button type="button" class="action-btn bg-blue-50 text-blue-600 border-2 border-blue-100 rounded-2xl p-4 font-bold flex flex-col items-center justify-center" data-action="chooseMemoryCamera">
+                                        <i class="fa-solid fa-camera text-2xl mb-1"></i><span class="text-sm">拍攝相片</span>
                                     </button>
-                                </label>
-                                ${state.pendingMemoryImage ? `<img src="${state.pendingMemoryImage}" class="w-full h-40 object-cover rounded-2xl border border-blue-100">` : ''}
+                                    <button type="button" class="action-btn bg-blue-50 text-blue-600 border-2 border-blue-100 rounded-2xl p-4 font-bold flex flex-col items-center justify-center" data-action="chooseMemoryImage">
+                                        <i class="fa-solid fa-images text-2xl mb-1"></i><span class="text-sm">從相簿選擇</span>
+                                    </button>
+                                </div>
+                                ${state.pendingMemoryImage ? `<img src="${state.pendingMemoryImage}" class="w-full h-40 object-cover rounded-2xl border border-blue-100 mt-2">` : ''}
                             ` : ''}
                             ${state.errorMsg ? `<p class="text-red-500 text-sm animate-shake">${state.errorMsg}</p>` : ''}
                         </div>
@@ -2595,11 +2599,20 @@
                         const imageInput = document.getElementById('memoryImageInput');
                         imageInput?.click();
                     }
+                    else if (action === 'chooseMemoryCamera') {
+                        const cameraInput = document.getElementById('memoryCameraInput');
+                        cameraInput?.click();
+                    }
                     else if (action === 'saveMemory') {
                         const memoryContentInput = document.getElementById('memoryContentInput');
                         const content = memoryContentInput?.value.trim();
-                        if (!content) {
+                        if (state.pendingMemoryType === 'text' && !content) {
                             state.errorMsg = '請先寫低一點內容。';
+                            render();
+                            return;
+                        }
+                        if (state.pendingMemoryType === 'photo' && !content && !state.pendingMemoryImage) {
+                            state.errorMsg = '請選擇一張相片或寫低內容。';
                             render();
                             return;
                         }
@@ -2720,6 +2733,18 @@
             const memoryImageInput = document.getElementById('memoryImageInput');
             if (memoryImageInput) {
                 memoryImageInput.addEventListener('change', async event => {
+                    const file = event.target.files?.[0];
+                    if (!file) return;
+                    state.pendingMemoryImage = await readFileAsDataUrl(file);
+                    const memoryContentInput = document.getElementById('memoryContentInput');
+                    if (memoryContentInput) state.pendingMemoryContent = memoryContentInput.value;
+                    render();
+                });
+            }
+
+            const memoryCameraInput = document.getElementById('memoryCameraInput');
+            if (memoryCameraInput) {
+                memoryCameraInput.addEventListener('change', async event => {
                     const file = event.target.files?.[0];
                     if (!file) return;
                     state.pendingMemoryImage = await readFileAsDataUrl(file);
