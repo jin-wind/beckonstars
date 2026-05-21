@@ -9,3 +9,4 @@ serviceAccountKey.json
 client_secret_*.json
 server_secret_*.json
 .claude/settings.local.json
+.superpowers/
