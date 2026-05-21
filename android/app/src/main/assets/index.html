@@ -193,6 +193,8 @@
             pushTokenCount: 0,
             pushTokenPreview: '',
             seniorMode: false,
+            summarizingChat: false,
+            chatSummaryContent: '',
             suggestions: [
                 "今日適宜同屋企人去飲茶 🍵", "今日適宜同媽咪打個視像電話 📱", 
                 "今日適宜一齊去行公園散步 🌳", "今日適宜分享一張靚靚風景相 📸", "今日適宜同屋企人分享一件開心事 ✨"
@@ -1851,6 +1853,15 @@
                         <div id="chatBottomAnchor" aria-hidden="true" class="h-px"></div>
                     </div>
 
+                    ${state.backendMode === 'server' ? `
+                    <div class="shrink-0 px-3 py-2 bg-[#FFF8F0]">
+                        <button class="action-btn w-full bg-white border border-gray-100 rounded-2xl py-2.5 px-4 flex items-center justify-center gap-2 text-[var(--font-sm)] font-bold text-gray-600 shadow-sm hover:bg-gray-50 transition-colors disabled:opacity-60" data-action="summarizeTodayChat" ${state.summarizingChat ? 'disabled' : ''}>
+                            <i class="fa-solid ${state.summarizingChat ? 'fa-spinner fa-spin' : 'fa-wand-magic-sparkles'} text-brand"></i>
+                            ${state.summarizingChat ? 'AI 總結中...' : 'AI 總結今日聊天'}
+                        </button>
+                    </div>
+                    ` : ''}
+
                     <div class="shrink-0 bg-white px-3 py-3 border-t border-gray-100 shadow-[0_-4px_10px_rgba(0,0,0,0.03)] flex items-center gap-2">
                         <button id="voiceHoldButton" class="w-10 h-10 rounded-full ${state.voiceRecording.active ? (state.voiceRecording.cancel ? 'bg-red-100 text-red-600' : 'bg-brand text-white') : 'bg-gray-100 text-gray-500'} flex items-center justify-center shrink-0 select-none touch-none" title="按住錄音，上滑取消">
                             <i class="fa-solid fa-microphone text-[var(--font-xl)]"></i>
@@ -2029,6 +2040,22 @@
                         <h3 class="text-[var(--font-xl)] font-bold text-gray-800 mb-2">提示</h3>
                         <p class="text-gray-600 mb-6">${state.modalMessage}</p>
                         <button class="action-btn w-full py-3 bg-brand text-white font-bold rounded-xl shadow-md" data-action="closeModal">確定</button>
+                    </div>
+                `;
+            }
+
+            if (state.showModal === 'chatSummary') {
+                modalContent = `
+                    <div class="bg-white w-[90%] max-w-sm rounded-3xl p-6 shadow-2xl animate-fadeIn relative">
+                        <button class="action-btn absolute top-4 right-4 w-8 h-8 bg-gray-100 rounded-full text-gray-500 flex items-center justify-center" data-action="closeModal">
+                            <i class="fa-solid fa-times"></i>
+                        </button>
+                        <div class="w-14 h-14 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center text-[var(--font-2xl)] mb-4">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i>
+                        </div>
+                        <h3 class="text-[var(--font-2xl)] font-bold text-gray-800 mb-2">今日聊天總結</h3>
+                        <p class="text-[var(--font-base)] text-gray-700 leading-relaxed mb-5 whitespace-pre-line">${state.chatSummaryContent}</p>
+                        <button class="action-btn w-full py-3 bg-brand text-white font-bold rounded-xl shadow-md" data-action="closeModal">關閉</button>
                     </div>
                 `;
             }
@@ -2718,6 +2745,39 @@
                     }
                     else if (action === 'summarizeVoice') {
                         await summarizeVoiceMessage(newBtn.getAttribute('data-message-id'));
+                    }
+                    else if (action === 'summarizeTodayChat') {
+                        state.summarizingChat = true;
+                        render();
+                        try {
+                            const todayStr = `${today.getFullYear()}-${(today.getMonth()+1).toString().padStart(2,'0')}-${today.getDate().toString().padStart(2,'0')}`;
+                            const todayMessages = state.messages.filter(m => {
+                                if (!m.time) return false;
+                                return true; // 今日聊天室訊息
+                            });
+                            const chatText = todayMessages.map(m => {
+                                const name = m.senderName || '用戶';
+                                const content = m.transcript || m.content || '';
+                                return `${name}: ${content}`;
+                            }).filter(Boolean).join('\n');
+                            if (!chatText.trim()) {
+                                showMessage('今日暫無聊天內容可總結。');
+                                state.summarizingChat = false;
+                                render();
+                                return;
+                            }
+                            const result = await serverApi('/api/summarize', {
+                                method: 'POST',
+                                body: JSON.stringify({ text: chatText })
+                            });
+                            state.showModal = 'chatSummary';
+                            state.chatSummaryContent = result.summary || '暫無摘要';
+                        } catch (err) {
+                            console.warn('[summary] failed', err);
+                            showMessage('AI 總結失敗，請稍後再試。');
+                        }
+                        state.summarizingChat = false;
+                        render();
                     }
                     else if (action === 'transcribeVoice') {
                         await transcribeVoiceMessage(newBtn.getAttribute('data-message-id'));
