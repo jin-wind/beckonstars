@@ -5,6 +5,7 @@ import android.app.Activity;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.content.ClipData;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
@@ -15,9 +16,12 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.MediaStore;
 import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
+import androidx.core.content.FileProvider;
+import android.util.Base64;
 import android.util.Log;
 import android.view.View;
 import android.webkit.JavascriptInterface;
@@ -26,7 +30,6 @@ import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
-import android.util.Base64;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -42,6 +45,7 @@ public class MainActivity extends Activity {
     private static final String SPEECH_LANGUAGE = "zh-HK";
     private WebView webView;
     private ValueCallback<Uri[]> filePathCallback;
+    private Uri pendingCameraImageUri;
     private SpeechRecognizer speechRecognizer;
     private MediaRecorder mediaRecorder;
     private MediaPlayer transcriptionPlayer;
@@ -88,6 +92,11 @@ public class MainActivity extends Activity {
                     MainActivity.this.filePathCallback.onReceiveValue(null);
                 }
                 MainActivity.this.filePathCallback = filePathCallback;
+
+                if (fileChooserParams.isCaptureEnabled() && acceptsImage(fileChooserParams)) {
+                    return startCameraFileChooser();
+                }
+
                 Intent intent = fileChooserParams.createIntent();
                 intent.addCategory(Intent.CATEGORY_OPENABLE);
                 try {
@@ -159,10 +168,50 @@ public class MainActivity extends Activity {
 
         Uri[] results = null;
         if (resultCode == RESULT_OK) {
-            results = WebChromeClient.FileChooserParams.parseResult(resultCode, data);
+            if (pendingCameraImageUri != null) {
+                results = new Uri[] { pendingCameraImageUri };
+            } else {
+                results = WebChromeClient.FileChooserParams.parseResult(resultCode, data);
+            }
         }
         filePathCallback.onReceiveValue(results);
         filePathCallback = null;
+        pendingCameraImageUri = null;
+    }
+
+    private boolean acceptsImage(WebChromeClient.FileChooserParams fileChooserParams) {
+        String[] acceptTypes = fileChooserParams.getAcceptTypes();
+        if (acceptTypes == null || acceptTypes.length == 0) return true;
+        for (String acceptType : acceptTypes) {
+            if (acceptType == null || acceptType.isEmpty() || acceptType.startsWith("image/")) return true;
+        }
+        return false;
+    }
+
+    private boolean startCameraFileChooser() {
+        try {
+            File imageFile = File.createTempFile("memory-camera-", ".jpg", getCacheDir());
+            pendingCameraImageUri = FileProvider.getUriForFile(
+                this,
+                getPackageName() + ".fileprovider",
+                imageFile
+            );
+
+            Intent cameraIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+            cameraIntent.putExtra(MediaStore.EXTRA_OUTPUT, pendingCameraImageUri);
+            cameraIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            cameraIntent.setClipData(ClipData.newUri(getContentResolver(), "memory-camera", pendingCameraImageUri));
+            startActivityForResult(cameraIntent, REQUEST_FILE_CHOOSER);
+            return true;
+        } catch (Exception error) {
+            Log.e(TAG, "Unable to start camera file chooser", error);
+            if (filePathCallback != null) {
+                filePathCallback.onReceiveValue(null);
+                filePathCallback = null;
+            }
+            pendingCameraImageUri = null;
+            return false;
+        }
     }
 
     @Override
