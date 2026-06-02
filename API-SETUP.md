@@ -2,7 +2,7 @@
 
 本文件說明如何為星喚服務器配置兩個 AI 服務：
 
-1. **Azure Speech to Text** — 語音轉文字（Fast Transcription）
+1. **Azure Speech to Text** — 語音轉文字（REST short audio）
 2. **OpenRouter** — AI 文字摘要/總結
 
 ---
@@ -44,25 +44,21 @@
 
 星喚已配置的語言優先順序：
 - `zh-HK` — 香港廣東話
-- `yue` — 粵語
-- `zh-TW` — 繁體中文
-- `zh-CN` — 簡體中文
-- `en-US` — 英文
 
-Azure Fast Transcription 會自動檢測語言。
+如需改用英文或普通話，可用 `AZURE_STT_LANGUAGE` 覆蓋，例如 `en-US` 或 `zh-CN`。
 
 ### 4. 技術細節
 
 星喚使用的 API：
 
 ```
-POST https://{endpoint}/speechtotext/transcriptions:transcribe?api-version=2024-05-15-preview
+POST https://{region}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=zh-HK&format=detailed
 ```
 
 - 音頻格式：**WAV** (已由 ffmpeg 從錄音轉換為 16kHz, mono)
-- 請求方式：**multipart/form-data**
-- 包含兩個字段：`audio` (二進制) 和 `definition` (JSON)
-- 響應字段：`combinedPhrases[].text` 拼接為轉譯結果
+- 請求方式：直接 POST `audio/wav; codecs=audio/pcm; samplerate=16000`
+- 響應字段：優先使用 `DisplayText`，其次使用 `NBest[0].Display`
+- 已用 East Asia regional host 實測成功：`eastasia.stt.speech.microsoft.com`
 
 ### 5. 查看用量
 
@@ -135,11 +131,12 @@ POST https://openrouter.ai/api/v1/chat/completions
 在啟動服務器之前執行：
 
 ```bash
-export AZURE_STT_ENDPOINT="https://your-resource.cognitiveservices.azure.com/"
 export AZURE_STT_KEY="your-azure-key-here"
+export AZURE_STT_REGION="eastasia"
 export OPENROUTER_API_KEY="sk-or-v1-your-key-here"
 
 # 可選
+export AZURE_STT_LANGUAGE="zh-HK"
 export OPENROUTER_MODEL="moonshotai/kimi-k2.6:free"
 export OPENROUTER_HTTP_REFERER="https://beckonstars.app"
 
@@ -149,8 +146,9 @@ npm run api-server
 
 **Windows (PowerShell)**：
 ```powershell
-$env:AZURE_STT_ENDPOINT = "https://your-resource.cognitiveservices.azure.com/"
 $env:AZURE_STT_KEY = "your-azure-key-here"
+$env:AZURE_STT_REGION = "eastasia"
+$env:AZURE_STT_LANGUAGE = "zh-HK"
 $env:OPENROUTER_API_KEY = "sk-or-v1-your-key-here"
 
 npm run api-server
@@ -166,8 +164,9 @@ module.exports = {
     name: 'beckonstars',
     script: 'scripts/local-api-server.js',
     env: {
-      AZURE_STT_ENDPOINT: 'https://your-resource.cognitiveservices.azure.com/',
       AZURE_STT_KEY: 'your-azure-key-here',
+      AZURE_STT_REGION: 'eastasia',
+      AZURE_STT_LANGUAGE: 'zh-HK',
       OPENROUTER_API_KEY: 'sk-or-v1-your-key-here',
       OPENROUTER_MODEL: 'moonshotai/kimi-k2.6:free',
       JWT_SECRET: 'your-fixed-jwt-secret-here'

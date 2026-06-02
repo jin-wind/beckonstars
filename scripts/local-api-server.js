@@ -76,9 +76,13 @@ const llmApiKey = process.env.LLM_SUMMARY_API_KEY || process.env.OPENAI_API_KEY 
 const llmModel = process.env.LLM_SUMMARY_MODEL || process.env.OPENAI_SUMMARY_MODEL || 'mimo-v2.5';
 const llmTranscribeModel = process.env.LLM_TRANSCRIBE_MODEL || process.env.LLM_AUDIO_MODEL || 'mimo-v2-omni';
 
-// Azure Speech to Text (Fast Transcription)
-const azureSttEndpoint = (process.env.AZURE_STT_ENDPOINT || 'https://tmcss-stt-s1.cognitiveservices.azure.com/').replace(/\/+$/, '');
+// Azure Speech to Text REST API (short audio)
 const azureSttKey = process.env.AZURE_STT_KEY || process.env.AZURE_SPEECH_KEY || '';
+const azureSttRegion = process.env.AZURE_STT_REGION || 'eastasia';
+const azureSttLanguage = process.env.AZURE_STT_LANGUAGE || process.env.AZURE_STT_LOCALE || 'zh-HK';
+const azureSttRecognitionHost = (process.env.AZURE_STT_RECOGNITION_HOST || `${azureSttRegion}.stt.speech.microsoft.com`)
+  .replace(/^https?:\/\//, '')
+  .replace(/\/+$/, '');
 
 // OpenRouter (AI 摘要)
 const openrouterApiKey = process.env.OPENROUTER_API_KEY || '';
@@ -257,33 +261,53 @@ function prepareAudioForLlm(audioDataUrl) {
   return convertAudioToWavBase64(audio);
 }
 
+function extractAzureTranscript(result) {
+  const text = result?.DisplayText
+    || result?.NBest?.[0]?.Display
+    || result?.NBest?.[0]?.Lexical
+    || result?.NBest?.[0]?.ITN
+    || '';
+  return cleanTranscript(text, '[聽不清]');
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 async function transcribeWithAzureStt(audioDataUrl) {
   const audio = prepareAudioForLlm(audioDataUrl);
   if (!audio?.data) return '';
 
-  // 標準 Azure Speech-to-text REST API（short audio）
-  // 直接傳 audio/wav binary，用 query param 設 locale
   const audioBuffer = Buffer.from(audio.data, 'base64');
+  const url = `https://${azureSttRecognitionHost}/speech/recognition/conversation/cognitiveservices/v1?language=${encodeURIComponent(azureSttLanguage)}&format=detailed`;
 
-  const response = await fetch(
-    `${azureSttEndpoint}/speechtotext/transcriptions:transcribe?api-version=2024-05-15-preview&locale=zh-HK&diarizationEnabled=false`,
-    {
+  let lastError = '';
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
+        Accept: 'application/json;text/xml',
         'Ocp-Apim-Subscription-Key': azureSttKey,
-        'Content-Type': 'audio/wav'
+        'Content-Type': 'audio/wav; codecs=audio/pcm; samplerate=16000'
       },
       body: audioBuffer
-    }
-  );
+    });
 
-  if (!response.ok) {
+    if (response.ok) {
+      const result = await response.json();
+      if (result?.RecognitionStatus && result.RecognitionStatus !== 'Success') {
+        return '[聽不清]';
+      }
+      return extractAzureTranscript(result);
+    }
+
     const errorText = await response.text().catch(() => '');
-    throw new Error(`azure-stt-${response.status}${errorText ? `: ${errorText.slice(0, 300)}` : ''}`);
+    lastError = `azure-stt-${response.status}${errorText ? `: ${errorText.slice(0, 300)}` : ''}`;
+    if (![429, 500, 502, 503, 504].includes(response.status) || attempt === 2) break;
+    await sleep(500 * (attempt + 1));
   }
 
-  const result = await response.json();
-  return result.combinedPhrases?.map(p => p.text).join('') || '[聽不清]';
+  throw new Error(lastError || 'azure-stt-failed');
 }
 
 async function transcribeAudioWithLlm(audioDataUrl) {
@@ -1212,6 +1236,7 @@ server.listen(port, host, async () => {
   }
 
   console.log(`\n🤖 LLM 摘要: ${llmBaseUrl} (${llmModel})`);
+  console.log(`🎤 Azure STT: ${azureSttKey ? `https://${azureSttRecognitionHost} (${azureSttLanguage})` : '未配置'}`);
   console.log(`🎤 LLM 轉譯: ${llmTranscribeModel}`);
   console.log(`💾 資料庫: ${dbPath}`);
   console.log(`${'='.repeat(50)}\n`);
