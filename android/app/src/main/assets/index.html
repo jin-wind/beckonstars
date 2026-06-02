@@ -1534,7 +1534,8 @@
 
         // 頂部導航列 (加入一鍵刪除按鈕)
         function renderHeader() {
-            const titles = { 'calendar': '共用日曆', 'chat': '溫馨對話', 'rewards': '家庭獎勵', 'leaderboard': '活躍度排行榜' };
+            const titles = { 'calendar': '共用日曆', 'chat': '溫馨對話', 'rewards': '家庭獎勵', 'leaderboard': '活躍度排行榜', 'profile': '我' };
+            const currentTitle = titles[state.currentTab] || '星喚';
             const backendLabel = '自架';
             const backendIcon = 'fa-cloud';
             return `
@@ -1543,7 +1544,7 @@
                         <div class="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center bs-text-2xl mr-3 border-2 border-brand-light shadow-sm overflow-hidden">
                             ${(state.userAvatar && (state.userAvatar.startsWith('data:') || state.userAvatar.startsWith('http'))) ? `<img src="${state.userAvatar}" class="w-full h-full object-cover">` : `<span>${state.userAvatar || '👤'}</span>`}
                         </div>
-                        <h2 class="bs-text-2xl font-bold text-gray-800">${titles[state.currentTab]}</h2>
+                        <h2 class="bs-text-2xl font-bold text-gray-800">${currentTitle}</h2>
                     </div>
                     <div class="flex items-center gap-2">
                         <button class="action-btn hidden sm:flex bg-green-50 text-green-700 px-3 py-1.5 rounded-full font-bold items-center bs-text-xs border border-green-100" data-action="openModal" data-modal="architecture" title="展示技術架構">
