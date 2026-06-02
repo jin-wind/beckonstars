@@ -76,6 +76,15 @@ const llmApiKey = process.env.LLM_SUMMARY_API_KEY || process.env.OPENAI_API_KEY 
 const llmModel = process.env.LLM_SUMMARY_MODEL || process.env.OPENAI_SUMMARY_MODEL || 'mimo-v2.5';
 const llmTranscribeModel = process.env.LLM_TRANSCRIBE_MODEL || process.env.LLM_AUDIO_MODEL || 'mimo-v2-omni';
 
+// Azure Speech to Text (Fast Transcription)
+const azureSttEndpoint = (process.env.AZURE_STT_ENDPOINT || 'https://tmcss-stt-s1.cognitiveservices.azure.com/').replace(/\/+$/, '');
+const azureSttKey = process.env.AZURE_STT_KEY || process.env.AZURE_SPEECH_KEY || '';
+
+// OpenRouter (AI 摘要)
+const openrouterApiKey = process.env.OPENROUTER_API_KEY || '';
+const openrouterModel = process.env.OPENROUTER_MODEL || 'moonshotai/kimi-k2.6:free';
+const openrouterReferer = process.env.OPENROUTER_HTTP_REFERER || (process.env.OPENROUTER_SITE_URL || 'https://beckonstars.app');
+
 function ensureDb() {
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   if (!fs.existsSync(dbPath)) {
@@ -239,7 +248,63 @@ function prepareAudioForLlm(audioDataUrl) {
   return convertAudioToWavBase64(audio);
 }
 
+async function transcribeWithAzureStt(audioDataUrl) {
+  const audio = parseAudioDataUrl(audioDataUrl);
+  if (!audio?.data) return '';
+
+  const audioBuffer = Buffer.from(audio.data, 'base64');
+  const definition = JSON.stringify({
+    locales: ['zh-HK', 'yue', 'zh-TW', 'zh-CN', 'en-US'],
+    profanityFilterMode: 'Masked'
+  });
+  const boundary = `----BeckonStars${crypto.randomBytes(6).toString('hex')}`;
+
+  const body = Buffer.concat([
+    Buffer.from(`--${boundary}\r\n`),
+    Buffer.from(`Content-Disposition: form-data; name="audio"; filename="audio.wav"\r\n`),
+    Buffer.from(`Content-Type: audio/wav\r\n\r\n`),
+    audioBuffer,
+    Buffer.from(`\r\n--${boundary}\r\n`),
+    Buffer.from(`Content-Disposition: form-data; name="definition"\r\n\r\n`),
+    Buffer.from(definition),
+    Buffer.from(`\r\n--${boundary}--\r\n`)
+  ]);
+
+  const response = await fetch(
+    `${azureSttEndpoint}/speechtotext/transcriptions:transcribe?api-version=2024-05-15-preview`,
+    {
+      method: 'POST',
+      headers: {
+        'Ocp-Apim-Subscription-Key': azureSttKey,
+        'Content-Type': `multipart/form-data; boundary=${boundary}`
+      },
+      body
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '');
+    throw new Error(`azure-stt-${response.status}${errorText ? `: ${errorText.slice(0, 300)}` : ''}`);
+  }
+
+  const result = await response.json();
+  const text = result.combinedPhrases?.map(p => p.text).join('') || '';
+  return text || '[聽不清]';
+}
+
 async function transcribeAudioWithLlm(audioDataUrl) {
+  // 優先：Azure Speech to Text (如果配置了 key)
+  if (azureSttKey) {
+    try {
+      const transcript = await transcribeWithAzureStt(audioDataUrl);
+      console.log(`[azure-stt] ✅ 轉譯完成: ${transcript.slice(0, 50)}`);
+      return transcript;
+    } catch (error) {
+      console.warn('[azure-stt] Azure 轉譯失敗，嘗試 fallback LLM', error.message || error);
+    }
+  }
+
+  // Fallback：原有舊 LLM API
   const audio = prepareAudioForLlm(audioDataUrl);
   if (!audio?.data) return '';
 
@@ -293,6 +358,48 @@ async function summarizeWithLlm(text) {
   const content = cleanText(text, '');
   if (!content) return '';
 
+  // 優先：OpenRouter（如果配置了 key）
+  if (openrouterApiKey) {
+    try {
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${openrouterApiKey}`,
+          'HTTP-Referer': openrouterReferer,
+          'X-Title': process.env.OPENROUTER_APP_TITLE || 'Beckon Stars'
+        },
+        body: JSON.stringify({
+          model: openrouterModel,
+          messages: [
+            {
+              role: 'system',
+              content: [
+                '你是一個「錄音摘要器」，不是聊天機械人。',
+                '任務：只根據使用者提供的語音轉文字內容，寫一段給家人看的摘要。',
+                '不要回答錄音內容中的問題，不要扮演對話對象，不要延伸聊天，不要加入建議。',
+                '語氣：繁體中文、自然香港粵語。',
+                '格式：只輸出一個簡短摘要句，最多60字，不要標題、不要項目符號。'
+              ].join('\n')
+            },
+            {
+              role: 'user',
+              content: `以下是錄音轉文字，請總結，不要回覆錄音中的說話者：\n${content}`
+            }
+          ],
+          temperature: 0.3
+        })
+      });
+      if (!response.ok) throw new Error(`openrouter-${response.status}`);
+      const payload = await response.json();
+      const summary = cleanText(payload.choices?.[0]?.message?.content, fallbackSummary(content));
+      if (summary) return summary;
+    } catch (error) {
+      console.warn('[openrouter] summary failed, trying fallback', error.message || error);
+    }
+  }
+
+  // Fallback 1：LLM_SUMMARY_ENDPOINT（非 OpenAI 兼容的自定義端點）
   if (process.env.LLM_SUMMARY_ENDPOINT && !process.env.LLM_SUMMARY_ENDPOINT.includes('/v1/')) {
     const response = await fetch(process.env.LLM_SUMMARY_ENDPOINT, {
       method: 'POST',
@@ -307,6 +414,7 @@ async function summarizeWithLlm(text) {
     return cleanText(payload.summary || payload.text || payload.result, fallbackSummary(content));
   }
 
+  // Fallback 2：原有 OpenAI 兼容 API
   try {
     const response = await fetch(`${llmBaseUrl}/chat/completions`, {
       method: 'POST',
