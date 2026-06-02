@@ -101,7 +101,16 @@ async function readDb() {
 let _writeLock = Promise.resolve();
 function writeDb(db) {
   const payload = JSON.stringify(db, null, 2);
-  _writeLock = _writeLock.then(() => fs.promises.writeFile(dbPath, payload)).catch(() => {});
+  const tmpPath = `${dbPath}.tmp`;
+  _writeLock = _writeLock
+    .then(async () => {
+      await fs.promises.writeFile(tmpPath, payload, 'utf8');
+      await fs.promises.rename(tmpPath, dbPath);
+    })
+    .catch(err => {
+      console.error('[db] write failed:', err.message);
+      throw err;
+    });
   return _writeLock;
 }
 
@@ -254,7 +263,7 @@ async function transcribeWithAzureStt(audioDataUrl) {
 
   const audioBuffer = Buffer.from(audio.data, 'base64');
   const definition = JSON.stringify({
-    locales: ['zh-HK', 'yue', 'zh-TW', 'zh-CN', 'en-US'],
+    locales: ['zh-HK'],
     profanityFilterMode: 'Masked'
   });
   const boundary = `----BeckonStars${crypto.randomBytes(6).toString('hex')}`;
