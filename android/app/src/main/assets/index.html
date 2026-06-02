@@ -36,6 +36,14 @@
             --btn-min-h: 52px; --touch-target: 48px;
             --line-height: 1.5; --radius: 20px;
         }
+        .bs-text-xs { font-size: var(--font-xs); line-height: var(--line-height); }
+        .bs-text-sm { font-size: var(--font-sm); line-height: var(--line-height); }
+        .bs-text-base { font-size: var(--font-base); line-height: var(--line-height); }
+        .bs-text-lg { font-size: var(--font-lg); line-height: var(--line-height); }
+        .bs-text-xl { font-size: var(--font-xl); line-height: var(--line-height); }
+        .bs-text-2xl { font-size: var(--font-2xl); line-height: var(--line-height); }
+        .bs-text-3xl { font-size: var(--font-3xl); line-height: var(--line-height); }
+        .bs-text-4xl { font-size: var(--font-4xl); line-height: var(--line-height); }
 
         html {
             height: 100%;
@@ -238,6 +246,29 @@
             isPlaying: false
         };
 
+        function applySeniorModeVars() {
+            const appEl = document.getElementById('app');
+            if (!appEl) return;
+            const sm = state.seniorMode;
+            appEl.style.setProperty('--font-xs', sm ? '15px' : '12px');
+            appEl.style.setProperty('--font-sm', sm ? '18px' : '14px');
+            appEl.style.setProperty('--font-base', sm ? '20px' : '16px');
+            appEl.style.setProperty('--font-lg', sm ? '22px' : '18px');
+            appEl.style.setProperty('--font-xl', sm ? '24px' : '20px');
+            appEl.style.setProperty('--font-2xl', sm ? '28px' : '24px');
+            appEl.style.setProperty('--font-3xl', sm ? '32px' : '30px');
+            appEl.style.setProperty('--font-4xl', sm ? '38px' : '36px');
+            appEl.style.setProperty('--space-xs', sm ? '6px' : '4px');
+            appEl.style.setProperty('--space-sm', sm ? '10px' : '8px');
+            appEl.style.setProperty('--space-md', sm ? '16px' : '12px');
+            appEl.style.setProperty('--space-lg', sm ? '20px' : '16px');
+            appEl.style.setProperty('--space-xl', sm ? '28px' : '24px');
+            appEl.style.setProperty('--btn-min-h', sm ? '52px' : '44px');
+            appEl.style.setProperty('--touch-target', sm ? '48px' : '40px');
+            appEl.style.setProperty('--line-height', sm ? '1.5' : '1.4');
+            appEl.style.setProperty('--radius', sm ? '20px' : '16px');
+        }
+
         function getChatMessagesContainer() {
             return document.getElementById('chatMessages');
         }
@@ -365,7 +396,7 @@
                         <div class="w-9 h-9 rounded-full ${isMe ? 'bg-white/20' : 'bg-orange-100'} flex items-center justify-center">
                             <i class="fa-solid fa-microphone ${isMe ? 'text-white' : 'text-brand'}"></i>
                         </div>
-                        <p class="text-[var(--font-sm)] opacity-80">錄音檔未同步</p>
+                        <p class="bs-text-sm opacity-80">錄音檔未同步</p>
                     </div>
                 `;
             }
@@ -373,14 +404,14 @@
             return `
                 <div class="voice-player flex items-center gap-2 w-full" data-message-id="${escapeAttribute(messageId)}" data-duration="${duration}">
                     <button type="button" class="action-btn voice-play-button w-9 h-9 rounded-full ${buttonClass} flex items-center justify-center shrink-0 shadow-sm" data-action="toggleVoice" data-message-id="${escapeAttribute(messageId)}" title="${isPlaying ? '暫停錄音' : '播放錄音'}">
-                        <i class="fa-solid ${isPlaying ? 'fa-pause' : 'fa-play'} voice-play-icon text-[var(--font-sm)]"></i>
+                        <i class="fa-solid ${isPlaying ? 'fa-pause' : 'fa-play'} voice-play-icon bs-text-sm"></i>
                     </button>
                     <button type="button" class="voice-seek-bar flex-1 min-w-24 h-8 flex items-center" data-message-id="${escapeAttribute(messageId)}" title="調整播放位置">
                         <span class="relative block h-2 w-full rounded-full ${trackClass} overflow-hidden">
                             <span class="voice-progress-fill absolute inset-y-0 left-0 rounded-full ${fillClass}" style="width: ${progress}%;"></span>
                         </span>
                     </button>
-                    <span class="voice-time flex items-center gap-0.5 text-[var(--font-xs)] tabular-nums ${timeClass} shrink-0">
+                    <span class="voice-time flex items-center gap-0.5 bs-text-xs tabular-nums ${timeClass} shrink-0">
                         <span class="voice-current">${formatVoiceTime(currentTime)}</span>
                         <span class="opacity-60">/</span>
                         <span class="voice-duration">${formatVoiceTime(duration)}</span>
@@ -401,7 +432,7 @@
                 const isPlaying = isActive && voicePlayback.isPlaying;
 
                 const icon = player.querySelector('.voice-play-icon');
-                if (icon) icon.className = `fa-solid ${isPlaying ? 'fa-pause' : 'fa-play'} voice-play-icon text-[var(--font-sm)]`;
+                if (icon) icon.className = `fa-solid ${isPlaying ? 'fa-pause' : 'fa-play'} voice-play-icon bs-text-sm`;
 
                 const playButton = player.querySelector('.voice-play-button');
                 if (playButton) playButton.title = isPlaying ? '暫停錄音' : '播放錄音';
@@ -451,12 +482,12 @@
             overlay.classList.add('opacity-100');
 
             video.addEventListener('play', () => {
-                playIcon.className = 'fa-solid fa-pause text-white text-[var(--font-3xl)]';
+                playIcon.className = 'fa-solid fa-pause text-white bs-text-3xl';
                 showOverlay();
             });
 
             video.addEventListener('pause', () => {
-                playIcon.className = 'fa-solid fa-play text-white text-[var(--font-3xl)] ml-1';
+                playIcon.className = 'fa-solid fa-play text-white bs-text-3xl ml-1';
                 overlay.classList.remove('opacity-0');
                 overlay.classList.add('opacity-100');
             });
@@ -470,7 +501,7 @@
             });
 
             video.addEventListener('ended', () => {
-                playIcon.className = 'fa-solid fa-play text-white text-[var(--font-3xl)] ml-1';
+                playIcon.className = 'fa-solid fa-play text-white bs-text-3xl ml-1';
                 overlay.classList.remove('opacity-0');
                 overlay.classList.add('opacity-100');
             });
@@ -680,6 +711,7 @@
                 const savedSeniorMode = localStorage.getItem('beckon-stars-senior-mode');
                 state.seniorMode = savedSeniorMode !== null ? savedSeniorMode === 'true' : state.role === 'senior';
                 document.body.classList.toggle('senior-mode', state.seniorMode);
+                applySeniorModeVars();
                 subscribeFamilyMessages(state.familyId);
                 subscribeFamilyMemories(state.familyId);
                 render();
@@ -1208,15 +1240,15 @@
             const displayName = isMe ? state.userName : msg.senderName;
             return `
                 <div data-msg-id="${msg.id}" class="flex ${isMe ? 'justify-end' : 'justify-start'} animate-fadeIn">
-                    ${!isMe ? `<div class="w-10 h-10 rounded-full bg-orange-200 flex items-center justify-center text-brand-dark font-bold mr-2 flex-shrink-0 text-[var(--font-xl)]">${displayAvatar}</div>` : ''}
+                    ${!isMe ? `<div class="w-10 h-10 rounded-full bg-orange-200 flex items-center justify-center text-brand-dark font-bold mr-2 flex-shrink-0 bs-text-xl">${displayAvatar}</div>` : ''}
                     <div class="max-w-[75%] flex flex-col ${isMe ? 'items-end' : 'items-start'}">
-                        ${!isMe ? `<span class="text-[var(--font-xs)] text-gray-500 mb-1 ml-1">${displayName}</span>` : ''}
+                        ${!isMe ? `<span class="bs-text-xs text-gray-500 mb-1 ml-1">${displayName}</span>` : ''}
                         <div class="p-3 rounded-2xl shadow-sm ${isMe ? 'bg-brand text-white rounded-tr-none' : 'bg-white text-gray-800 rounded-tl-none border border-gray-100'}">
-                            ${msg.type === 'text' ? `<p class="text-[var(--font-lg)]">${msg.content}</p>` : ''}
-                            ${msg.type === 'photo' && msg.img ? `<img src="${msg.img}" class="max-w-56 max-h-56 rounded-xl object-cover">${msg.content ? `<p class="text-[var(--font-base)] mt-2">${msg.content}</p>` : ''}` : ''}
-                            ${msg.type === 'audio' ? `<div class="space-y-2 w-60 max-w-[68vw]">${renderVoicePlayer(msg, isMe)}<div class="${isMe ? 'bg-white/10' : 'bg-gray-50'} rounded-xl p-2"><p class="text-[var(--font-xs)] opacity-70 mb-1">語音轉譯</p>${msg.transcript ? `<p class="text-[var(--font-base)]">${msg.transcript}</p>` : `<p class="text-[var(--font-sm)] opacity-80">未取得轉譯文字</p>`}${msg.type === 'audio' && msg.audio && !msg.transcript && state.backendMode === 'server' ? `<button class="action-btn mt-1 bg-amber-50 border border-amber-100 text-amber-700 rounded-lg px-2 py-1 text-[var(--font-xs)] font-bold disabled:opacity-60" data-action="transcribeVoice" data-message-id="${msg.id}" ${state.transcribingMessageId === msg.id ? 'disabled' : ''}><i class="fa-solid ${state.transcribingMessageId === msg.id ? 'fa-spinner fa-spin' : 'fa-closed-captioning'} mr-1"></i>${state.transcribingMessageId === msg.id ? '轉譯中' : 'AI 轉譯'}</button>` : ''}</div></div>` : ''}
+                            ${msg.type === 'text' ? `<p class="bs-text-lg">${msg.content}</p>` : ''}
+                            ${msg.type === 'photo' && msg.img ? `<img src="${msg.img}" class="max-w-56 max-h-56 rounded-xl object-cover">${msg.content ? `<p class="bs-text-base mt-2">${msg.content}</p>` : ''}` : ''}
+                            ${msg.type === 'audio' ? `<div class="space-y-2 w-60 max-w-[68vw]">${renderVoicePlayer(msg, isMe)}<div class="${isMe ? 'bg-white/10' : 'bg-gray-50'} rounded-xl p-2"><p class="bs-text-xs opacity-70 mb-1">語音轉譯</p>${msg.transcript ? `<p class="bs-text-base">${msg.transcript}</p>` : `<p class="bs-text-sm opacity-80">未取得轉譯文字</p>`}${msg.type === 'audio' && msg.audio && !msg.transcript && state.backendMode === 'server' ? `<button class="action-btn mt-1 bg-amber-50 border border-amber-100 text-amber-700 rounded-lg px-2 py-1 bs-text-xs font-bold disabled:opacity-60" data-action="transcribeVoice" data-message-id="${msg.id}" ${state.transcribingMessageId === msg.id ? 'disabled' : ''}><i class="fa-solid ${state.transcribingMessageId === msg.id ? 'fa-spinner fa-spin' : 'fa-closed-captioning'} mr-1"></i>${state.transcribingMessageId === msg.id ? '轉譯中' : 'AI 轉譯'}</button>` : ''}</div></div>` : ''}
                         </div>
-                        <span class="text-[var(--font-xs)] text-gray-400 mt-1 ${isMe ? 'mr-1' : 'ml-1'}">${msg.time}</span>
+                        <span class="bs-text-xs text-gray-400 mt-1 ${isMe ? 'mr-1' : 'ml-1'}">${msg.time}</span>
                     </div>
                 </div>
             `;
@@ -1225,7 +1257,7 @@
         function renderChatMessages() {
             const visibleMessages = state.messages;
             return `
-                <div class="text-center text-[var(--font-xs)] text-gray-400 mb-4">今天</div>
+                <div class="text-center bs-text-xs text-gray-400 mb-4">今天</div>
                 ${visibleMessages.map(msg => {
                     const isMe = msg.senderId === state.authUid || msg.uid === state.authUid;
                     return renderSingleChatMessage(msg, isMe);
@@ -1252,7 +1284,7 @@
             });
             const sorted = Object.values(memberScores).sort((a, b) => b.score - a.score);
             if (sorted.length === 0) {
-                return `<div class="bg-white rounded-3xl shadow-sm overflow-hidden"><div class="flex flex-col items-center justify-center py-12 text-center"><div class="w-20 h-20 bg-orange-100 rounded-full flex items-center justify-center mb-4"><i class="fa-solid fa-ranking-star text-[var(--font-3xl)] text-brand"></i></div><h3 class="text-[var(--font-xl)] font-bold text-gray-800 mb-2">排行榜暫無數據</h3><p class="text-gray-500">開始聊天和分享回憶後，排行榜會自動更新！</p></div></div>`;
+                return `<div class="bg-white rounded-3xl shadow-sm overflow-hidden"><div class="flex flex-col items-center justify-center py-12 text-center"><div class="w-20 h-20 bg-orange-100 rounded-full flex items-center justify-center mb-4"><i class="fa-solid fa-ranking-star bs-text-3xl text-brand"></i></div><h3 class="bs-text-xl font-bold text-gray-800 mb-2">排行榜暫無數據</h3><p class="text-gray-500">開始聊天和分享回憶後，排行榜會自動更新！</p></div></div>`;
             }
             const rankIcons = ['👑', '2', '3'];
             const subtitles = ['本週互動最熱烈！', '繼續保持～', '加油追上去！'];
@@ -1261,7 +1293,7 @@
                 const icon = rank <= 3 ? rankIcons[index] : String(rank);
                 const subtitle = rank <= 3 ? subtitles[index] : (member.messageCount > 0 ? `${member.messageCount} 則訊息` : '潛水中...');
                 const avatarBg = rank === 1 ? 'bg-[#f6d1aa] text-[#b66122]' : (rank <= 3 ? 'bg-orange-100 text-brand-dark' : 'bg-gray-100 text-gray-500');
-                return `<div class="flex items-center py-4 px-5 border-b border-gray-50"><div class="w-8 text-center mr-4 ${rank <= 3 ? (rank===1?'text-[var(--font-2xl)] text-yellow-400':rank===2?'text-[var(--font-xl)] text-gray-400':'text-[var(--font-lg)] text-amber-600') : 'text-[var(--font-base)] text-gray-400'} font-bold">${icon}</div><div class="w-12 h-12 rounded-full ${avatarBg} flex items-center justify-center text-[var(--font-xl)] font-bold mr-4">${member.avatar}</div><div class="flex-1"><div class="font-bold text-gray-800 text-[var(--font-base)]">${member.name}</div><div class="text-[var(--font-xs)] text-gray-400">${subtitle}</div></div><div class="text-right"><div class="text-[var(--font-lg)] font-bold text-brand">${member.score.toLocaleString()}</div><div class="text-[var(--font-xs)] text-gray-400">分</div></div></div>`;
+                return `<div class="flex items-center py-4 px-5 border-b border-gray-50"><div class="w-8 text-center mr-4 ${rank <= 3 ? (rank===1?'bs-text-2xl text-yellow-400':rank===2?'bs-text-xl text-gray-400':'bs-text-lg text-amber-600') : 'bs-text-base text-gray-400'} font-bold">${icon}</div><div class="w-12 h-12 rounded-full ${avatarBg} flex items-center justify-center bs-text-xl font-bold mr-4">${member.avatar}</div><div class="flex-1"><div class="font-bold text-gray-800 bs-text-base">${member.name}</div><div class="bs-text-xs text-gray-400">${subtitle}</div></div><div class="text-right"><div class="bs-text-lg font-bold text-brand">${member.score.toLocaleString()}</div><div class="bs-text-xs text-gray-400">分</div></div></div>`;
             }).join('');
             return `<div class="bg-white rounded-3xl shadow-sm overflow-hidden">${rankItems}</div>`;
         }
@@ -1311,38 +1343,38 @@
             return `
                 <div class="flex flex-col items-center justify-center h-full p-8 bg-gradient-to-b from-[#FFF8F0] to-[#FFE5D0] animate-fadeIn overflow-y-auto">
                     <div class="w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-lg mb-4">
-                        <i class="fa-solid fa-star text-[var(--font-4xl)] text-brand"></i>
+                        <i class="fa-solid fa-star bs-text-4xl text-brand"></i>
                     </div>
-                    <h1 class="text-[var(--font-3xl)] font-bold text-gray-800 mb-1 tracking-wider">星喚</h1>
-                    <p class="text-[var(--font-base)] text-gray-600 mb-6">Beckon Stars</p>
+                    <h1 class="bs-text-3xl font-bold text-gray-800 mb-1 tracking-wider">星喚</h1>
+                    <p class="bs-text-base text-gray-600 mb-6">Beckon Stars</p>
 
                     <div class="w-full max-w-sm">
                         <div class="flex mb-6 bg-gray-100 rounded-xl p-1">
-                            <button class="action-btn flex-1 py-2 rounded-lg text-[var(--font-sm)] font-medium transition-colors ${isLogin ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}" data-action="switchAuthMode" data-mode="login">登入</button>
-                            <button class="action-btn flex-1 py-2 rounded-lg text-[var(--font-sm)] font-medium transition-colors ${!isLogin ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}" data-action="switchAuthMode" data-mode="register">註冊</button>
+                            <button class="action-btn flex-1 py-2 rounded-lg bs-text-sm font-medium transition-colors ${isLogin ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}" data-action="switchAuthMode" data-mode="login">登入</button>
+                            <button class="action-btn flex-1 py-2 rounded-lg bs-text-sm font-medium transition-colors ${!isLogin ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}" data-action="switchAuthMode" data-mode="register">註冊</button>
                         </div>
 
                         ${!isLogin ? `
                         <div class="mb-3">
-                            <input id="authName" type="text" placeholder="用戶名稱" class="w-full px-4 py-3 rounded-xl border border-gray-200 text-[var(--font-base)] focus:outline-none focus:border-brand bg-white" autocomplete="name">
+                            <input id="authName" type="text" placeholder="用戶名稱" class="w-full px-4 py-3 rounded-xl border border-gray-200 bs-text-base focus:outline-none focus:border-brand bg-white" autocomplete="name">
                         </div>
                         ` : ''}
 
                         <div class="mb-3">
-                            <input id="authEmail" type="email" placeholder="電郵地址" class="w-full px-4 py-3 rounded-xl border border-gray-200 text-[var(--font-base)] focus:outline-none focus:border-brand bg-white" autocomplete="email">
+                            <input id="authEmail" type="email" placeholder="電郵地址" class="w-full px-4 py-3 rounded-xl border border-gray-200 bs-text-base focus:outline-none focus:border-brand bg-white" autocomplete="email">
                         </div>
 
                         <div class="mb-4">
-                            <input id="authPassword" type="password" placeholder="密碼" class="w-full px-4 py-3 rounded-xl border border-gray-200 text-[var(--font-base)] focus:outline-none focus:border-brand bg-white" autocomplete="${isLogin ? 'current-password' : 'new-password'}">
+                            <input id="authPassword" type="password" placeholder="密碼" class="w-full px-4 py-3 rounded-xl border border-gray-200 bs-text-base focus:outline-none focus:border-brand bg-white" autocomplete="${isLogin ? 'current-password' : 'new-password'}">
                         </div>
 
-                        <button class="action-btn w-full bg-brand text-white text-[var(--font-lg)] font-bold py-3 px-6 rounded-xl shadow-md hover:opacity-90 transition-opacity" data-action="${isLogin ? 'login' : 'register'}">
+                        <button class="action-btn w-full bg-brand text-white bs-text-lg font-bold py-3 px-6 rounded-xl shadow-md hover:opacity-90 transition-opacity" data-action="${isLogin ? 'login' : 'register'}">
                             ${isLogin ? '登入' : '註冊'}
                         </button>
 
-                        ${state.errorMsg ? `<p class="text-red-500 text-[var(--font-sm)] mt-3 text-center animate-shake">${state.errorMsg}</p>` : ''}
+                        ${state.errorMsg ? `<p class="text-red-500 bs-text-sm mt-3 text-center animate-shake">${state.errorMsg}</p>` : ''}
 
-                        <p class="text-[var(--font-xs)] text-gray-400 text-center mt-4">${isLogin ? '還沒有帳號？' : '已有帳號？'} <button class="action-btn text-brand font-medium" data-action="switchAuthMode" data-mode="${isLogin ? 'register' : 'login'}">${isLogin ? '立即註冊' : '返回登入'}</button></p>
+                        <p class="bs-text-xs text-gray-400 text-center mt-4">${isLogin ? '還沒有帳號？' : '已有帳號？'} <button class="action-btn text-brand font-medium" data-action="switchAuthMode" data-mode="${isLogin ? 'register' : 'login'}">${isLogin ? '立即註冊' : '返回登入'}</button></p>
                     </div>
                 </div>
             `;
@@ -1355,15 +1387,15 @@
                     <div class="w-28 h-28 bg-white rounded-full flex items-center justify-center shadow-lg mb-6">
                         <i class="fa-solid fa-star text-5xl text-brand"></i>
                     </div>
-                    <h1 class="text-[var(--font-4xl)] font-bold text-gray-800 mb-2 tracking-wider">星喚</h1>
-                    <p class="text-[var(--font-lg)] text-gray-600 mb-10">Beckon Stars</p>
+                    <h1 class="bs-text-4xl font-bold text-gray-800 mb-2 tracking-wider">星喚</h1>
+                    <p class="bs-text-lg text-gray-600 mb-10">Beckon Stars</p>
                     
-                    <h2 class="text-[var(--font-xl)] font-medium text-gray-700 mb-6">請選擇您的身份</h2>
+                    <h2 class="bs-text-xl font-medium text-gray-700 mb-6">請選擇您的身份</h2>
                     
-                    <button class="action-btn w-full bg-brand text-white text-[var(--font-xl)] font-bold py-4 px-6 rounded-2xl shadow-md mb-4 hover:bg-brand-dark transition-colors" data-action="setRole" data-role="senior">
+                    <button class="action-btn w-full bg-brand text-white bs-text-xl font-bold py-4 px-6 rounded-2xl shadow-md mb-4 hover:bg-brand-dark transition-colors" data-action="setRole" data-role="senior">
                         <i class="fa-solid fa-person-cane mr-2"></i> 我是長者
                     </button>
-                    <button class="action-btn w-full bg-white text-brand border-2 border-brand text-[var(--font-xl)] font-bold py-4 px-6 rounded-2xl shadow-sm hover:bg-orange-50 transition-colors" data-action="setRole" data-role="child">
+                    <button class="action-btn w-full bg-white text-brand border-2 border-brand bs-text-xl font-bold py-4 px-6 rounded-2xl shadow-sm hover:bg-orange-50 transition-colors" data-action="setRole" data-role="child">
                         <i class="fa-solid fa-children mr-2"></i> 我是子女
                     </button>
                 </div>
@@ -1379,16 +1411,16 @@
 
             return `
                 <div class="flex flex-col h-full p-8 bg-[#FFF8F0] animate-fadeIn">
-                    <button class="action-btn self-start text-gray-400 mb-6 text-[var(--font-xl)]" data-action="backStep" data-step="1">
+                    <button class="action-btn self-start text-gray-400 mb-6 bs-text-xl" data-action="backStep" data-step="1">
                         <i class="fa-solid fa-arrow-left"></i>
                     </button>
-                    <h2 class="text-[var(--font-3xl)] font-bold text-gray-800 mb-2">設定個人檔案</h2>
+                    <h2 class="bs-text-3xl font-bold text-gray-800 mb-2">設定個人檔案</h2>
                     <p class="text-gray-500 mb-8">選擇一個喜歡的頭像並輸入稱呼</p>
                     
                     <!-- 頭像選擇 -->
                     <div class="grid grid-cols-3 gap-4 mb-8">
                         ${avatarOptions.map(avatar => `
-                            <button class="action-btn text-[var(--font-4xl)] p-3 rounded-2xl transition-all ${state.userAvatar === avatar ? 'bg-brand shadow-md transform scale-105' : 'bg-white border border-gray-200 opacity-60'}" data-action="selectAvatar" data-avatar="${avatar}">
+                            <button class="action-btn bs-text-4xl p-3 rounded-2xl transition-all ${state.userAvatar === avatar ? 'bg-brand shadow-md transform scale-105' : 'bg-white border border-gray-200 opacity-60'}" data-action="selectAvatar" data-avatar="${avatar}">
                                 ${avatar}
                             </button>
                         `).join('')}
@@ -1397,12 +1429,12 @@
                     <!-- 稱呼輸入 -->
                     <div class="mb-8 relative">
                         <label class="block text-gray-700 font-bold mb-2">您的稱呼</label>
-                        <input type="text" id="nameInput" value="${state.userName}" placeholder="例如: ${state.role === 'senior' ? '媽媽, 爺爺' : '阿強, 妹妹'}" class="w-full text-[var(--font-xl)] p-4 rounded-2xl border-2 ${state.errorMsg ? 'border-red-400' : 'border-gray-200'} focus:border-brand outline-none bg-white">
-                        ${state.errorMsg ? `<p class="text-red-500 text-[var(--font-sm)] mt-2 absolute -bottom-6 animate-shake">${state.errorMsg}</p>` : ''}
+                        <input type="text" id="nameInput" value="${state.userName}" placeholder="例如: ${state.role === 'senior' ? '媽媽, 爺爺' : '阿強, 妹妹'}" class="w-full bs-text-xl p-4 rounded-2xl border-2 ${state.errorMsg ? 'border-red-400' : 'border-gray-200'} focus:border-brand outline-none bg-white">
+                        ${state.errorMsg ? `<p class="text-red-500 bs-text-sm mt-2 absolute -bottom-6 animate-shake">${state.errorMsg}</p>` : ''}
                     </div>
 
                     <div class="flex-1"></div>
-                    <button class="action-btn w-full bg-brand text-white text-[var(--font-xl)] font-bold py-4 rounded-2xl shadow-lg hover:bg-brand-dark transition-colors" data-action="submitProfile">
+                    <button class="action-btn w-full bg-brand text-white bs-text-xl font-bold py-4 rounded-2xl shadow-lg hover:bg-brand-dark transition-colors" data-action="submitProfile">
                         下一步 <i class="fa-solid fa-arrow-right ml-2"></i>
                     </button>
                 </div>
@@ -1414,30 +1446,30 @@
             if (!state.connectionMode || state.connectionMode === 'select') {
                 return `
                     <div class="flex flex-col h-full p-8 bg-[#FFF8F0] animate-fadeIn">
-                        <button class="action-btn self-start text-gray-400 mb-6 text-[var(--font-xl)]" data-action="backStep" data-step="2">
+                        <button class="action-btn self-start text-gray-400 mb-6 bs-text-xl" data-action="backStep" data-step="2">
                             <i class="fa-solid fa-arrow-left"></i>
                         </button>
-                        <h2 class="text-[var(--font-3xl)] font-bold text-gray-800 mb-2">加入共用日曆</h2>
+                        <h2 class="bs-text-3xl font-bold text-gray-800 mb-2">加入共用日曆</h2>
                         <p class="text-gray-500 mb-10">與家人連結，隨時隨地分享生活點滴。</p>
                         
                         <div class="space-y-6">
                             <button class="action-btn w-full bg-white border-2 border-brand p-6 rounded-3xl shadow-sm text-left flex items-center hover:bg-orange-50 transition-colors" data-action="setConnectionMode" data-mode="create">
-                                <div class="w-14 h-14 rounded-full bg-orange-100 text-brand flex items-center justify-center text-[var(--font-2xl)] mr-4 shrink-0">
+                                <div class="w-14 h-14 rounded-full bg-orange-100 text-brand flex items-center justify-center bs-text-2xl mr-4 shrink-0">
                                     <i class="fa-solid fa-house-chimney-medical"></i>
                                 </div>
                                 <div>
-                                    <h3 class="text-[var(--font-xl)] font-bold text-gray-800">建立新日曆</h3>
-                                    <p class="text-[var(--font-sm)] text-gray-500 mt-1">產生一組數字邀請家人加入</p>
+                                    <h3 class="bs-text-xl font-bold text-gray-800">建立新日曆</h3>
+                                    <p class="bs-text-sm text-gray-500 mt-1">產生一組數字邀請家人加入</p>
                                 </div>
                             </button>
 
                             <button class="action-btn w-full bg-white border-2 border-gray-200 p-6 rounded-3xl shadow-sm text-left flex items-center hover:bg-gray-50 transition-colors" data-action="setConnectionMode" data-mode="join">
-                                <div class="w-14 h-14 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center text-[var(--font-2xl)] mr-4 shrink-0">
+                                <div class="w-14 h-14 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center bs-text-2xl mr-4 shrink-0">
                                     <i class="fa-solid fa-right-to-bracket"></i>
                                 </div>
                                 <div>
-                                    <h3 class="text-[var(--font-xl)] font-bold text-gray-800">加入現有日曆</h3>
-                                    <p class="text-[var(--font-sm)] text-gray-500 mt-1">輸入家人提供給您的6位數字</p>
+                                    <h3 class="bs-text-xl font-bold text-gray-800">加入現有日曆</h3>
+                                    <p class="bs-text-sm text-gray-500 mt-1">輸入家人提供給您的6位數字</p>
                                 </div>
                             </button>
                         </div>
@@ -1452,10 +1484,10 @@
                 }
                 return `
                     <div class="flex flex-col h-full p-8 bg-[#FFF8F0] animate-fadeIn text-center">
-                        <button class="action-btn self-start text-gray-400 mb-2 text-[var(--font-xl)]" data-action="setConnectionMode" data-mode="select">
+                        <button class="action-btn self-start text-gray-400 mb-2 bs-text-xl" data-action="setConnectionMode" data-mode="select">
                             <i class="fa-solid fa-arrow-left"></i>
                         </button>
-                        <h2 class="text-[var(--font-2xl)] font-bold text-gray-800 mb-6">您的日曆邀請碼</h2>
+                        <h2 class="bs-text-2xl font-bold text-gray-800 mb-6">您的日曆邀請碼</h2>
                         
                         <div class="bg-white p-8 rounded-3xl shadow-lg border border-orange-100 mb-8">
                             <p class="text-gray-500 mb-4">請將這組數字告訴您的家人</p>
@@ -1468,7 +1500,7 @@
                         </div>
 
                         <div class="flex-1"></div>
-                        <button class="action-btn w-full bg-brand text-white text-[var(--font-xl)] font-bold py-4 rounded-2xl shadow-lg hover:bg-brand-dark transition-colors" data-action="finishOnboarding">
+                        <button class="action-btn w-full bg-brand text-white bs-text-xl font-bold py-4 rounded-2xl shadow-lg hover:bg-brand-dark transition-colors" data-action="finishOnboarding">
                             進入應用程式
                         </button>
                     </div>
@@ -1478,19 +1510,19 @@
             if (state.connectionMode === 'join') {
                 return `
                     <div class="flex flex-col h-full p-8 bg-[#FFF8F0] animate-fadeIn text-center">
-                        <button class="action-btn self-start text-gray-400 mb-6 text-[var(--font-xl)]" data-action="setConnectionMode" data-mode="select">
+                        <button class="action-btn self-start text-gray-400 mb-6 bs-text-xl" data-action="setConnectionMode" data-mode="select">
                             <i class="fa-solid fa-arrow-left"></i>
                         </button>
-                        <h2 class="text-[var(--font-3xl)] font-bold text-gray-800 mb-2">輸入邀請碼</h2>
+                        <h2 class="bs-text-3xl font-bold text-gray-800 mb-2">輸入邀請碼</h2>
                         <p class="text-gray-500 mb-8">請輸入家人提供給您的6位數字</p>
                         
                         <div class="mb-8 relative">
-                            <input type="number" id="joinCodeInput" placeholder="_ _ _ _ _ _" class="w-full text-center text-[var(--font-4xl)] font-mono tracking-widest p-6 rounded-2xl border-2 ${state.errorMsg ? 'border-red-400' : 'border-gray-200'} focus:border-brand outline-none bg-white">
-                            ${state.errorMsg ? `<p class="text-red-500 text-[var(--font-sm)] mt-3 animate-shake">${state.errorMsg}</p>` : ''}
+                            <input type="number" id="joinCodeInput" placeholder="_ _ _ _ _ _" class="w-full text-center bs-text-4xl font-mono tracking-widest p-6 rounded-2xl border-2 ${state.errorMsg ? 'border-red-400' : 'border-gray-200'} focus:border-brand outline-none bg-white">
+                            ${state.errorMsg ? `<p class="text-red-500 bs-text-sm mt-3 animate-shake">${state.errorMsg}</p>` : ''}
                         </div>
 
                         <div class="flex-1"></div>
-                        <button class="action-btn w-full bg-brand text-white text-[var(--font-xl)] font-bold py-4 rounded-2xl shadow-lg hover:bg-brand-dark transition-colors" data-action="submitJoinCode">
+                        <button class="action-btn w-full bg-brand text-white bs-text-xl font-bold py-4 rounded-2xl shadow-lg hover:bg-brand-dark transition-colors" data-action="submitJoinCode">
                             確認加入
                         </button>
                     </div>
@@ -1508,19 +1540,19 @@
             return `
                 <header class="bg-white px-6 pt-12 pb-4 shadow-sm z-10 sticky top-0 flex justify-between items-center rounded-b-2xl">
                     <div class="flex items-center">
-                        <div class="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-[var(--font-2xl)] mr-3 border-2 border-brand-light shadow-sm overflow-hidden">
+                        <div class="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center bs-text-2xl mr-3 border-2 border-brand-light shadow-sm overflow-hidden">
                             ${(state.userAvatar && (state.userAvatar.startsWith('data:') || state.userAvatar.startsWith('http'))) ? `<img src="${state.userAvatar}" class="w-full h-full object-cover">` : `<span>${state.userAvatar || '👤'}</span>`}
                         </div>
-                        <h2 class="text-[var(--font-2xl)] font-bold text-gray-800">${titles[state.currentTab]}</h2>
+                        <h2 class="bs-text-2xl font-bold text-gray-800">${titles[state.currentTab]}</h2>
                     </div>
                     <div class="flex items-center gap-2">
-                        <button class="action-btn hidden sm:flex bg-green-50 text-green-700 px-3 py-1.5 rounded-full font-bold items-center text-[var(--font-xs)] border border-green-100" data-action="openModal" data-modal="architecture" title="展示技術架構">
+                        <button class="action-btn hidden sm:flex bg-green-50 text-green-700 px-3 py-1.5 rounded-full font-bold items-center bs-text-xs border border-green-100" data-action="openModal" data-modal="architecture" title="展示技術架構">
                             <i class="fa-solid fa-bolt mr-1.5"></i> Demo
                         </button>
                         <div class="bg-orange-100 text-brand-dark px-3 py-1.5 rounded-full font-bold flex items-center shadow-inner">
                             <i class="fa-solid fa-coins mr-1.5 text-yellow-500"></i> ${state.points}
                         </div>
-                        <div class="hidden sm:flex bg-blue-50 text-blue-700 px-3 py-1.5 rounded-full font-bold items-center text-[var(--font-xs)] border border-blue-100">
+                        <div class="hidden sm:flex bg-blue-50 text-blue-700 px-3 py-1.5 rounded-full font-bold items-center bs-text-xs border border-blue-100">
                             <i class="fa-solid ${backendIcon} mr-1.5"></i> ${backendLabel}
                         </div>
                         <button class="action-btn w-9 h-9 rounded-full ${state.notificationPermission === 'granted' ? 'bg-green-50 text-green-600' : 'bg-yellow-50 text-yellow-600'} flex items-center justify-center hover:bg-yellow-100 transition-colors" data-action="requestNotifications" title="開啟通知提示">
@@ -1556,8 +1588,8 @@
                 <nav class="absolute bottom-0 w-full bg-white border-t border-gray-100 px-6 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] flex justify-between items-center z-20 shadow-[0_-5px_15px_rgba(0,0,0,0.03)]">
                     ${tabs.map(tab => `
                         <button class="action-btn flex flex-col items-center p-2 flex-1 ${state.currentTab === tab.id ? 'text-brand' : 'text-gray-400'}" data-action="switchTab" data-tab="${tab.id}">
-                            <i class="fa-solid ${tab.icon} text-[var(--font-2xl)] mb-1 transition-transform ${state.currentTab === tab.id ? 'transform scale-110' : ''}"></i>
-                            <span class="text-[var(--font-xs)] font-medium">${tab.label}</span>
+                            <i class="fa-solid ${tab.icon} bs-text-2xl mb-1 transition-transform ${state.currentTab === tab.id ? 'transform scale-110' : ''}"></i>
+                            <span class="bs-text-xs font-medium">${tab.label}</span>
                         </button>
                     `).join('')}
                 </nav>
@@ -1574,22 +1606,22 @@
             return `
                 <div class="p-6" id="calendarContent">
                     <div class="flex bg-gray-200 rounded-xl p-1 mb-6">
-                        <button class="action-btn flex-1 py-2 rounded-lg font-bold text-[var(--font-sm)] transition-colors ${state.calendarMode === 'tear-off' ? 'bg-white text-brand shadow' : 'text-gray-500'}" data-action="switchCalendar" data-mode="tear-off">
+                        <button class="action-btn flex-1 py-2 rounded-lg font-bold bs-text-sm transition-colors ${state.calendarMode === 'tear-off' ? 'bg-white text-brand shadow' : 'text-gray-500'}" data-action="switchCalendar" data-mode="tear-off">
                             手撕日曆
                         </button>
-                        <button class="action-btn flex-1 py-2 rounded-lg font-bold text-[var(--font-sm)] transition-colors ${state.calendarMode === 'monthly' ? 'bg-white text-brand shadow' : 'text-gray-500'}" data-action="switchCalendar" data-mode="monthly">
+                        <button class="action-btn flex-1 py-2 rounded-lg font-bold bs-text-sm transition-colors ${state.calendarMode === 'monthly' ? 'bg-white text-brand shadow' : 'text-gray-500'}" data-action="switchCalendar" data-mode="monthly">
                             現時月曆
                         </button>
                     </div>
 
                     ${state.calendarMode === 'tear-off' ? renderTearOffCalendar(visibleMemories) : renderMonthlyCalendar(visibleMemories)}
 
-                    <button class="action-btn mt-6 w-full bg-white border-2 border-orange-100 text-brand-dark py-4 rounded-2xl font-bold text-[var(--font-lg)] shadow-sm flex items-center justify-center hover:bg-orange-50 transition-colors" data-action="openModal" data-modal="weeklySummary">
+                    <button class="action-btn mt-6 w-full bg-white border-2 border-orange-100 text-brand-dark py-4 rounded-2xl font-bold bs-text-lg shadow-sm flex items-center justify-center hover:bg-orange-50 transition-colors" data-action="openModal" data-modal="weeklySummary">
                         <i class="fa-solid fa-wand-magic-sparkles mr-2 text-brand"></i> 生成家庭回憶摘要
                     </button>
 
-                    <button class="action-btn mt-4 w-full bg-brand text-white py-4 rounded-2xl font-bold text-[var(--font-lg)] shadow-lg flex items-center justify-center hover:bg-brand-dark transition-colors" data-action="openModal" data-modal="addMemory">
-                        <i class="fa-solid fa-plus-circle mr-2 text-[var(--font-xl)]"></i> 記錄今日回憶
+                    <button class="action-btn mt-4 w-full bg-brand text-white py-4 rounded-2xl font-bold bs-text-lg shadow-lg flex items-center justify-center hover:bg-brand-dark transition-colors" data-action="openModal" data-modal="addMemory">
+                        <i class="fa-solid fa-plus-circle mr-2 bs-text-xl"></i> 記錄今日回憶
                     </button>
                 </div>
             `;
@@ -1644,7 +1676,7 @@
             let lunarDisplay = '';
             if (hasAlmanac) {
                 const lunar = almanac.lunar;
-                lunarDisplay = `<p class="text-[var(--font-xs)] text-gray-400 mt-1">${lunar.dayGanZhi}日 · 農曆${lunar.month}月${lunar.day}${lunar.jieQi ? ' · ' + lunar.jieQi : ''}</p>`;
+                lunarDisplay = `<p class="bs-text-xs text-gray-400 mt-1">${lunar.dayGanZhi}日 · 農曆${lunar.month}月${lunar.day}${lunar.jieQi ? ' · ' + lunar.jieQi : ''}</p>`;
             }
 
             // 宜忌顯示
@@ -1653,20 +1685,20 @@
                 yiJiHtml = `
                     <div class="bg-[#FFF8F0] border border-orange-200 rounded-xl p-4 shadow-sm inline-block text-left">
                         <div class="mb-2">
-                            <span class="bg-orange-100 text-brand-dark px-2 py-1 rounded text-[var(--font-sm)] font-bold mr-2">${isToday ? '今日宜' : '宜'}</span>
+                            <span class="bg-orange-100 text-brand-dark px-2 py-1 rounded bs-text-sm font-bold mr-2">${isToday ? '今日宜' : '宜'}</span>
                             <span class="text-gray-700 font-medium">${almanac.yiDisplay}</span>
                         </div>
                         <div>
-                            <span class="bg-red-50 text-red-600 px-2 py-1 rounded text-[var(--font-sm)] font-bold mr-2">忌</span>
+                            <span class="bg-red-50 text-red-600 px-2 py-1 rounded bs-text-sm font-bold mr-2">忌</span>
                             <span class="text-gray-500 font-medium">${almanac.jiDisplay}</span>
                         </div>
-                        <p class="text-[var(--font-xs)] text-gray-400 mt-2">${almanac.lunar.pengZu} · ${almanac.lunar.xiu}宿${almanac.lunar.xiuLuck ? ' · ' + almanac.lunar.xiuLuck : ''}</p>
+                        <p class="bs-text-xs text-gray-400 mt-2">${almanac.lunar.pengZu} · ${almanac.lunar.xiu}宿${almanac.lunar.xiuLuck ? ' · ' + almanac.lunar.xiuLuck : ''}</p>
                     </div>
                 `;
             } else {
                 yiJiHtml = `
                     <div class="bg-[#FFF8F0] border border-orange-200 rounded-xl p-4 shadow-sm inline-block">
-                        <span class="bg-orange-100 text-brand-dark px-2 py-1 rounded text-[var(--font-sm)] font-bold mr-2">${isToday ? '今日宜' : '宜'}</span>
+                        <span class="bg-orange-100 text-brand-dark px-2 py-1 rounded bs-text-sm font-bold mr-2">${isToday ? '今日宜' : '宜'}</span>
                         <span class="text-gray-700 font-medium">${getDailySuggestion()}</span>
                     </div>
                 `;
@@ -1674,18 +1706,18 @@
 
             return `
                 <div class="p-8 text-center relative tear-off-bg">
-                    <h3 class="text-[var(--font-2xl)] font-medium text-gray-500 mb-2">${dayNames[displayDate.getDay()]}</h3>
+                    <h3 class="bs-text-2xl font-medium text-gray-500 mb-2">${dayNames[displayDate.getDay()]}</h3>
                     <h1 class="text-8xl font-bold text-gray-800 mb-2 font-serif">${displayDay}</h1>
                     ${lunarDisplay}
                     <div class="mt-4">${yiJiHtml}</div>
                 </div>
                 ${dayMemories.length > 0 ? `
                     <div class="bg-orange-50 p-4 border-t border-orange-100">
-                        <p class="text-[var(--font-sm)] font-bold text-brand-dark mb-2"><i class="fa-solid fa-heart"></i> ${displayDay}日已有 ${dayMemories.length} 個回憶</p>
+                        <p class="bs-text-sm font-bold text-brand-dark mb-2"><i class="fa-solid fa-heart"></i> ${displayDay}日已有 ${dayMemories.length} 個回憶</p>
                         <div class="flex gap-2 overflow-x-auto no-scrollbar">
                             ${dayMemories.map(m => `
                                 <div class="w-12 h-12 rounded-lg bg-white border border-orange-200 flex-shrink-0 flex items-center justify-center overflow-hidden">
-                                    ${m.img ? `<img src="${m.img}" class="w-full h-full object-cover">` : `<i class="fa-solid ${m.type === 'audio' ? 'fa-microphone text-blue-400' : 'fa-font text-gray-400'} text-[var(--font-xl)]"></i>`}
+                                    ${m.img ? `<img src="${m.img}" class="w-full h-full object-cover">` : `<i class="fa-solid ${m.type === 'audio' ? 'fa-microphone text-blue-400' : 'fa-font text-gray-400'} bs-text-xl"></i>`}
                                 </div>
                             `).join('')}
                         </div>
@@ -1706,9 +1738,9 @@
             return `
                 <div class="bg-white rounded-3xl shadow-xl overflow-hidden border-2 border-gray-100 relative" id="tearOffCalendar">
                     <div class="bg-brand-red text-white py-3 px-6 flex justify-between items-center">
-                        <button class="calendar-nav-btn text-white/80 hover:text-white text-[var(--font-lg)] px-2" data-calendar-dir="-1"><i class="fa-solid fa-chevron-left"></i></button>
-                        <span class="text-[var(--font-xl)] font-bold">${state.calendarYear}年 ${state.calendarMonth}月</span>
-                        <button class="calendar-nav-btn text-white/80 hover:text-white text-[var(--font-lg)] px-2" data-calendar-dir="1"><i class="fa-solid fa-chevron-right"></i></button>
+                        <button class="calendar-nav-btn text-white/80 hover:text-white bs-text-lg px-2" data-calendar-dir="-1"><i class="fa-solid fa-chevron-left"></i></button>
+                        <span class="bs-text-xl font-bold">${state.calendarYear}年 ${state.calendarMonth}月</span>
+                        <button class="calendar-nav-btn text-white/80 hover:text-white bs-text-lg px-2" data-calendar-dir="1"><i class="fa-solid fa-chevron-right"></i></button>
                     </div>
 
                     <div class="calendar-page-container overflow-hidden relative" id="calendarPageContainer">
@@ -1727,7 +1759,7 @@
             const isCurrentMonth = calYear === today.getFullYear() && calMonth === today.getMonth() + 1;
             const dayNames = ["日", "一", "二", "三", "四", "五", "六"];
 
-            let gridHtml = dayNames.map(d => `<div class="text-center text-[var(--font-sm)] font-bold text-gray-400 py-2">${d}</div>`).join('');
+            let gridHtml = dayNames.map(d => `<div class="text-center bs-text-sm font-bold text-gray-400 py-2">${d}</div>`).join('');
             for (let i = 0; i < firstDay; i++) gridHtml += `<div></div>`;
             for (let i = 1; i <= daysInMonth; i++) {
                 const isToday = isCurrentMonth && i === today.getDate();
@@ -1735,7 +1767,7 @@
                 const hasMemory = dayMemories.length > 0;
                 gridHtml += `
                     <div class="aspect-square flex items-center justify-center p-1 relative">
-                        <button class="action-btn w-full h-full rounded-xl flex items-center justify-center font-medium text-[var(--font-lg)] transition-all ${isToday ? 'bg-brand text-white shadow-md' : 'bg-gray-50 text-gray-700 hover:bg-orange-100'} ${hasMemory && !isToday ? 'border-2 border-brand-light' : ''}"
+                        <button class="action-btn w-full h-full rounded-xl flex items-center justify-center font-medium bs-text-lg transition-all ${isToday ? 'bg-brand text-white shadow-md' : 'bg-gray-50 text-gray-700 hover:bg-orange-100'} ${hasMemory && !isToday ? 'border-2 border-brand-light' : ''}"
                                 ${hasMemory ? `data-action="viewMemories" data-date="${i}" data-month="${calMonth}"` : ''}>
                             ${i}
                         </button>
@@ -1747,7 +1779,7 @@
             return `
                 <div class="flex justify-between items-center mb-4">
                     <button class="calendar-nav-btn text-gray-400 hover:text-brand transition-colors p-2" data-calendar-dir="-1"><i class="fa-solid fa-chevron-left"></i></button>
-                    <h3 class="text-[var(--font-xl)] font-bold text-gray-800">${calYear}年 ${calMonth}月</h3>
+                    <h3 class="bs-text-xl font-bold text-gray-800">${calYear}年 ${calMonth}月</h3>
                     <button class="calendar-nav-btn text-gray-400 hover:text-brand transition-colors p-2" data-calendar-dir="1"><i class="fa-solid fa-chevron-right"></i></button>
                 </div>
                 <div class="grid grid-cols-7 gap-2 mb-6">
@@ -1775,8 +1807,8 @@
                                 <i class="fa-solid fa-play text-white"></i>
                             </div>
                             <div class="text-left">
-                                <p class="font-bold text-[var(--font-lg)]">本月回憶影片</p>
-                                <p class="text-[var(--font-xs)] text-orange-100">為您集合這個月的溫暖時刻</p>
+                                <p class="font-bold bs-text-lg">本月回憶影片</p>
+                                <p class="bs-text-xs text-orange-100">為您集合這個月的溫暖時刻</p>
                             </div>
                         </div>
                         <i class="fa-solid fa-chevron-right text-white/70"></i>
@@ -1791,7 +1823,7 @@
             return `
                 <div class="flex flex-col h-full min-h-0 bg-[#FFF8F0]">
                     <div id="chatMessages" class="flex-1 min-h-0 px-4 pt-4 pb-3 space-y-6 overflow-y-auto no-scrollbar">
-                        <div class="text-center text-[var(--font-xs)] text-gray-400 mb-4">今天</div>
+                        <div class="text-center bs-text-xs text-gray-400 mb-4">今天</div>
 
                         ${visibleMessages.map(msg => {
                             const isMe = msg.senderId === state.authUid || msg.uid === state.authUid;
@@ -1803,49 +1835,49 @@
                             return `
                                 <div class="flex ${isMe ? 'justify-end' : 'justify-start'} animate-fadeIn">
                                     ${!isMe ? `
-                                        <div class="w-10 h-10 rounded-full bg-orange-200 flex items-center justify-center text-brand-dark font-bold mr-2 flex-shrink-0 text-[var(--font-xl)]">
+                                        <div class="w-10 h-10 rounded-full bg-orange-200 flex items-center justify-center text-brand-dark font-bold mr-2 flex-shrink-0 bs-text-xl">
                                             ${displayAvatar}
                                         </div>
                                     ` : ''}
                                     <div class="max-w-[75%] flex flex-col ${isMe ? 'items-end' : 'items-start'}">
-                                        ${!isMe ? `<span class="text-[var(--font-xs)] text-gray-500 mb-1 ml-1">${displayName}</span>` : ''}
+                                        ${!isMe ? `<span class="bs-text-xs text-gray-500 mb-1 ml-1">${displayName}</span>` : ''}
                                         
                                         <div class="p-3 rounded-2xl shadow-sm ${isMe ? 'bg-brand text-white rounded-tr-none' : 'bg-white text-gray-800 rounded-tl-none border border-gray-100'}">
-                                            ${msg.type === 'text' ? `<p class="text-[var(--font-lg)]">${msg.content}</p>` : ''}
+                                            ${msg.type === 'text' ? `<p class="bs-text-lg">${msg.content}</p>` : ''}
                                             ${msg.type === 'photo' && msg.img ? `
                                                 <img src="${msg.img}" class="max-w-56 max-h-56 rounded-xl object-cover mb-2">
-                                                ${msg.content ? `<p class="text-[var(--font-base)]">${msg.content}</p>` : ''}
+                                                ${msg.content ? `<p class="bs-text-base">${msg.content}</p>` : ''}
                                             ` : ''}
                                             ${msg.type === 'audio' ? `
                                                 <div class="space-y-2 w-60 max-w-[68vw]">
                                                     ${renderVoicePlayer(msg, isMe)}
                                                     <div class="${isMe ? 'bg-white/10' : 'bg-gray-50'} rounded-xl p-2">
-                                                        <p class="text-[var(--font-xs)] opacity-70 mb-1">語音轉譯</p>
-                                                        ${msg.transcript ? `<p class="text-[var(--font-base)]">${msg.transcript}</p>` : `<p class="text-[var(--font-sm)] opacity-80">未取得轉譯文字，可播放錄音確認內容。</p>`}
+                                                        <p class="bs-text-xs opacity-70 mb-1">語音轉譯</p>
+                                                        ${msg.transcript ? `<p class="bs-text-base">${msg.transcript}</p>` : `<p class="bs-text-sm opacity-80">未取得轉譯文字，可播放錄音確認內容。</p>`}
                                                     </div>
                                                 </div>
                                             ` : ''}
                                         </div>
                                         
                                         ${msg.type === 'audio' && msg.transcript && !msg.aiSummary && state.backendMode === 'server' ? `
-                                            <button class="action-btn mt-2 bg-blue-50 border border-blue-100 text-blue-700 rounded-xl px-3 py-2 text-[var(--font-sm)] font-bold" data-action="summarizeVoice" data-message-id="${msg.id}">
+                                            <button class="action-btn mt-2 bg-blue-50 border border-blue-100 text-blue-700 rounded-xl px-3 py-2 bs-text-sm font-bold" data-action="summarizeVoice" data-message-id="${msg.id}">
                                                 <i class="fa-solid fa-wand-magic-sparkles mr-1"></i>總結錄音
                                             </button>
                                         ` : ''}
                                         ${msg.type === 'audio' && msg.audio && !msg.transcript && state.backendMode === 'server' ? `
-                                            <button class="action-btn mt-2 bg-amber-50 border border-amber-100 text-amber-700 rounded-xl px-3 py-2 text-[var(--font-sm)] font-bold disabled:opacity-60" data-action="transcribeVoice" data-message-id="${msg.id}" ${state.transcribingMessageId === msg.id ? 'disabled' : ''}>
+                                            <button class="action-btn mt-2 bg-amber-50 border border-amber-100 text-amber-700 rounded-xl px-3 py-2 bs-text-sm font-bold disabled:opacity-60" data-action="transcribeVoice" data-message-id="${msg.id}" ${state.transcribingMessageId === msg.id ? 'disabled' : ''}>
                                                 <i class="fa-solid ${state.transcribingMessageId === msg.id ? 'fa-spinner fa-spin' : 'fa-closed-captioning'} mr-1"></i>${state.transcribingMessageId === msg.id ? 'AI 轉譯中' : 'AI 轉譯錄音'}
                                             </button>
                                         ` : ''}
                                         ${msg.aiSummary ? `
                                             <div class="mt-2 bg-blue-50 border border-blue-100 rounded-xl p-3 shadow-sm relative w-full">
-                                                <div class="absolute -top-2 -left-2 bg-blue-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[var(--font-xs)] shadow-md">
+                                                <div class="absolute -top-2 -left-2 bg-blue-500 text-white w-6 h-6 rounded-full flex items-center justify-center bs-text-xs shadow-md">
                                                     <i class="fa-solid fa-robot"></i>
                                                 </div>
-                                                <p class="text-[var(--font-sm)] text-blue-800 pl-3 font-medium">${msg.aiSummary}</p>
+                                                <p class="bs-text-sm text-blue-800 pl-3 font-medium">${msg.aiSummary}</p>
                                             </div>
                                         ` : ''}
-                                        <span class="text-[var(--font-xs)] text-gray-400 mt-1">${msg.time}</span>
+                                        <span class="bs-text-xs text-gray-400 mt-1">${msg.time}</span>
                                     </div>
                                 </div>
                             `;
@@ -1855,7 +1887,7 @@
 
                     ${state.backendMode === 'server' ? `
                     <div class="shrink-0 px-3 py-2 bg-[#FFF8F0]">
-                        <button class="action-btn w-full bg-white border border-gray-100 rounded-2xl py-2.5 px-4 flex items-center justify-center gap-2 text-[var(--font-sm)] font-bold text-gray-600 shadow-sm hover:bg-gray-50 transition-colors disabled:opacity-60" data-action="summarizeTodayChat" ${state.summarizingChat ? 'disabled' : ''}>
+                        <button class="action-btn w-full bg-white border border-gray-100 rounded-2xl py-2.5 px-4 flex items-center justify-center gap-2 bs-text-sm font-bold text-gray-600 shadow-sm hover:bg-gray-50 transition-colors disabled:opacity-60" data-action="summarizeTodayChat" ${state.summarizingChat ? 'disabled' : ''}>
                             <i class="fa-solid ${state.summarizingChat ? 'fa-spinner fa-spin' : 'fa-wand-magic-sparkles'} text-brand"></i>
                             ${state.summarizingChat ? 'AI 總結中...' : 'AI 總結今日聊天'}
                         </button>
@@ -1864,22 +1896,22 @@
 
                     <div class="shrink-0 bg-white px-3 py-3 border-t border-gray-100 shadow-[0_-4px_10px_rgba(0,0,0,0.03)] flex items-center gap-2">
                         <button id="voiceHoldButton" class="w-10 h-10 rounded-full ${state.voiceRecording.active ? (state.voiceRecording.cancel ? 'bg-red-100 text-red-600' : 'bg-brand text-white') : 'bg-gray-100 text-gray-500'} flex items-center justify-center shrink-0 select-none touch-none" title="按住錄音，上滑取消">
-                            <i class="fa-solid fa-microphone text-[var(--font-xl)]"></i>
+                            <i class="fa-solid fa-microphone bs-text-xl"></i>
                         </button>
                         <button class="action-btn w-10 h-10 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center shrink-0" data-action="selectChatImage" title="傳送圖片">
-                            <i class="fa-solid fa-image text-[var(--font-xl)]"></i>
+                            <i class="fa-solid fa-image bs-text-xl"></i>
                         </button>
                         <input id="chatImageInput" type="file" accept="image/*" class="hidden">
-                        <input id="chatInput" type="text" value="${escapeAttribute(chatDraft)}" placeholder="發送溫暖訊息..." class="min-w-0 flex-1 bg-gray-100 rounded-full px-4 py-3 text-[var(--font-base)] outline-none focus:ring-2 focus:ring-brand-light">
+                        <input id="chatInput" type="text" value="${escapeAttribute(chatDraft)}" placeholder="發送溫暖訊息..." class="min-w-0 flex-1 bg-gray-100 rounded-full px-4 py-3 bs-text-base outline-none focus:ring-2 focus:ring-brand-light">
                         <button class="action-btn w-12 h-12 rounded-full bg-brand text-white flex items-center justify-center shrink-0 shadow-md hover:bg-brand-dark transition-colors" data-action="sendMessage">
-                            <i class="fa-solid fa-paper-plane text-[var(--font-xl)]"></i>
+                            <i class="fa-solid fa-paper-plane bs-text-xl"></i>
                         </button>
                     </div>
                     ${state.voiceRecording.active ? `
                         <div class="absolute inset-x-6 bottom-32 z-40 rounded-2xl ${state.voiceRecording.cancel ? 'bg-red-500' : 'bg-gray-900'} text-white p-4 text-center shadow-2xl">
-                            <i class="fa-solid ${state.voiceRecording.cancel ? 'fa-ban' : 'fa-microphone'} text-[var(--font-2xl)] mb-2"></i>
+                            <i class="fa-solid ${state.voiceRecording.cancel ? 'fa-ban' : 'fa-microphone'} bs-text-2xl mb-2"></i>
                             <p class="font-bold">${state.voiceRecording.cancel ? '鬆手取消發送' : '正在錄音，鬆手發送'}</p>
-                            <p class="text-[var(--font-xs)] opacity-80 mt-1">按住說話；手指向上滑到取消區即可取消</p>
+                            <p class="bs-text-xs opacity-80 mt-1">按住說話；手指向上滑到取消區即可取消</p>
                         </div>
                     ` : ''}
                 </div>
@@ -1897,13 +1929,13 @@
                 <div class="p-6">
                     <div class="bg-gradient-to-br from-brand-light to-brand text-white rounded-3xl p-6 shadow-lg mb-8 relative overflow-hidden">
                         <i class="fa-solid fa-star absolute -right-4 -bottom-4 text-7xl text-white opacity-20 transform -rotate-15"></i>
-                        <h3 class="text-[var(--font-xl)] font-bold mb-1">每日溫馨任務</h3>
-                        <p class="text-white/80 text-[var(--font-sm)] mb-4">發送5條訊息與家人保持聯絡</p>
+                        <h3 class="bs-text-xl font-bold mb-1">每日溫馨任務</h3>
+                        <p class="text-white/80 bs-text-sm mb-4">發送5條訊息與家人保持聯絡</p>
                         
                         <div class="bg-black/10 rounded-full h-3 mb-2 relative overflow-hidden">
                             <div class="bg-white h-full rounded-full transition-all duration-1000" style="width: ${(state.dailyMessages/5)*100}%;"></div>
                         </div>
-                        <div class="flex justify-between text-[var(--font-sm)] font-bold">
+                        <div class="flex justify-between bs-text-sm font-bold">
                             <span>進度</span>
                             <span>${state.dailyMessages} / 5 條</span>
                         </div>
@@ -1911,27 +1943,27 @@
                         ${state.dailyMessages >= 5 && !state.claimedDailyReward ? `
                             <button class="action-btn mt-4 w-full bg-white text-brand font-bold py-2 rounded-xl shadow" data-action="claimDailyReward">領取今日積分 (+50)</button>
                         ` : state.claimedDailyReward ? `
-                            <p class="mt-4 text-[var(--font-xs)] text-center text-white/80 font-bold">今日積分已領取</p>
+                            <p class="mt-4 bs-text-xs text-center text-white/80 font-bold">今日積分已領取</p>
                         ` : `
-                            <p class="mt-4 text-[var(--font-xs)] text-center text-white/70">仲差${5 - state.dailyMessages}條訊息就可以拎積分啦！</p>
+                            <p class="mt-4 bs-text-xs text-center text-white/70">仲差${5 - state.dailyMessages}條訊息就可以拎積分啦！</p>
                         `}
                     </div>
 
-                    <h3 class="text-[var(--font-xl)] font-bold text-gray-800 mb-4 flex items-center">
+                    <h3 class="bs-text-xl font-bold text-gray-800 mb-4 flex items-center">
                         <i class="fa-solid fa-ticket text-brand mr-2"></i> 獎勵兌換
                     </h3>
 
                     <div class="space-y-4">
                         ${state.rewards.map(reward => `
                             <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center">
-                                <div class="w-14 h-14 rounded-full ${reward.color} flex items-center justify-center text-[var(--font-2xl)] mr-4 shrink-0">
+                                <div class="w-14 h-14 rounded-full ${reward.color} flex items-center justify-center bs-text-2xl mr-4 shrink-0">
                                     <i class="fa-solid ${reward.icon}"></i>
                                 </div>
                                 <div class="flex-1">
-                                    <h4 class="font-bold text-gray-800 text-[var(--font-lg)] leading-tight">${reward.title}</h4>
-                                    <p class="text-brand font-bold text-[var(--font-sm)] mt-1">${reward.points} 積分</p>
+                                    <h4 class="font-bold text-gray-800 bs-text-lg leading-tight">${reward.title}</h4>
+                                    <p class="text-brand font-bold bs-text-sm mt-1">${reward.points} 積分</p>
                                 </div>
-                                <button class="action-btn ml-2 px-4 py-2 rounded-xl font-bold text-[var(--font-sm)] ${state.redeemedRewards.includes(reward.id) ? 'bg-green-100 text-green-600' : state.points >= reward.points ? 'bg-brand text-white shadow-md hover:bg-brand-dark' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}" data-action="redeemReward" data-reward-id="${reward.id}">
+                                <button class="action-btn ml-2 px-4 py-2 rounded-xl font-bold bs-text-sm ${state.redeemedRewards.includes(reward.id) ? 'bg-green-100 text-green-600' : state.points >= reward.points ? 'bg-brand text-white shadow-md hover:bg-brand-dark' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}" data-action="redeemReward" data-reward-id="${reward.id}">
                                     ${state.redeemedRewards.includes(reward.id) ? '已換' : '兌換'}
                                 </button>
                             </div>
@@ -1954,16 +1986,16 @@
                         <div class="w-24 h-24 mx-auto mb-4 rounded-full bg-orange-100 flex items-center justify-center overflow-hidden border-4 border-orange-200">
                             ${isImage ? `<img src="${avatar}" class="w-full h-full object-cover" alt="avatar">` : `<span class="text-5xl">${avatar}</span>`}
                         </div>
-                        <h2 class="text-[var(--font-2xl)] font-bold text-gray-800">${state.userName || '用戶'}</h2>
-                        <p class="text-gray-500 text-[var(--font-sm)] mt-1">${state.currentUser?.email || ''}</p>
-                        <span class="inline-block mt-2 px-3 py-1 rounded-full text-[var(--font-xs)] font-medium bg-orange-100 text-brand-dark">${roleLabel}</span>
+                        <h2 class="bs-text-2xl font-bold text-gray-800">${state.userName || '用戶'}</h2>
+                        <p class="text-gray-500 bs-text-sm mt-1">${state.currentUser?.email || ''}</p>
+                        <span class="inline-block mt-2 px-3 py-1 rounded-full bs-text-xs font-medium bg-orange-100 text-brand-dark">${roleLabel}</span>
                     </div>
 
                     <!-- 長者模式開關 -->
                     <div class="bg-white rounded-3xl shadow-sm p-5 flex items-center justify-between">
                         <div>
-                            <p class="font-bold text-gray-800 text-[var(--font-lg)]">長者模式</p>
-                            <p class="text-[var(--font-sm)] text-gray-500">放大字體，方便閱讀</p>
+                            <p class="font-bold text-gray-800 bs-text-lg">長者模式</p>
+                            <p class="bs-text-sm text-gray-500">放大字體，方便閱讀</p>
                         </div>
                         <button class="action-btn relative w-14 h-8 rounded-full transition-colors" data-action="toggleSeniorMode"
                             style="background: ${state.seniorMode ? '#FF944D' : '#d1d5db'}">
@@ -1974,26 +2006,26 @@
 
                     <!-- 家庭邀請碼 -->
                     <div class="bg-white rounded-3xl shadow-sm p-6">
-                        <h3 class="text-[var(--font-lg)] font-bold text-gray-800 mb-3"><i class="fa-solid fa-users mr-2 text-brand"></i>家庭邀請碼</h3>
+                        <h3 class="bs-text-lg font-bold text-gray-800 mb-3"><i class="fa-solid fa-users mr-2 text-brand"></i>家庭邀請碼</h3>
                         <div class="flex items-center justify-center gap-3 bg-orange-50 rounded-2xl p-4">
-                            <span class="text-[var(--font-3xl)] font-bold tracking-[0.3em] text-gray-800">${state.calendarCode || '------'}</span>
-                            <button class="action-btn px-4 py-2 bg-brand text-white rounded-xl text-[var(--font-sm)] font-bold shadow-md hover:bg-brand-dark transition-colors" data-action="copyFamilyCode">
+                            <span class="bs-text-3xl font-bold tracking-[0.3em] text-gray-800">${state.calendarCode || '------'}</span>
+                            <button class="action-btn px-4 py-2 bg-brand text-white rounded-xl bs-text-sm font-bold shadow-md hover:bg-brand-dark transition-colors" data-action="copyFamilyCode">
                                 <i class="fa-regular fa-copy mr-1"></i>複製
                             </button>
                         </div>
-                        <p class="text-[var(--font-xs)] text-gray-400 text-center mt-2">分享此碼給家人加入</p>
+                        <p class="bs-text-xs text-gray-400 text-center mt-2">分享此碼給家人加入</p>
                     </div>
 
                     <!-- 操作按鈕 -->
                     <div class="bg-white rounded-3xl shadow-sm p-2">
                         <button class="action-btn w-full flex items-center px-4 py-4 rounded-2xl hover:bg-gray-50 transition-colors" data-action="openModal" data-modal="editProfile">
-                            <i class="fa-solid fa-pen-to-square text-brand text-[var(--font-lg)] w-8"></i>
+                            <i class="fa-solid fa-pen-to-square text-brand bs-text-lg w-8"></i>
                             <span class="text-gray-800 font-medium">編輯個人資料</span>
                             <i class="fa-solid fa-chevron-right text-gray-300 ml-auto"></i>
                         </button>
                         <div class="border-t border-gray-100 mx-4"></div>
                         <button class="action-btn w-full flex items-center px-4 py-4 rounded-2xl hover:bg-gray-50 transition-colors" data-action="openModal" data-modal="changePassword">
-                            <i class="fa-solid fa-lock text-brand text-[var(--font-lg)] w-8"></i>
+                            <i class="fa-solid fa-lock text-brand bs-text-lg w-8"></i>
                             <span class="text-gray-800 font-medium">修改密碼</span>
                             <i class="fa-solid fa-chevron-right text-gray-300 ml-auto"></i>
                         </button>
@@ -2017,11 +2049,11 @@
             if (state.showModal === 'confirmReset') {
                 modalContent = `
                     <div class="bg-white w-[80%] max-w-xs rounded-3xl p-6 text-center shadow-2xl animate-fadeIn">
-                        <div class="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center text-[var(--font-3xl)] mx-auto mb-4">
+                        <div class="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center bs-text-3xl mx-auto mb-4">
                             <i class="fa-solid fa-triangle-exclamation"></i>
                         </div>
-                        <h3 class="text-[var(--font-xl)] font-bold text-gray-800 mb-2">確定刪除數據？</h3>
-                        <p class="text-gray-600 mb-6 text-[var(--font-sm)]">這將會清除您的所有設定與進度，並返回初始選擇角色畫面。</p>
+                        <h3 class="bs-text-xl font-bold text-gray-800 mb-2">確定刪除數據？</h3>
+                        <p class="text-gray-600 mb-6 bs-text-sm">這將會清除您的所有設定與進度，並返回初始選擇角色畫面。</p>
                         <div class="flex gap-3">
                             <button class="action-btn flex-1 py-3 bg-gray-100 text-gray-600 font-bold rounded-xl hover:bg-gray-200 transition-colors" data-action="closeModal">取消</button>
                             <button class="action-btn flex-1 py-3 bg-red-500 text-white font-bold rounded-xl shadow-md hover:bg-red-600 transition-colors" data-action="resetData">確定刪除</button>
@@ -2034,10 +2066,10 @@
             if (state.showModal === 'messageBox') {
                 modalContent = `
                     <div class="bg-white w-[80%] max-w-xs rounded-3xl p-6 text-center shadow-2xl animate-fadeIn">
-                        <div class="w-16 h-16 bg-brand-light text-brand rounded-full flex items-center justify-center text-[var(--font-3xl)] mx-auto mb-4">
+                        <div class="w-16 h-16 bg-brand-light text-brand rounded-full flex items-center justify-center bs-text-3xl mx-auto mb-4">
                             <i class="fa-solid fa-circle-check"></i>
                         </div>
-                        <h3 class="text-[var(--font-xl)] font-bold text-gray-800 mb-2">提示</h3>
+                        <h3 class="bs-text-xl font-bold text-gray-800 mb-2">提示</h3>
                         <p class="text-gray-600 mb-6">${state.modalMessage}</p>
                         <button class="action-btn w-full py-3 bg-brand text-white font-bold rounded-xl shadow-md" data-action="closeModal">確定</button>
                     </div>
@@ -2050,11 +2082,11 @@
                         <button class="action-btn absolute top-4 right-4 w-8 h-8 bg-gray-100 rounded-full text-gray-500 flex items-center justify-center" data-action="closeModal">
                             <i class="fa-solid fa-times"></i>
                         </button>
-                        <div class="w-14 h-14 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center text-[var(--font-2xl)] mb-4">
+                        <div class="w-14 h-14 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center bs-text-2xl mb-4">
                             <i class="fa-solid fa-wand-magic-sparkles"></i>
                         </div>
-                        <h3 class="text-[var(--font-2xl)] font-bold text-gray-800 mb-2">今日聊天總結</h3>
-                        <p class="text-[var(--font-base)] text-gray-700 leading-relaxed mb-5 whitespace-pre-line">${state.chatSummaryContent}</p>
+                        <h3 class="bs-text-2xl font-bold text-gray-800 mb-2">今日聊天總結</h3>
+                        <p class="bs-text-base text-gray-700 leading-relaxed mb-5 whitespace-pre-line">${state.chatSummaryContent}</p>
                         <button class="action-btn w-full py-3 bg-brand text-white font-bold rounded-xl shadow-md" data-action="closeModal">關閉</button>
                     </div>
                 `;
@@ -2066,23 +2098,23 @@
                         <button class="action-btn absolute top-4 right-4 w-8 h-8 bg-gray-100 rounded-full text-gray-500 flex items-center justify-center" data-action="closeModal">
                             <i class="fa-solid fa-times"></i>
                         </button>
-                        <div class="w-14 h-14 bg-green-100 text-green-600 rounded-2xl flex items-center justify-center text-[var(--font-2xl)] mb-4">
+                        <div class="w-14 h-14 bg-green-100 text-green-600 rounded-2xl flex items-center justify-center bs-text-2xl mb-4">
                             <i class="fa-solid fa-diagram-project"></i>
                         </div>
-                        <h3 class="text-[var(--font-2xl)] font-bold text-gray-800 mb-2">技術架構</h3>
-                        <p class="text-[var(--font-sm)] text-gray-500 mb-5">使用自託管 API 伺服器同步家庭資料。</p>
+                        <h3 class="bs-text-2xl font-bold text-gray-800 mb-2">技術架構</h3>
+                        <p class="bs-text-sm text-gray-500 mb-5">使用自託管 API 伺服器同步家庭資料。</p>
                         <div class="space-y-3">
                             <div class="bg-orange-50 border border-orange-100 rounded-2xl p-4">
                                 <p class="font-bold text-brand-dark mb-1"><i class="fa-solid fa-display mr-2"></i>目前狀態</p>
-                                <p class="text-[var(--font-sm)] text-gray-600">已連接自架服務器。家庭碼：${state.familyId || state.calendarCode || '尚未建立'}。</p>
+                                <p class="bs-text-sm text-gray-600">已連接自架服務器。家庭碼：${state.familyId || state.calendarCode || '尚未建立'}。</p>
                             </div>
                             <div class="bg-blue-50 border border-blue-100 rounded-2xl p-4">
                                 <p class="font-bold text-blue-700 mb-1"><i class="fa-solid fa-server mr-2"></i>自託管伺服器</p>
-                                <p class="text-[var(--font-sm)] text-gray-600">使用自架 API 伺服器同步家庭訊息和回憶資料。</p>
+                                <p class="bs-text-sm text-gray-600">使用自架 API 伺服器同步家庭訊息和回憶資料。</p>
                             </div>
                             <div class="bg-gray-50 border border-gray-100 rounded-2xl p-4">
                                 <p class="font-bold text-gray-700 mb-1"><i class="fa-solid fa-shield-halved mr-2"></i>資料安全</p>
-                                <p class="text-[var(--font-sm)] text-gray-600">資料通過自託管伺服器同步，可自行控制數據存放位置。</p>
+                                <p class="bs-text-sm text-gray-600">資料通過自託管伺服器同步，可自行控制數據存放位置。</p>
                             </div>
                         </div>
                     </div>
@@ -2097,26 +2129,26 @@
                         <button class="action-btn absolute top-4 right-4 w-8 h-8 bg-gray-100 rounded-full text-gray-500 flex items-center justify-center" data-action="closeModal">
                             <i class="fa-solid fa-times"></i>
                         </button>
-                        <div class="w-14 h-14 bg-orange-100 text-brand rounded-2xl flex items-center justify-center text-[var(--font-2xl)] mb-4">
+                        <div class="w-14 h-14 bg-orange-100 text-brand rounded-2xl flex items-center justify-center bs-text-2xl mb-4">
                             <i class="fa-solid fa-wand-magic-sparkles"></i>
                         </div>
-                        <h3 class="text-[var(--font-2xl)] font-bold text-gray-800 mb-2">本週家庭回憶摘要</h3>
-                        <p class="text-[var(--font-sm)] text-gray-500 mb-5">Demo AI 會把最近互動整理成 present 友善摘要。</p>
+                        <h3 class="bs-text-2xl font-bold text-gray-800 mb-2">本週家庭回憶摘要</h3>
+                        <p class="bs-text-sm text-gray-500 mb-5">Demo AI 會把最近互動整理成 present 友善摘要。</p>
                         <div class="bg-[#FFF8F0] border border-orange-100 rounded-2xl p-4 mb-4">
                             <p class="text-gray-800 leading-relaxed">今週家人保持了穩定互動，共留下 ${state.memories.length} 個回憶、${messageCount} 則訊息。最值得紀念的是「${weekMemories[0]?.content || '今日的溫暖分享'}」，提醒家人即使忙碌亦有互相關心。</p>
                         </div>
                         <div class="grid grid-cols-3 gap-3 text-center mb-5">
                             <div class="bg-gray-50 rounded-2xl p-3">
-                                <p class="text-[var(--font-2xl)] font-bold text-brand">${state.memories.length}</p>
-                                <p class="text-[var(--font-xs)] text-gray-500">回憶</p>
+                                <p class="bs-text-2xl font-bold text-brand">${state.memories.length}</p>
+                                <p class="bs-text-xs text-gray-500">回憶</p>
                             </div>
                             <div class="bg-gray-50 rounded-2xl p-3">
-                                <p class="text-[var(--font-2xl)] font-bold text-brand">${messageCount}</p>
-                                <p class="text-[var(--font-xs)] text-gray-500">訊息</p>
+                                <p class="bs-text-2xl font-bold text-brand">${messageCount}</p>
+                                <p class="bs-text-xs text-gray-500">訊息</p>
                             </div>
                             <div class="bg-gray-50 rounded-2xl p-3">
-                                <p class="text-[var(--font-2xl)] font-bold text-brand">${state.points}</p>
-                                <p class="text-[var(--font-xs)] text-gray-500">積分</p>
+                                <p class="bs-text-2xl font-bold text-brand">${state.points}</p>
+                                <p class="bs-text-xs text-gray-500">積分</p>
                             </div>
                         </div>
                         <button class="action-btn w-full py-3 bg-brand text-white font-bold rounded-xl shadow-md" data-action="shareSummary">分享摘要給家人</button>
@@ -2132,30 +2164,30 @@
                 modalContent = `
                     <div class="bg-white w-full rounded-t-3xl p-6 transform transition-transform animate-slideUp">
                         <div class="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6"></div>
-                        <h3 class="text-[var(--font-2xl)] font-bold text-gray-800 mb-6 text-center">記錄今日點滴</h3>
+                        <h3 class="bs-text-2xl font-bold text-gray-800 mb-6 text-center">記錄今日點滴</h3>
                         <div class="grid grid-cols-2 gap-4 mb-8">
                             ${memoryTypes.map(type => `
                                 <button class="action-btn flex flex-col items-center p-4 rounded-2xl border hover:shadow-sm ${type.classes} ${state.pendingMemoryType === type.id ? 'ring-2 ring-brand shadow-md' : ''}" data-action="selectMemoryType" data-type="${type.id}">
-                                    <i class="fa-solid ${type.icon} text-[var(--font-3xl)] mb-2"></i><span class="font-bold text-gray-700">${type.label}</span>
+                                    <i class="fa-solid ${type.icon} bs-text-3xl mb-2"></i><span class="font-bold text-gray-700">${type.label}</span>
                                 </button>
                             `).join('')}
                         </div>
                         <div class="space-y-3 mb-5">
-                            <textarea id="memoryContentInput" rows="3" placeholder="${state.pendingMemoryType === 'photo' ? '寫低想說的話（可選）...' : '寫低今日想分享的事...'}" class="w-full bg-gray-50 rounded-2xl border-2 ${state.errorMsg ? 'border-red-400' : 'border-gray-100'} p-4 outline-none focus:border-brand resize-none text-[var(--font-lg)]">${state.pendingMemoryContent || ''}</textarea>
+                            <textarea id="memoryContentInput" rows="3" placeholder="${state.pendingMemoryType === 'photo' ? '寫低想說的話（可選）...' : '寫低今日想分享的事...'}" class="w-full bg-gray-50 rounded-2xl border-2 ${state.errorMsg ? 'border-red-400' : 'border-gray-100'} p-4 outline-none focus:border-brand resize-none bs-text-lg">${state.pendingMemoryContent || ''}</textarea>
                             ${state.pendingMemoryType === 'photo' ? `
                                 <input id="memoryImageInput" type="file" accept="image/*" class="hidden">
                                 <input id="memoryCameraInput" type="file" accept="image/*" capture="environment" class="hidden">
                                 <div class="grid grid-cols-2 gap-3">
                                     <button type="button" class="action-btn bg-blue-50 text-blue-600 border-2 border-blue-100 rounded-2xl p-4 font-bold flex flex-col items-center justify-center" data-action="chooseMemoryCamera">
-                                        <i class="fa-solid fa-camera text-[var(--font-2xl)] mb-1"></i><span class="text-[var(--font-sm)]">拍攝相片</span>
+                                        <i class="fa-solid fa-camera bs-text-2xl mb-1"></i><span class="bs-text-sm">拍攝相片</span>
                                     </button>
                                     <button type="button" class="action-btn bg-blue-50 text-blue-600 border-2 border-blue-100 rounded-2xl p-4 font-bold flex flex-col items-center justify-center" data-action="chooseMemoryImage">
-                                        <i class="fa-solid fa-images text-[var(--font-2xl)] mb-1"></i><span class="text-[var(--font-sm)]">從相簿選擇</span>
+                                        <i class="fa-solid fa-images bs-text-2xl mb-1"></i><span class="bs-text-sm">從相簿選擇</span>
                                     </button>
                                 </div>
                                 ${state.pendingMemoryImage ? `<img src="${state.pendingMemoryImage}" class="w-full h-40 object-cover rounded-2xl border border-blue-100 mt-2">` : ''}
                             ` : ''}
-                            ${state.errorMsg ? `<p class="text-red-500 text-[var(--font-sm)] animate-shake">${state.errorMsg}</p>` : ''}
+                            ${state.errorMsg ? `<p class="text-red-500 bs-text-sm animate-shake">${state.errorMsg}</p>` : ''}
                         </div>
                         <button class="action-btn w-full py-3 bg-brand text-white font-bold rounded-xl shadow-md mb-3" data-action="saveMemory">儲存回憶</button>
                         <button class="action-btn w-full py-3 text-gray-500 font-bold bg-gray-100 rounded-xl" data-action="closeModal">取消</button>
@@ -2170,15 +2202,15 @@
                         <button class="action-btn absolute top-4 right-4 w-8 h-8 bg-gray-100 rounded-full text-gray-500 flex items-center justify-center" data-action="closeModal">
                             <i class="fa-solid fa-times"></i>
                         </button>
-                        <h3 class="text-[var(--font-xl)] font-bold text-gray-800 mb-4">${today.getMonth() + 1}月${state.selectedDate}日 的回憶</h3>
+                        <h3 class="bs-text-xl font-bold text-gray-800 mb-4">${today.getMonth() + 1}月${state.selectedDate}日 的回憶</h3>
                         <div class="space-y-4 max-h-[60vh] overflow-y-auto no-scrollbar">
                             ${dayMemories.map(m => `
                                 <div class="bg-orange-50 rounded-2xl p-4 border border-orange-100">
                                     <div class="flex items-center mb-2">
-                                        <div class="w-6 h-6 rounded-full bg-brand text-white text-[var(--font-xs)] flex items-center justify-center mr-2">
+                                        <div class="w-6 h-6 rounded-full bg-brand text-white bs-text-xs flex items-center justify-center mr-2">
                                             ${m.childName[0]}
                                         </div>
-                                        <span class="text-[var(--font-sm)] font-bold text-gray-700">${m.childName}</span>
+                                        <span class="bs-text-sm font-bold text-gray-700">${m.childName}</span>
                                     </div>
                                     ${m.img ? `<img src="${m.img}" class="w-full h-32 object-cover rounded-xl mb-2">` : ''}
                                     <p class="text-gray-800">${m.content}</p>
@@ -2195,10 +2227,10 @@
                     modalContent = `
                         <div class="bg-gradient-to-b from-brand-dark to-black w-full max-w-md h-96 rounded-3xl flex flex-col items-center justify-center relative animate-fadeIn">
                             <button class="action-btn absolute top-4 right-4 w-10 h-10 bg-white/20 rounded-full text-white flex items-center justify-center z-50" data-action="closeModal">
-                                <i class="fa-solid fa-times text-[var(--font-xl)]"></i>
+                                <i class="fa-solid fa-times bs-text-xl"></i>
                             </button>
                             <div class="w-16 h-16 border-4 border-white/30 border-t-white rounded-full animate-spin mb-6"></div>
-                            <h2 class="text-[var(--font-2xl)] font-bold text-white mb-2">正在生成回憶影片</h2>
+                            <h2 class="bs-text-2xl font-bold text-white mb-2">正在生成回憶影片</h2>
                             <p class="text-white/70">把這個月的照片縫合成影片...</p>
                         </div>
                     `;
@@ -2206,12 +2238,12 @@
                     modalContent = `
                         <div class="bg-black w-full max-w-md rounded-3xl overflow-hidden relative animate-fadeIn" id="videoContainer">
                             <button class="action-btn absolute top-4 right-4 w-10 h-10 bg-black/50 rounded-full text-white flex items-center justify-center z-50 backdrop-blur-md" data-action="closeModal">
-                                <i class="fa-solid fa-times text-[var(--font-xl)]"></i>
+                                <i class="fa-solid fa-times bs-text-xl"></i>
                             </button>
                             <video src="${state.videoUrl}" playsinline class="w-full" style="max-height: 70vh;" id="memVideo"></video>
                             <div class="absolute inset-0 flex items-center justify-center pointer-events-none" id="videoOverlay">
                                 <div class="w-20 h-20 bg-black/50 rounded-full flex items-center justify-center backdrop-blur-md" id="videoPlayBtn" style="pointer-events:auto;">
-                                    <i class="fa-solid fa-play text-white text-[var(--font-3xl)] ml-1" id="videoPlayIcon"></i>
+                                    <i class="fa-solid fa-play text-white bs-text-3xl ml-1" id="videoPlayIcon"></i>
                                 </div>
                             </div>
                             <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 pt-8">
@@ -2219,8 +2251,8 @@
                                     <div class="h-full bg-brand rounded-full transition-all" id="videoProgressFill" style="width:0%"></div>
                                 </div>
                                 <div class="flex items-center justify-between">
-                                    <p class="text-white/80 text-[var(--font-sm)]">${today.getFullYear()}年 ${today.getMonth() + 1}月 回憶精華</p>
-                                    <span class="text-white/60 text-[var(--font-xs)]" id="videoTime">0:00</span>
+                                    <p class="text-white/80 bs-text-sm">${today.getFullYear()}年 ${today.getMonth() + 1}月 回憶精華</p>
+                                    <span class="text-white/60 bs-text-xs" id="videoTime">0:00</span>
                                 </div>
                             </div>
                         </div>
@@ -2232,9 +2264,9 @@
                                 <i class="fa-solid fa-times"></i>
                             </button>
                             <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                <i class="fa-solid fa-triangle-exclamation text-[var(--font-2xl)] text-red-500"></i>
+                                <i class="fa-solid fa-triangle-exclamation bs-text-2xl text-red-500"></i>
                             </div>
-                            <h3 class="text-[var(--font-xl)] font-bold text-gray-800 mb-2">無法生成影片</h3>
+                            <h3 class="bs-text-xl font-bold text-gray-800 mb-2">無法生成影片</h3>
                             <p class="text-gray-500 mb-6">${state.videoError}</p>
                             <button class="action-btn w-full py-3 bg-brand text-white font-bold rounded-xl" data-action="closeModal">確定</button>
                         </div>
@@ -2243,23 +2275,23 @@
                     modalContent = `
                         <div class="bg-gradient-to-b from-brand to-brand-dark w-full max-w-md rounded-3xl overflow-hidden relative animate-fadeIn">
                             <button class="action-btn absolute top-4 right-4 w-10 h-10 bg-white/20 rounded-full text-white flex items-center justify-center z-50" data-action="closeModal">
-                                <i class="fa-solid fa-times text-[var(--font-xl)]"></i>
+                                <i class="fa-solid fa-times bs-text-xl"></i>
                             </button>
                             <div class="p-8 text-center text-white">
                                 <div class="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-6">
-                                    <i class="fa-solid fa-film text-[var(--font-4xl)]"></i>
+                                    <i class="fa-solid fa-film bs-text-4xl"></i>
                                 </div>
-                                <h2 class="text-[var(--font-2xl)] font-bold mb-2">${today.getFullYear()}年 ${today.getMonth() + 1}月 回憶精華</h2>
+                                <h2 class="bs-text-2xl font-bold mb-2">${today.getFullYear()}年 ${today.getMonth() + 1}月 回憶精華</h2>
                                 <p class="text-white/80 mb-8">把這個月的照片縫合成一段溫馨的回憶影片</p>
                                 ${hasPhotos ? `
-                                    <button class="action-btn w-full py-4 bg-white text-brand font-bold text-[var(--font-lg)] rounded-2xl shadow-lg" data-action="generateVideo">
+                                    <button class="action-btn w-full py-4 bg-white text-brand font-bold bs-text-lg rounded-2xl shadow-lg" data-action="generateVideo">
                                         <i class="fa-solid fa-wand-magic-sparkles mr-2"></i> 生成回憶影片
                                     </button>
                                 ` : `
                                     <div class="bg-white/10 rounded-2xl p-6">
-                                        <i class="fa-solid fa-image text-[var(--font-3xl)] text-white/50 mb-3"></i>
+                                        <i class="fa-solid fa-image bs-text-3xl text-white/50 mb-3"></i>
                                         <p class="text-white/70">這個月還沒有照片回憶</p>
-                                        <p class="text-white/50 text-[var(--font-sm)] mt-1">先去記錄一些回憶吧！</p>
+                                        <p class="text-white/50 bs-text-sm mt-1">先去記錄一些回憶吧！</p>
                                     </div>
                                 `}
                             </div>
@@ -2273,10 +2305,10 @@
                 modalContent = `
                     <div class="bg-white w-full max-w-sm rounded-3xl p-6 text-center relative animate-fadeIn">
                         <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <i class="fa-solid fa-right-from-bracket text-[var(--font-2xl)] text-red-500"></i>
+                            <i class="fa-solid fa-right-from-bracket bs-text-2xl text-red-500"></i>
                         </div>
-                        <h3 class="text-[var(--font-xl)] font-bold text-gray-800 mb-2">確認登出？</h3>
-                        <p class="text-gray-500 text-[var(--font-sm)] mb-6">登出後需要重新輸入電郵和密碼登入</p>
+                        <h3 class="bs-text-xl font-bold text-gray-800 mb-2">確認登出？</h3>
+                        <p class="text-gray-500 bs-text-sm mb-6">登出後需要重新輸入電郵和密碼登入</p>
                         <div class="flex gap-3">
                             <button class="action-btn flex-1 bg-gray-100 text-gray-600 font-bold py-3 rounded-2xl hover:bg-gray-200 transition-colors" data-action="closeModal">取消</button>
                             <button class="action-btn flex-1 bg-red-500 text-white font-bold py-3 rounded-2xl shadow-md hover:bg-red-600 transition-colors" data-action="confirmLogout">登出</button>
@@ -2295,34 +2327,34 @@
                         <button class="action-btn absolute top-4 right-4 w-8 h-8 bg-gray-100 rounded-full text-gray-500 flex items-center justify-center" data-action="closeModal">
                             <i class="fa-solid fa-times"></i>
                         </button>
-                        <h2 class="text-[var(--font-xl)] font-bold text-gray-800 mb-6">編輯個人資料</h2>
+                        <h2 class="bs-text-xl font-bold text-gray-800 mb-6">編輯個人資料</h2>
 
                         <!-- 頭像 -->
                         <div class="text-center mb-4">
                             <div class="w-20 h-20 mx-auto rounded-full bg-orange-100 flex items-center justify-center overflow-hidden border-4 border-orange-200 mb-2" id="editAvatarPreview">
-                                ${isCustomImage ? `<img src="${currentAvatar}" class="w-full h-full object-cover" id="editAvatarImg">` : `<span class="text-[var(--font-4xl)]" id="editAvatarEmoji">${currentAvatar}</span>`}
+                                ${isCustomImage ? `<img src="${currentAvatar}" class="w-full h-full object-cover" id="editAvatarImg">` : `<span class="bs-text-4xl" id="editAvatarEmoji">${currentAvatar}</span>`}
                             </div>
-                            <button class="action-btn text-[var(--font-sm)] text-brand font-medium" data-action="uploadAvatar">
+                            <button class="action-btn bs-text-sm text-brand font-medium" data-action="uploadAvatar">
                                 <i class="fa-solid fa-camera mr-1"></i>上傳照片
                             </button>
                             <input type="file" id="avatarFileInput" accept="image/*" class="hidden">
                         </div>
 
                         <!-- Emoji 頭像選擇 -->
-                        <p class="text-[var(--font-sm)] text-gray-500 mb-2">或選擇 Emoji：</p>
+                        <p class="bs-text-sm text-gray-500 mb-2">或選擇 Emoji：</p>
                         <div class="grid grid-cols-6 gap-2 mb-4">
                             ${avatarOptions.map(a => `
-                                <button class="action-btn text-[var(--font-2xl)] p-2 rounded-xl transition-all ${!isCustomImage && currentAvatar === a ? 'bg-brand shadow-md scale-105' : 'bg-gray-50 border border-gray-200 opacity-60'}" data-action="editSelectAvatar" data-avatar="${a}">${a}</button>
+                                <button class="action-btn bs-text-2xl p-2 rounded-xl transition-all ${!isCustomImage && currentAvatar === a ? 'bg-brand shadow-md scale-105' : 'bg-gray-50 border border-gray-200 opacity-60'}" data-action="editSelectAvatar" data-avatar="${a}">${a}</button>
                             `).join('')}
                         </div>
 
                         <!-- 名稱 -->
                         <div class="mb-6">
-                            <label class="text-[var(--font-sm)] text-gray-500 mb-1 block">名稱</label>
-                            <input id="editNameInput" type="text" value="${state.userName || ''}" class="w-full px-4 py-3 rounded-xl border border-gray-200 text-[var(--font-base)] focus:outline-none focus:border-brand bg-white" placeholder="輸入您的稱呼">
+                            <label class="bs-text-sm text-gray-500 mb-1 block">名稱</label>
+                            <input id="editNameInput" type="text" value="${state.userName || ''}" class="w-full px-4 py-3 rounded-xl border border-gray-200 bs-text-base focus:outline-none focus:border-brand bg-white" placeholder="輸入您的稱呼">
                         </div>
 
-                        ${state.errorMsg ? `<p class="text-red-500 text-[var(--font-sm)] mb-4 text-center animate-shake">${state.errorMsg}</p>` : ''}
+                        ${state.errorMsg ? `<p class="text-red-500 bs-text-sm mb-4 text-center animate-shake">${state.errorMsg}</p>` : ''}
 
                         <button class="action-btn w-full bg-brand text-white font-bold py-3 rounded-2xl shadow-md hover:bg-brand-dark transition-colors" data-action="saveProfile">
                             儲存
@@ -2338,24 +2370,24 @@
                         <button class="action-btn absolute top-4 right-4 w-8 h-8 bg-gray-100 rounded-full text-gray-500 flex items-center justify-center" data-action="closeModal">
                             <i class="fa-solid fa-times"></i>
                         </button>
-                        <h2 class="text-[var(--font-xl)] font-bold text-gray-800 mb-6">修改密碼</h2>
+                        <h2 class="bs-text-xl font-bold text-gray-800 mb-6">修改密碼</h2>
 
                         <div class="space-y-4 mb-6">
                             <div>
-                                <label class="text-[var(--font-sm)] text-gray-500 mb-1 block">舊密碼</label>
-                                <input id="oldPasswordInput" type="password" class="w-full px-4 py-3 rounded-xl border border-gray-200 text-[var(--font-base)] focus:outline-none focus:border-brand bg-white" placeholder="輸入舊密碼" autocomplete="current-password">
+                                <label class="bs-text-sm text-gray-500 mb-1 block">舊密碼</label>
+                                <input id="oldPasswordInput" type="password" class="w-full px-4 py-3 rounded-xl border border-gray-200 bs-text-base focus:outline-none focus:border-brand bg-white" placeholder="輸入舊密碼" autocomplete="current-password">
                             </div>
                             <div>
-                                <label class="text-[var(--font-sm)] text-gray-500 mb-1 block">新密碼</label>
-                                <input id="newPasswordInput" type="password" class="w-full px-4 py-3 rounded-xl border border-gray-200 text-[var(--font-base)] focus:outline-none focus:border-brand bg-white" placeholder="至少 6 個字元" autocomplete="new-password">
+                                <label class="bs-text-sm text-gray-500 mb-1 block">新密碼</label>
+                                <input id="newPasswordInput" type="password" class="w-full px-4 py-3 rounded-xl border border-gray-200 bs-text-base focus:outline-none focus:border-brand bg-white" placeholder="至少 6 個字元" autocomplete="new-password">
                             </div>
                             <div>
-                                <label class="text-[var(--font-sm)] text-gray-500 mb-1 block">確認新密碼</label>
-                                <input id="confirmPasswordInput" type="password" class="w-full px-4 py-3 rounded-xl border border-gray-200 text-[var(--font-base)] focus:outline-none focus:border-brand bg-white" placeholder="再次輸入新密碼" autocomplete="new-password">
+                                <label class="bs-text-sm text-gray-500 mb-1 block">確認新密碼</label>
+                                <input id="confirmPasswordInput" type="password" class="w-full px-4 py-3 rounded-xl border border-gray-200 bs-text-base focus:outline-none focus:border-brand bg-white" placeholder="再次輸入新密碼" autocomplete="new-password">
                             </div>
                         </div>
 
-                        ${state.errorMsg ? `<p class="text-red-500 text-[var(--font-sm)] mb-4 text-center animate-shake">${state.errorMsg}</p>` : ''}
+                        ${state.errorMsg ? `<p class="text-red-500 bs-text-sm mb-4 text-center animate-shake">${state.errorMsg}</p>` : ''}
 
                         <button class="action-btn w-full bg-brand text-white font-bold py-3 rounded-2xl shadow-md hover:bg-brand-dark transition-colors" data-action="savePassword">
                             確認修改
@@ -2415,6 +2447,8 @@
                         localStorage.setItem('beckon-stars-role', state.role);
                         state.seniorMode = state.role === 'senior';
                         localStorage.setItem('beckon-stars-senior-mode', state.seniorMode);
+                        document.body.classList.toggle('senior-mode', state.seniorMode);
+                        applySeniorModeVars();
                         state.userAvatar = null; // 重置頭像確保切換角色時重新賦予預設值
                         state.onboardingStep = 3;
                         render();
@@ -2495,6 +2529,7 @@
                         state.seniorMode = !state.seniorMode;
                         localStorage.setItem('beckon-stars-senior-mode', state.seniorMode);
                         document.body.classList.toggle('senior-mode', state.seniorMode);
+                        applySeniorModeVars();
                         render();
                     }
                     else if (action === 'logout') {
@@ -2515,11 +2550,11 @@
                     else if (action === 'editSelectAvatar') {
                         state.userAvatar = newBtn.getAttribute('data-avatar');
                         const preview = document.getElementById('editAvatarPreview');
-                        if (preview) preview.innerHTML = `<span class="text-[var(--font-4xl)]">${state.userAvatar}</span>`;
+                        if (preview) preview.innerHTML = `<span class="bs-text-4xl">${state.userAvatar}</span>`;
                         // 更新按鈕選中狀態
                         document.querySelectorAll('[data-action="editSelectAvatar"]').forEach(b => {
                             const isSelected = b.getAttribute('data-avatar') === state.userAvatar;
-                            b.className = `action-btn text-[var(--font-2xl)] p-2 rounded-xl transition-all ${isSelected ? 'bg-brand shadow-md scale-105' : 'bg-gray-50 border border-gray-200 opacity-60'}`;
+                            b.className = `action-btn bs-text-2xl p-2 rounded-xl transition-all ${isSelected ? 'bg-brand shadow-md scale-105' : 'bg-gray-50 border border-gray-200 opacity-60'}`;
                         });
                     }
                     else if (action === 'saveProfile') {
@@ -2883,7 +2918,7 @@
                     if (preview) preview.innerHTML = `<img src="${dataUrl}" class="w-full h-full object-cover">`;
                     // 取消 emoji 選中狀態
                     document.querySelectorAll('[data-action="editSelectAvatar"]').forEach(b => {
-                        b.className = 'action-btn text-[var(--font-2xl)] p-2 rounded-xl transition-all bg-gray-50 border border-gray-200 opacity-60';
+                        b.className = 'action-btn bs-text-2xl p-2 rounded-xl transition-all bg-gray-50 border border-gray-200 opacity-60';
                     });
                 });
             }
@@ -3467,6 +3502,7 @@
                     const savedSeniorMode = localStorage.getItem('beckon-stars-senior-mode');
                     state.seniorMode = savedSeniorMode !== null ? savedSeniorMode === 'true' : state.role === 'senior';
                     document.body.classList.toggle('senior-mode', state.seniorMode);
+                    applySeniorModeVars();
                     subscribeFamilyMessages(state.familyId);
                     subscribeFamilyMemories(state.familyId);
                     render();
