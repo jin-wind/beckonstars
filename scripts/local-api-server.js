@@ -258,36 +258,22 @@ function prepareAudioForLlm(audioDataUrl) {
 }
 
 async function transcribeWithAzureStt(audioDataUrl) {
-  const audio = parseAudioDataUrl(audioDataUrl);
+  const audio = prepareAudioForLlm(audioDataUrl);
   if (!audio?.data) return '';
 
+  // 標準 Azure Speech-to-text REST API（short audio）
+  // 直接傳 audio/wav binary，用 query param 設 locale
   const audioBuffer = Buffer.from(audio.data, 'base64');
-  const definition = JSON.stringify({
-    locales: ['zh-CN'],
-    profanityFilterMode: 'Masked'
-  });
-  const boundary = `----BeckonStars${crypto.randomBytes(6).toString('hex')}`;
-
-  const body = Buffer.concat([
-    Buffer.from(`--${boundary}\r\n`),
-    Buffer.from(`Content-Disposition: form-data; name="audio"; filename="audio.wav"\r\n`),
-    Buffer.from(`Content-Type: audio/wav\r\n\r\n`),
-    audioBuffer,
-    Buffer.from(`\r\n--${boundary}\r\n`),
-    Buffer.from(`Content-Disposition: form-data; name="definition"\r\n\r\n`),
-    Buffer.from(definition),
-    Buffer.from(`\r\n--${boundary}--\r\n`)
-  ]);
 
   const response = await fetch(
-    `${azureSttEndpoint}/speechtotext/transcriptions:transcribe?api-version=2024-05-15-preview`,
+    `${azureSttEndpoint}/speechtotext/transcriptions:transcribe?api-version=2024-05-15-preview&locale=zh-HK&diarizationEnabled=false`,
     {
       method: 'POST',
       headers: {
         'Ocp-Apim-Subscription-Key': azureSttKey,
-        'Content-Type': `multipart/form-data; boundary=${boundary}`
+        'Content-Type': 'audio/wav'
       },
-      body
+      body: audioBuffer
     }
   );
 
@@ -297,8 +283,7 @@ async function transcribeWithAzureStt(audioDataUrl) {
   }
 
   const result = await response.json();
-  const text = result.combinedPhrases?.map(p => p.text).join('') || '';
-  return text || '[聽不清]';
+  return result.combinedPhrases?.map(p => p.text).join('') || '[聽不清]';
 }
 
 async function transcribeAudioWithLlm(audioDataUrl) {
