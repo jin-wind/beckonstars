@@ -1019,7 +1019,7 @@ const server = http.createServer(async (req, res) => {
         img: cleanLargeText(body.img) || null,
         createdAt: now.toISOString()
       };
-      if (!memory.content) {
+      if (!memory.content && !memory.img) {
         sendJson(res, 400, { error: 'empty-content' });
         return;
       }
