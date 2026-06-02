@@ -263,7 +263,7 @@ async function transcribeWithAzureStt(audioDataUrl) {
 
   const audioBuffer = Buffer.from(audio.data, 'base64');
   const definition = JSON.stringify({
-    locale: 'zh-CN',
+    locales: ['zh-CN'],
     profanityFilterMode: 'Masked'
   });
   const boundary = `----BeckonStars${crypto.randomBytes(6).toString('hex')}`;
