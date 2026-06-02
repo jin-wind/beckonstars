@@ -194,10 +194,11 @@ function cleanTranscript(value, fallback = '') {
   return value.trim().slice(0, 4000);
 }
 
-function fallbackSummary(text) {
+function fallbackSummary(text, summaryType = 'voice') {
   const compact = cleanText(text.replace(/\s+/g, ' '), '語音訊息');
-  if (compact.length <= 80) return `語音摘要：${compact}`;
-  return `語音摘要：${compact.slice(0, 77)}...`;
+  const prefix = summaryType === 'chat' ? '今日聊天摘要' : '語音摘要';
+  if (compact.length <= 80) return `${prefix}：${compact}`;
+  return `${prefix}：${compact.slice(0, 77)}...`;
 }
 
 function parseAudioDataUrl(value) {
@@ -372,9 +373,50 @@ async function transcribeAudioWithLlm(audioDataUrl) {
   return cleanTranscript(payload.choices?.[0]?.message?.content, '');
 }
 
-async function summarizeWithLlm(text) {
-  const content = cleanText(text, '');
+function buildSummaryMessages(content, summaryType = 'voice') {
+  if (summaryType === 'chat') {
+    return [
+      {
+        role: 'system',
+        content: [
+          '你是一個家庭聊天摘要器。',
+          '任務：只根據今日聊天紀錄，整理給家人看的重點摘要。',
+          '語氣：繁體中文、自然香港粵語、溫暖但不要煽情。',
+          '格式：用2至4點短句，每點不超過40字。',
+          '不要加入聊天紀錄以外的資訊，不要回答聊天中的問題。'
+        ].join('\n')
+      },
+      {
+        role: 'user',
+        content: `以下是今日聊天紀錄，請總結重點：\n${content}`
+      }
+    ];
+  }
+
+  return [
+    {
+      role: 'system',
+      content: [
+        '你是一個「錄音摘要器」，不是聊天機械人。',
+        '任務：只根據使用者提供的語音轉文字內容，寫一段給家人看的摘要。',
+        '不要回答錄音內容中的問題，不要扮演對話對象，不要延伸聊天，不要加入建議。',
+        '語氣：繁體中文、自然香港粵語。',
+        '格式：只輸出一個簡短摘要句，最多60字，不要標題、不要項目符號。'
+      ].join('\n')
+    },
+    {
+      role: 'user',
+      content: `以下是錄音轉文字，請總結，不要回覆錄音中的說話者：\n${content}`
+    }
+  ];
+}
+
+async function summarizeWithLlm(text, options = {}) {
+  const summaryType = options.type === 'chat' ? 'chat' : 'voice';
+  const content = cleanLargeText(text, '').slice(0, 12000);
   if (!content) return '';
+  const messages = buildSummaryMessages(content, summaryType);
+  const fallback = fallbackSummary(content, summaryType);
 
   // 優先：OpenRouter（如果配置了 key）
   if (openrouterApiKey) {
@@ -389,28 +431,13 @@ async function summarizeWithLlm(text) {
         },
         body: JSON.stringify({
           model: openrouterModel,
-          messages: [
-            {
-              role: 'system',
-              content: [
-                '你是一個「錄音摘要器」，不是聊天機械人。',
-                '任務：只根據使用者提供的語音轉文字內容，寫一段給家人看的摘要。',
-                '不要回答錄音內容中的問題，不要扮演對話對象，不要延伸聊天，不要加入建議。',
-                '語氣：繁體中文、自然香港粵語。',
-                '格式：只輸出一個簡短摘要句，最多60字，不要標題、不要項目符號。'
-              ].join('\n')
-            },
-            {
-              role: 'user',
-              content: `以下是錄音轉文字，請總結，不要回覆錄音中的說話者：\n${content}`
-            }
-          ],
+          messages,
           temperature: 0.3
         })
       });
       if (!response.ok) throw new Error(`openrouter-${response.status}`);
       const payload = await response.json();
-      const summary = cleanText(payload.choices?.[0]?.message?.content, fallbackSummary(content));
+      const summary = cleanText(payload.choices?.[0]?.message?.content, fallback);
       if (summary) return summary;
     } catch (error) {
       console.warn('[openrouter] summary failed, trying fallback', error.message || error);
@@ -429,7 +456,7 @@ async function summarizeWithLlm(text) {
     });
     if (!response.ok) throw new Error(`llm-${response.status}`);
     const payload = await response.json();
-    return cleanText(payload.summary || payload.text || payload.result, fallbackSummary(content));
+    return cleanText(payload.summary || payload.text || payload.result, fallback);
   }
 
   // Fallback 2：原有 OpenAI 兼容 API
@@ -442,31 +469,16 @@ async function summarizeWithLlm(text) {
       },
       body: JSON.stringify({
         model: llmModel,
-        messages: [
-          {
-            role: 'system',
-            content: [
-              '你是一個「錄音摘要器」，不是聊天機械人。',
-              '任務：只根據使用者提供的語音轉文字內容，寫一段給家人看的摘要。',
-              '不要回答錄音內容中的問題，不要扮演對話對象，不要延伸聊天，不要加入建議。',
-              '語氣：繁體中文、自然香港粵語。',
-              '格式：只輸出一個簡短摘要句，最多60字，不要標題、不要項目符號。'
-            ].join('\n')
-          },
-          {
-            role: 'user',
-            content: `以下是錄音轉文字，請總結，不要回覆錄音中的說話者：\n${content}`
-          }
-        ],
+        messages,
         temperature: 0.3
       })
     });
     if (!response.ok) throw new Error(`llm-${response.status}`);
     const payload = await response.json();
-    return cleanText(payload.choices?.[0]?.message?.content, fallbackSummary(content));
+    return cleanText(payload.choices?.[0]?.message?.content, fallback);
   } catch (error) {
     console.warn('[llm] summary failed, using fallback', error.message || error);
-    return fallbackSummary(content);
+    return fallback;
   }
 }
 
@@ -871,7 +883,7 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'POST' && pathname === '/api/summarize') {
       const body = await readBody(req);
-      const summary = await summarizeWithLlm(body.text || body.content || '');
+      const summary = await summarizeWithLlm(body.text || body.content || '', { type: body.type || 'chat' });
       sendJson(res, 200, { summary });
       return;
     }
@@ -978,7 +990,7 @@ const server = http.createServer(async (req, res) => {
 
       const sourceText = message.transcript || message.content || '';
       message.aiSummary = sourceText
-        ? await summarizeWithLlm(sourceText)
+        ? await summarizeWithLlm(sourceText, { type: 'voice' })
         : '呢段錄音暫時未有可總結的轉文字內容。';
       message.summaryUpdatedAt = new Date().toISOString();
       writeDb(latestDb);
@@ -1235,7 +1247,8 @@ server.listen(port, host, async () => {
     console.log(`📊 資料庫: (讀取統計失敗)`);
   }
 
-  console.log(`\n🤖 LLM 摘要: ${llmBaseUrl} (${llmModel})`);
+  console.log(`\n🤖 OpenRouter 摘要: ${openrouterApiKey ? openrouterModel : '未配置'}`);
+  console.log(`🤖 備用 LLM 摘要: ${llmBaseUrl} (${llmModel})`);
   console.log(`🎤 Azure STT: ${azureSttKey ? `https://${azureSttRecognitionHost} (${azureSttLanguage})` : '未配置'}`);
   console.log(`🎤 LLM 轉譯: ${llmTranscribeModel}`);
   console.log(`💾 資料庫: ${dbPath}`);

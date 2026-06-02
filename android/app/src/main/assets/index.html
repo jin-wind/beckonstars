@@ -1083,7 +1083,12 @@
                     }
                 });
             }
-            const changed = incoming.length !== state.messages.length || (incoming.length > 0 && incoming[incoming.length - 1].id !== state.messages[state.messages.length - 1]?.id);
+            const changed = incoming.length !== state.messages.length || incoming.some((message, index) => {
+                const current = state.messages[index];
+                return !current
+                    || String(message.id) !== String(current.id)
+                    || getMessageRenderKey(message) !== getMessageRenderKey(current);
+            });
             if (changed) state.messages = incoming;
             hasLoadedCloudMessages = true;
             if (changed) refreshVisibleContent();
@@ -1165,6 +1170,29 @@
         }
 
         // --- 局部刷新（避免全頁閃屏） ---
+        function getMessageRenderKey(msg) {
+            return [
+                msg.id,
+                msg.senderId,
+                msg.senderName,
+                msg.type,
+                msg.content,
+                msg.img ? 'img' : '',
+                msg.audio ? 'audio' : '',
+                msg.audioDurationMs || 0,
+                msg.transcript || '',
+                msg.aiSummary || '',
+                state.transcribingMessageId === String(msg.id) ? 'transcribing' : ''
+            ].map(value => String(value ?? '')).join('|');
+        }
+
+        function createChatMessageElement(msg) {
+            const isMe = msg.senderId === state.authUid || msg.uid === state.authUid;
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = renderSingleChatMessage(msg, isMe);
+            return tempDiv.firstElementChild;
+        }
+
         function refreshVisibleContent() {
             // 更新聊天訊息（增量追加，避免閃爍）
             if (state.currentTab === 'chat') {
@@ -1172,25 +1200,41 @@
                 if (chatMessages) {
                     const visibleMessages = state.messages;
                     const existingMsgs = chatMessages.querySelectorAll('[data-msg-id]');
-                    const existingIds = new Set(Array.from(existingMsgs).map(el => el.getAttribute('data-msg-id')));
+                    const existingById = new Map(Array.from(existingMsgs).map(el => [el.getAttribute('data-msg-id'), el]));
+                    const visibleIds = new Set(visibleMessages.map(msg => String(msg.id)));
                     const anchor = document.getElementById('chatBottomAnchor');
                     const shouldAutoScroll = !isUserScrolledUp();
 
-                    // 只追加新訊息，不替換整個 innerHTML
-                    let appended = 0;
+                    // 追加新訊息，並替換已轉譯/已總結的同一條訊息。
+                    let touched = 0;
+                    existingById.forEach((element, id) => {
+                        if (!visibleIds.has(String(id))) {
+                            element.remove();
+                            touched++;
+                        }
+                    });
                     for (const msg of visibleMessages) {
-                        if (existingIds.has(String(msg.id))) continue;
-                        const isMe = msg.senderId === state.authUid || msg.uid === state.authUid;
-                        const tempDiv = document.createElement('div');
-                        tempDiv.innerHTML = renderSingleChatMessage(msg, isMe);
-                        const newEl = tempDiv.firstElementChild;
+                        const messageId = String(msg.id);
+                        const existing = existingById.get(messageId);
+                        const nextKey = getMessageRenderKey(msg);
+                        if (existing) {
+                            if (existing.getAttribute('data-msg-key') !== nextKey) {
+                                const replacement = createChatMessageElement(msg);
+                                if (replacement) {
+                                    existing.replaceWith(replacement);
+                                    touched++;
+                                }
+                            }
+                            continue;
+                        }
+                        const newEl = createChatMessageElement(msg);
                         if (newEl && anchor) {
                             chatMessages.insertBefore(newEl, anchor);
-                            appended++;
+                            touched++;
                         }
                     }
 
-                    if (appended > 0) {
+                    if (touched > 0) {
                         syncVoicePlayerUi();
                         if (shouldAutoScroll) {
                             chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -1214,12 +1258,9 @@
         function appendMessageToChat(msg) {
             const chatMessages = document.getElementById('chatMessages');
             if (!chatMessages) return;
-            const isMe = msg.senderId === state.authUid || msg.uid === state.authUid;
             const anchor = document.getElementById('chatBottomAnchor');
             const shouldAutoScroll = !isUserScrolledUp();
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = renderSingleChatMessage(msg, isMe);
-            const newEl = tempDiv.firstElementChild;
+            const newEl = createChatMessageElement(msg);
             if (newEl && anchor) {
                 chatMessages.insertBefore(newEl, anchor);
                 syncVoicePlayerUi();
@@ -1236,18 +1277,37 @@
         }
 
         function renderSingleChatMessage(msg, isMe) {
-            const displayAvatar = isMe ? state.userAvatar : (msg.senderName[0] || '👤');
-            const displayName = isMe ? state.userName : msg.senderName;
+            const displayAvatar = isMe ? state.userAvatar : ((msg.senderName || '家')[0] || '👤');
+            const displayName = isMe ? state.userName : (msg.senderName || '家庭成員');
+            const messageId = String(msg.id);
             return `
-                <div data-msg-id="${msg.id}" class="flex ${isMe ? 'justify-end' : 'justify-start'} animate-fadeIn">
+                <div data-msg-id="${escapeAttribute(messageId)}" data-msg-key="${escapeAttribute(getMessageRenderKey(msg))}" class="flex ${isMe ? 'justify-end' : 'justify-start'} animate-fadeIn">
                     ${!isMe ? `<div class="w-10 h-10 rounded-full bg-orange-200 flex items-center justify-center text-brand-dark font-bold mr-2 flex-shrink-0 bs-text-xl">${displayAvatar}</div>` : ''}
                     <div class="max-w-[75%] flex flex-col ${isMe ? 'items-end' : 'items-start'}">
                         ${!isMe ? `<span class="bs-text-xs text-gray-500 mb-1 ml-1">${displayName}</span>` : ''}
                         <div class="p-3 rounded-2xl shadow-sm ${isMe ? 'bg-brand text-white rounded-tr-none' : 'bg-white text-gray-800 rounded-tl-none border border-gray-100'}">
                             ${msg.type === 'text' ? `<p class="bs-text-lg">${msg.content}</p>` : ''}
                             ${msg.type === 'photo' && msg.img ? `<img src="${msg.img}" class="max-w-56 max-h-56 rounded-xl object-cover">${msg.content ? `<p class="bs-text-base mt-2">${msg.content}</p>` : ''}` : ''}
-                            ${msg.type === 'audio' ? `<div class="space-y-2 w-60 max-w-[68vw]">${renderVoicePlayer(msg, isMe)}<div class="${isMe ? 'bg-white/10' : 'bg-gray-50'} rounded-xl p-2"><p class="bs-text-xs opacity-70 mb-1">語音轉譯</p>${msg.transcript ? `<p class="bs-text-base">${msg.transcript}</p>` : `<p class="bs-text-sm opacity-80">未取得轉譯文字</p>`}${msg.type === 'audio' && msg.audio && !msg.transcript && state.backendMode === 'server' ? `<button class="action-btn mt-1 bg-amber-50 border border-amber-100 text-amber-700 rounded-lg px-2 py-1 bs-text-xs font-bold disabled:opacity-60" data-action="transcribeVoice" data-message-id="${msg.id}" ${state.transcribingMessageId === msg.id ? 'disabled' : ''}><i class="fa-solid ${state.transcribingMessageId === msg.id ? 'fa-spinner fa-spin' : 'fa-closed-captioning'} mr-1"></i>${state.transcribingMessageId === msg.id ? '轉譯中' : 'AI 轉譯'}</button>` : ''}</div></div>` : ''}
+                            ${msg.type === 'audio' ? `<div class="space-y-2 w-60 max-w-[68vw]">${renderVoicePlayer(msg, isMe)}<div class="${isMe ? 'bg-white/10' : 'bg-gray-50'} rounded-xl p-2"><p class="bs-text-xs opacity-70 mb-1">語音轉譯</p>${msg.transcript ? `<p class="bs-text-base">${msg.transcript}</p>` : `<p class="bs-text-sm opacity-80">未取得轉譯文字，可播放錄音確認內容。</p>`}</div></div>` : ''}
                         </div>
+                        ${msg.type === 'audio' && msg.transcript && !msg.aiSummary && state.backendMode === 'server' ? `
+                            <button class="action-btn mt-2 bg-blue-50 border border-blue-100 text-blue-700 rounded-xl px-3 py-2 bs-text-sm font-bold" data-action="summarizeVoice" data-message-id="${escapeAttribute(messageId)}">
+                                <i class="fa-solid fa-wand-magic-sparkles mr-1"></i>總結錄音
+                            </button>
+                        ` : ''}
+                        ${msg.type === 'audio' && msg.audio && !msg.transcript && state.backendMode === 'server' ? `
+                            <button class="action-btn mt-2 bg-amber-50 border border-amber-100 text-amber-700 rounded-xl px-3 py-2 bs-text-sm font-bold disabled:opacity-60" data-action="transcribeVoice" data-message-id="${escapeAttribute(messageId)}" ${state.transcribingMessageId === messageId ? 'disabled' : ''}>
+                                <i class="fa-solid ${state.transcribingMessageId === messageId ? 'fa-spinner fa-spin' : 'fa-closed-captioning'} mr-1"></i>${state.transcribingMessageId === messageId ? 'AI 轉譯中' : 'AI 轉譯錄音'}
+                            </button>
+                        ` : ''}
+                        ${msg.aiSummary ? `
+                            <div class="mt-2 bg-blue-50 border border-blue-100 rounded-xl p-3 shadow-sm relative w-full">
+                                <div class="absolute -top-2 -left-2 bg-blue-500 text-white w-6 h-6 rounded-full flex items-center justify-center bs-text-xs shadow-md">
+                                    <i class="fa-solid fa-robot"></i>
+                                </div>
+                                <p class="bs-text-sm text-blue-800 pl-3 font-medium">${msg.aiSummary}</p>
+                            </div>
+                        ` : ''}
                         <span class="bs-text-xs text-gray-400 mt-1 ${isMe ? 'mr-1' : 'ml-1'}">${msg.time}</span>
                     </div>
                 </div>
@@ -1820,69 +1880,10 @@
 
         // 聊天視圖
         function renderChat() {
-            const visibleMessages = state.messages;
             return `
                 <div class="flex flex-col h-full min-h-0 bg-[#FFF8F0]">
                     <div id="chatMessages" class="flex-1 min-h-0 px-4 pt-4 pb-3 space-y-6 overflow-y-auto no-scrollbar">
-                        <div class="text-center bs-text-xs text-gray-400 mb-4">今天</div>
-
-                        ${visibleMessages.map(msg => {
-                            const isMe = msg.senderId === state.authUid || msg.uid === state.authUid;
-                            
-                            // 更新為使用者自己設定的名字和頭像 (僅限當前使用者發送的訊息)
-                            const displayAvatar = isMe ? state.userAvatar : (msg.senderName[0] || '👤');
-                            const displayName = isMe ? state.userName : msg.senderName;
-                            
-                            return `
-                                <div class="flex ${isMe ? 'justify-end' : 'justify-start'} animate-fadeIn">
-                                    ${!isMe ? `
-                                        <div class="w-10 h-10 rounded-full bg-orange-200 flex items-center justify-center text-brand-dark font-bold mr-2 flex-shrink-0 bs-text-xl">
-                                            ${displayAvatar}
-                                        </div>
-                                    ` : ''}
-                                    <div class="max-w-[75%] flex flex-col ${isMe ? 'items-end' : 'items-start'}">
-                                        ${!isMe ? `<span class="bs-text-xs text-gray-500 mb-1 ml-1">${displayName}</span>` : ''}
-                                        
-                                        <div class="p-3 rounded-2xl shadow-sm ${isMe ? 'bg-brand text-white rounded-tr-none' : 'bg-white text-gray-800 rounded-tl-none border border-gray-100'}">
-                                            ${msg.type === 'text' ? `<p class="bs-text-lg">${msg.content}</p>` : ''}
-                                            ${msg.type === 'photo' && msg.img ? `
-                                                <img src="${msg.img}" class="max-w-56 max-h-56 rounded-xl object-cover mb-2">
-                                                ${msg.content ? `<p class="bs-text-base">${msg.content}</p>` : ''}
-                                            ` : ''}
-                                            ${msg.type === 'audio' ? `
-                                                <div class="space-y-2 w-60 max-w-[68vw]">
-                                                    ${renderVoicePlayer(msg, isMe)}
-                                                    <div class="${isMe ? 'bg-white/10' : 'bg-gray-50'} rounded-xl p-2">
-                                                        <p class="bs-text-xs opacity-70 mb-1">語音轉譯</p>
-                                                        ${msg.transcript ? `<p class="bs-text-base">${msg.transcript}</p>` : `<p class="bs-text-sm opacity-80">未取得轉譯文字，可播放錄音確認內容。</p>`}
-                                                    </div>
-                                                </div>
-                                            ` : ''}
-                                        </div>
-                                        
-                                        ${msg.type === 'audio' && msg.transcript && !msg.aiSummary && state.backendMode === 'server' ? `
-                                            <button class="action-btn mt-2 bg-blue-50 border border-blue-100 text-blue-700 rounded-xl px-3 py-2 bs-text-sm font-bold" data-action="summarizeVoice" data-message-id="${msg.id}">
-                                                <i class="fa-solid fa-wand-magic-sparkles mr-1"></i>總結錄音
-                                            </button>
-                                        ` : ''}
-                                        ${msg.type === 'audio' && msg.audio && !msg.transcript && state.backendMode === 'server' ? `
-                                            <button class="action-btn mt-2 bg-amber-50 border border-amber-100 text-amber-700 rounded-xl px-3 py-2 bs-text-sm font-bold disabled:opacity-60" data-action="transcribeVoice" data-message-id="${msg.id}" ${state.transcribingMessageId === msg.id ? 'disabled' : ''}>
-                                                <i class="fa-solid ${state.transcribingMessageId === msg.id ? 'fa-spinner fa-spin' : 'fa-closed-captioning'} mr-1"></i>${state.transcribingMessageId === msg.id ? 'AI 轉譯中' : 'AI 轉譯錄音'}
-                                            </button>
-                                        ` : ''}
-                                        ${msg.aiSummary ? `
-                                            <div class="mt-2 bg-blue-50 border border-blue-100 rounded-xl p-3 shadow-sm relative w-full">
-                                                <div class="absolute -top-2 -left-2 bg-blue-500 text-white w-6 h-6 rounded-full flex items-center justify-center bs-text-xs shadow-md">
-                                                    <i class="fa-solid fa-robot"></i>
-                                                </div>
-                                                <p class="bs-text-sm text-blue-800 pl-3 font-medium">${msg.aiSummary}</p>
-                                            </div>
-                                        ` : ''}
-                                        <span class="bs-text-xs text-gray-400 mt-1">${msg.time}</span>
-                                    </div>
-                                </div>
-                            `;
-                        }).join('')}
+                        ${renderChatMessages()}
                         <div id="chatBottomAnchor" aria-hidden="true" class="h-px"></div>
                     </div>
 
@@ -2804,7 +2805,7 @@
                             }
                             const result = await serverApi('/api/summarize', {
                                 method: 'POST',
-                                body: JSON.stringify({ text: chatText })
+                                body: JSON.stringify({ text: chatText, type: 'chat' })
                             });
                             state.showModal = 'chatSummary';
                             state.chatSummaryContent = result.summary || '暫無摘要';
@@ -3294,13 +3295,21 @@
                 audioDurationMs: recording.durationMs || 0,
                 aiSummary: null
             });
-            if (sentMessage && sentMessage.id) {
-                serverApi(`/api/families/${encodeURIComponent(state.familyId)}/messages/${encodeURIComponent(sentMessage.id)}/transcribe`, {
-                    method: 'POST',
-                    body: JSON.stringify({})
-                }).then(async () => {
-                    await refreshServerMessages(state.familyId);
-                }).catch(err => console.warn('[voice] auto-transcribe failed', err));
+            if (sentMessage && sentMessage.id && !sentMessage.transcript) {
+                state.transcribingMessageId = String(sentMessage.id);
+                refreshVisibleContent();
+                const waitForTranscript = waitForServerMessage(sentMessage.id, message => !!message.transcript, {
+                    timeoutMs: 45000,
+                    intervalMs: 1200
+                });
+                waitForTranscript.catch(err => {
+                    console.warn('[voice] transcript polling failed', err);
+                }).finally(() => {
+                    if (state.transcribingMessageId === String(sentMessage.id)) {
+                        state.transcribingMessageId = null;
+                        refreshVisibleContent();
+                    }
+                });
             }
         };
 
@@ -3375,6 +3384,21 @@
             }
         }
 
+        async function waitForServerMessage(messageId, predicate, options = {}) {
+            const timeoutMs = Number(options.timeoutMs) || 30000;
+            const intervalMs = Number(options.intervalMs) || 1000;
+            const deadline = Date.now() + timeoutMs;
+            const targetId = String(messageId);
+
+            while (Date.now() < deadline) {
+                await refreshServerMessages(state.familyId);
+                const message = state.messages.find(item => String(item.id) === targetId);
+                if (message && predicate(message)) return message;
+                await new Promise(resolve => setTimeout(resolve, intervalMs));
+            }
+            return null;
+        }
+
         async function summarizeVoiceMessage(messageId) {
             if (!messageId || state.backendMode !== 'server' || !state.familyId) return;
             render();
@@ -3429,10 +3453,17 @@
                 state.messages.push(message);
                 appendMessageToChat(message);
                 try {
-                    await serverApi(`/api/families/${encodeURIComponent(state.familyId)}/messages`, {
+                    const result = await serverApi(`/api/families/${encodeURIComponent(state.familyId)}/messages`, {
                         method: 'POST',
                         body: JSON.stringify(message)
                     });
+                    if (result?.message?.id) {
+                        const serverMessage = normalizeCloudMessage(result.message.id, result.message);
+                        const index = state.messages.findIndex(item => String(item.id) === String(message.id));
+                        if (index >= 0) state.messages[index] = serverMessage;
+                        refreshVisibleContent();
+                        return serverMessage;
+                    }
                 } catch (error) {
                     console.warn('Server message send failed', error);
                     if (isTextMessage) {
