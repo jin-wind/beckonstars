@@ -272,14 +272,23 @@
             const dy = clientY - recording.startY;
             const absDx = Math.abs(dx);
             const absDy = Math.abs(dy);
-            const locked = dy < -75 && absDy > absDx * 0.9;
-            const cancel = dx < -70 && absDx > absDy * 1.15;
+            const locked = dy < -45 && absDy > absDx * 0.9;
+            const cancel = dx > 40 && absDx > absDy * 1.15;
 
             return {
                 cancel,
                 locked,
                 gesture: locked ? 'lock' : cancel ? 'cancel' : 'recording'
             };
+        }
+
+        function updateVoiceRecordingTimerUi() {
+            if (!state.voiceRecording.active) return;
+            const elapsed = formatRecordingElapsed(state.voiceRecording.elapsedMs);
+            const timerEl = document.getElementById('voiceRecordingTimerText');
+            if (timerEl && timerEl.textContent !== elapsed) {
+                timerEl.textContent = elapsed;
+            }
         }
 
         function startVoiceRecordingTimer(startedAt = Date.now()) {
@@ -290,7 +299,7 @@
                     return;
                 }
                 state.voiceRecording.elapsedMs = Date.now() - startedAt;
-                render();
+                updateVoiceRecordingTimerUi();
             }, 500);
         }
 
@@ -1975,17 +1984,17 @@
                             <div class="min-w-0 flex-1">
                                 <div class="flex items-center justify-between gap-3">
                                     <div class="min-w-0 flex-1 flex items-center gap-2 ${isCancelling ? 'text-brand-red' : 'text-gray-500'} font-bold bs-text-sm">
-                                        ${isCancelling ? '<i class="fa-solid fa-ban"></i><span>鬆手取消錄音</span>' : '<i class="fa-solid fa-arrow-left-long"></i><span>向左滑取消</span>'}
+                                        ${isCancelling ? '<i class="fa-solid fa-ban"></i><span>鬆手取消錄音</span>' : '<span>向右滑取消</span><i class="fa-solid fa-arrow-right-long"></i>'}
                                     </div>
                                     <div class="flex items-center gap-2 text-gray-800 font-bold bs-text-base shrink-0">
                                         <span class="w-2.5 h-2.5 rounded-full bg-brand-red recording-pulse"></span>
-                                        <span>${elapsed}</span>
+                                        <span id="voiceRecordingTimerText">${elapsed}</span>
                                     </div>
                                     <div class="w-10 h-10 rounded-full ${isLocking ? 'bg-brand text-white shadow-md' : 'bg-gray-100 text-gray-500'} flex items-center justify-center shrink-0 transition-colors">
                                         <i class="fa-solid ${isLocking ? 'fa-lock' : 'fa-arrow-up'}"></i>
                                     </div>
                                 </div>
-                                <p class="bs-text-xs text-gray-400 mt-1 text-center">${isCancelling ? '保持向左並鬆手即可取消' : '鬆手即發送；向上滑可鎖定錄音'}</p>
+                                <p class="bs-text-xs text-gray-400 mt-1 text-center">${isCancelling ? '保持向右並鬆手即可取消' : '鬆手即發送；向上滑可鎖定錄音'}</p>
                             </div>
                         </div>
                     </div>
