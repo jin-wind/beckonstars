@@ -74,7 +74,7 @@
         .animate-fadeIn { animation: fadeIn 0.3s ease-out; }
         @keyframes shake { 0%, 100% {transform: translateX(0);} 25% {transform: translateX(-5px);} 75% {transform: translateX(5px);} }
         .animate-shake { animation: shake 0.3s ease-in-out; }
-        @keyframes recordingPulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.45; transform: scale(0.82); } }
+        @keyframes recordingPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
         .recording-pulse { animation: recordingPulse 1.1s ease-in-out infinite; }
 
         /* 日曆撕拉動畫 */
@@ -379,21 +379,8 @@
         }
 
         function restoreChatInputFocusAfterRender() {
-            if (!shouldRestoreChatInputFocus || state.currentTab !== 'chat') return;
+            // 已移除：避免發送訊息後強制聚焦導致 Android 手機虛擬鍵盤自動彈出
             shouldRestoreChatInputFocus = false;
-
-            const chatInput = document.getElementById('chatInput');
-            if (!chatInput) return;
-
-            try {
-                chatInput.focus({ preventScroll: true });
-            } catch (error) {
-                chatInput.focus();
-            }
-            const cursorPosition = chatInput.value.length;
-            try {
-                chatInput.setSelectionRange(cursorPosition, cursorPosition);
-            } catch (error) {}
         }
 
         function escapeAttribute(value) {
@@ -1258,11 +1245,15 @@
             ].map(value => String(value ?? '')).join('|');
         }
 
-        function createChatMessageElement(msg) {
+        function createChatMessageElement(msg, disableAnimation = false) {
             const isMe = msg.senderId === state.authUid || msg.uid === state.authUid;
             const tempDiv = document.createElement('div');
             tempDiv.innerHTML = renderSingleChatMessage(msg, isMe);
-            return tempDiv.firstElementChild;
+            const el = tempDiv.firstElementChild;
+            if (disableAnimation) {
+                el.classList.remove('animate-fadeIn');
+            }
+            return el;
         }
 
         function refreshVisibleContent() {
@@ -1291,7 +1282,7 @@
                         const nextKey = getMessageRenderKey(msg);
                         if (existing) {
                             if (existing.getAttribute('data-msg-key') !== nextKey) {
-                                const replacement = createChatMessageElement(msg);
+                                const replacement = createChatMessageElement(msg, true);
                                 if (replacement) {
                                     existing.replaceWith(replacement);
                                     touched++;
@@ -1299,7 +1290,7 @@
                             }
                             continue;
                         }
-                        const newEl = createChatMessageElement(msg);
+                        const newEl = createChatMessageElement(msg, false);
                         if (newEl && anchor) {
                             chatMessages.insertBefore(newEl, anchor);
                             touched++;
@@ -1353,7 +1344,7 @@
             const displayName = isMe ? state.userName : (msg.senderName || '家庭成員');
             const messageId = String(msg.id);
             return `
-                <div data-msg-id="${escapeAttribute(messageId)}" data-msg-key="${escapeAttribute(getMessageRenderKey(msg))}" class="flex ${isMe ? 'justify-end' : 'justify-start'} animate-fadeIn">
+                <div data-msg-id="${escapeAttribute(messageId)}" data-msg-key="${escapeAttribute(getMessageRenderKey(msg))}" class="flex ${isMe ? 'justify-end' : 'justify-start'}">
                     ${!isMe ? `<div class="w-10 h-10 rounded-full bg-orange-200 flex items-center justify-center text-brand-dark font-bold mr-2 flex-shrink-0 bs-text-xl">${displayAvatar}</div>` : ''}
                     <div class="max-w-[75%] flex flex-col ${isMe ? 'items-end' : 'items-start'}">
                         ${!isMe ? `<span class="bs-text-xs text-gray-500 mb-1 ml-1">${displayName}</span>` : ''}
@@ -1441,7 +1432,7 @@
             } else {
                 app.innerHTML = `
                     ${renderHeader()}
-                    <main class="flex-1 min-h-0 ${state.currentTab === 'chat' ? 'overflow-hidden pb-[calc(5.75rem+env(safe-area-inset-bottom))]' : 'overflow-y-auto no-scrollbar pb-[calc(5.75rem+env(safe-area-inset-bottom))]'} animate-fadeIn">
+                    <main class="flex-1 min-h-0 ${state.currentTab === 'chat' ? 'overflow-hidden pb-[calc(5.75rem+env(safe-area-inset-bottom))]' : 'overflow-y-auto no-scrollbar pb-[calc(5.75rem+env(safe-area-inset-bottom))]'}">
                         ${state.currentTab === 'calendar' ? renderCalendar() : ''}
                         ${state.currentTab === 'chat' ? renderChat() : ''}
                         ${state.currentTab === 'leaderboard' ? renderLeaderboard() : ''}
@@ -1982,7 +1973,7 @@
                 return `
                     <div id="chatComposerBar" class="shrink-0 bg-white px-3 py-3 border-t border-gray-100 shadow-[0_-4px_10px_rgba(0,0,0,0.03)]">
                         <div class="flex items-center gap-3">
-                            <button id="voiceHoldButton" class="w-12 h-12 rounded-full ${isCancelling ? 'bg-red-100 text-brand-red' : 'bg-brand text-white'} flex items-center justify-center shrink-0 select-none touch-none shadow-md ${isCancelling ? 'animate-shake' : 'recording-pulse'}" title="按住錄音">
+                            <button id="voiceHoldButton" class="w-12 h-12 rounded-full ${isCancelling ? 'bg-red-100 text-brand-red' : 'bg-brand text-white'} flex items-center justify-center shrink-0 select-none touch-none shadow-md ${isCancelling ? '' : 'recording-pulse'}" title="按住錄音">
                                 <i class="fa-solid ${isCancelling ? 'fa-ban' : 'fa-microphone'} bs-text-xl"></i>
                             </button>
                             <div class="min-w-0 flex-1">
@@ -2055,7 +2046,12 @@
 
                 // 重新綁定新按鈕的指針事件與其他事件
                 const newBtn = document.getElementById('voiceHoldButton');
-                if (newBtn && !state.voiceRecording.locked) {
+                if (newBtn && !state.voiceRecording.locked && state.voiceRecording.active) {
+                    // 如果依然在 active 且非 locked 狀態（這通常表示還在 pointermove），
+                    // 不要透過 attachVoiceHoldEvents 重新覆蓋 start/move/finish，
+                    // 否則會遺失外層作用域中正在綁定的 pointerId。
+                    // 因此針對「滑動更新 UI」的情境，新按鈕直接接續即可。
+                } else if (newBtn && !state.voiceRecording.locked) {
                     attachVoiceHoldEvents(newBtn);
                 }
                 const newInput = document.getElementById('chatInput');
@@ -3388,7 +3384,7 @@
         function finishLockedVoiceRecording(cancelled) {
             if (!state.voiceRecording.active || !state.voiceRecording.locked) return;
             resetVoiceRecordingState();
-            render();
+            replaceVoiceRecordingBar();
             if (isAndroidApk() && window.BeckonStarsAndroid?.finishVoiceRecording) {
                 window.BeckonStarsAndroid.finishVoiceRecording(!!cancelled);
             }
@@ -3453,17 +3449,7 @@
                 state.voiceRecording.locked = gesture.locked;
                 state.voiceRecording.gesture = gesture.gesture;
 
-                const composer = document.getElementById('chatComposerBar');
-                if (composer) {
-                    composer.outerHTML = renderVoiceRecordingBar();
-                    const newBtn = document.getElementById('voiceHoldButton');
-                    if (newBtn && !gesture.locked) {
-                        try { newBtn.setPointerCapture(pointerId); } catch(e) {}
-                        attachVoiceHoldEvents(newBtn, pointerId, startedAt);
-                    }
-                } else {
-                    render();
-                }
+                replaceVoiceRecordingBar();
 
                 if (gesture.locked) {
                     cleanupDocumentListeners();
@@ -3481,7 +3467,7 @@
                 } catch (error) {}
                 pointerId = null;
                 resetVoiceRecordingState();
-                render();
+                replaceVoiceRecordingBar();
                 if (isAndroidApk() && window.BeckonStarsAndroid?.finishVoiceRecording) {
                     window.BeckonStarsAndroid.finishVoiceRecording(!!cancelled);
                 }
@@ -3493,7 +3479,7 @@
                 if (state.voiceRecording.locked) {
                     cleanupDocumentListeners();
                     pointerId = null;
-                    render();
+                    replaceVoiceRecordingBar();
                     return;
                 }
                 completeRecording(state.voiceRecording.cancel);
@@ -3525,7 +3511,6 @@
                 return;
             }
             state.showModal = null;
-            render();
             const sentMessage = await sendChatMessage({
                 type: 'audio',
                 content: transcript || '語音訊息',
@@ -3663,7 +3648,7 @@
             if (!content && !hasImage) return;
             if (isTextMessage) {
                 chatDraft = '';
-                shouldRestoreChatInputFocus = true;
+                shouldRestoreChatInputFocus = false;
             }
 
             const now = new Date();
@@ -3689,7 +3674,6 @@
             if (state.backendMode === 'server' && state.familyId) {
                 if (chatInput && isTextMessage && !override) {
                     chatInput.value = '';
-                    chatInput.focus({ preventScroll: true });
                 }
                 state.messages.push(message);
                 appendMessageToChat(message);
@@ -3709,7 +3693,7 @@
                     console.warn('Server message send failed', error);
                     if (isTextMessage) {
                         chatDraft = content;
-                        shouldRestoreChatInputFocus = true;
+                        shouldRestoreChatInputFocus = false;
                     }
                     showMessage('訊息送出失敗，請檢查自架服務器。');
                 }
