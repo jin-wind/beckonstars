@@ -77,34 +77,35 @@
         @keyframes recordingPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
         .recording-pulse { animation: recordingPulse 1.1s ease-in-out infinite; }
 
-        /* 日曆撕拉動畫 */
-        .calendar-page-container { position: relative; overflow: hidden; touch-action: pan-y; }
-        .calendar-page { transition: transform 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.35s ease; will-change: transform, opacity; }
-        .calendar-page.swiping { transition: none; }
-        .calendar-page.tear-out-left { animation: tearOutLeft 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards; }
-        .calendar-page.tear-out-right { animation: tearOutRight 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards; }
-        .calendar-page.tear-in-left { animation: tearInLeft 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards; }
-        .calendar-page.tear-in-right { animation: tearInRight 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards; }
+        /* 日曆彈性滑帶動畫 */
+        .calendar-page-container { position: relative; overflow: hidden; touch-action: pan-y; background: #fff; }
+        .calendar-page-strip {
+            display: flex;
+            width: 200%;
+            height: 100%;
+            will-change: transform;
+            pointer-events: none;
+        }
+        .calendar-page-strip > .calendar-page {
+            width: 50%;
+            flex-shrink: 0;
+            pointer-events: auto;
+            transform: none !important;
+            opacity: 1 !important;
+            filter: none !important;
+        }
+        .calendar-page-strip.is-animating {
+            transition: transform 0.58s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+        }
+        .calendar-page-strip.slide-forward { transform: translate3d(-50%, 0, 0); }
+        .calendar-page-strip.slide-backward { transform: translate3d(50%, 0, 0); }
+        /* 修正 strip backward 初始位置：需要讓 next 在 left (-50%)，current 在 right (0) */
+        .calendar-page-strip.prep-backward { transform: translate3d(-50%, 0, 0); }
+        .calendar-page-strip.prep-backward.slide-to-current { transform: translate3d(0, 0, 0); }
 
-        @keyframes tearOutLeft {
-            0% { transform: translateX(0) rotate(0deg); opacity: 1; }
-            40% { transform: translateX(-30%) rotate(-2deg); opacity: 0.8; }
-            100% { transform: translateX(-110%) rotate(-4deg); opacity: 0; }
-        }
-        @keyframes tearOutRight {
-            0% { transform: translateX(0) rotate(0deg); opacity: 1; }
-            40% { transform: translateX(30%) rotate(2deg); opacity: 0.8; }
-            100% { transform: translateX(110%) rotate(4deg); opacity: 0; }
-        }
-        @keyframes tearInLeft {
-            0% { transform: translateX(110%) rotate(3deg); opacity: 0; }
-            60% { transform: translateX(-3%) rotate(-0.5deg); opacity: 1; }
-            100% { transform: translateX(0) rotate(0deg); opacity: 1; }
-        }
-        @keyframes tearInRight {
-            0% { transform: translateX(-110%) rotate(-3deg); opacity: 0; }
-            60% { transform: translateX(3%) rotate(0.5deg); opacity: 1; }
-            100% { transform: translateX(0) rotate(0deg); opacity: 1; }
+        @keyframes calendarElasticStripSlide {
+            from { transform: translate3d(0, 0, 0); }
+            to { transform: translate3d(-50%, 0, 0); }
         }
 
         /* 日曆底部指示點 */
@@ -3312,7 +3313,8 @@
                 ? tearOffPageHtml(targetDay, newYear, newMonth, visibleMemories)
                 : monthlyPageHtml(newYear, newMonth, visibleMemories);
 
-            doCalendarTransition(page, container, dir, newHtml, () => {
+            const transition = state.calendarMode === 'tear-off' ? doElasticCalendarStripTransition : doCalendarTransition;
+            transition(page, container, dir, newHtml, () => {
                 state.calendarMonth = newMonth;
                 state.calendarYear = newYear;
                 // 手撕日曆：如果新月的天數比當前日期小，調整日期
@@ -3383,7 +3385,41 @@
                 };
             }
 
-            doCalendarTransition(page, container, dir, newHtml, onDone);
+            const transition = state.calendarMode === 'tear-off' ? doElasticCalendarStripTransition : doCalendarTransition;
+            transition(page, container, dir, newHtml, onDone);
+        }
+
+        function doElasticCalendarStripTransition(oldPage, container, dir, newHtml, onDone) {
+            const strip = document.createElement('div');
+            strip.className = 'calendar-page-strip';
+            const nextContent = document.createElement('div');
+            nextContent.className = 'calendar-page';
+            nextContent.innerHTML = newHtml;
+
+            if (dir > 0) {
+                // Forward: current at left (0), next at right (50%)
+                strip.appendChild(oldPage.cloneNode(true));
+                strip.appendChild(nextContent);
+                container.innerHTML = '';
+                container.appendChild(strip);
+                strip.offsetHeight; // force reflow
+                strip.classList.add('is-animating', 'slide-forward');
+            } else {
+                // Backward: next at left (0), current at right (50%)
+                // Use prep-backward to set initial -50% offset so next is visible
+                strip.classList.add('prep-backward');
+                strip.appendChild(nextContent);
+                strip.appendChild(oldPage.cloneNode(true));
+                container.innerHTML = '';
+                container.appendChild(strip);
+                strip.offsetHeight; // force reflow
+                strip.classList.add('is-animating', 'slide-to-current');
+            }
+
+            const duration = 580;
+            setTimeout(() => {
+                onDone();
+            }, duration);
         }
 
         // 共用的過渡動畫
@@ -3410,8 +3446,8 @@
             oldPage.style.transition = `transform ${duration}ms ${ease}, opacity ${duration}ms ease`;
             newPage.style.transition = `transform ${duration}ms ${ease}, opacity ${duration}ms ease`;
 
-            const oldOut = dir > 0 ? '-100%' : '100%';
-            oldPage.style.transform = `translateX(${oldOut}) rotate(${dir > 0 ? -3 : 3}deg)`;
+            const exitOffset = dir > 0 ? '-100%' : '100%';
+            oldPage.style.transform = `translateX(${exitOffset}) rotate(${dir > 0 ? -3 : 3}deg)`;
             oldPage.style.opacity = '0';
             newPage.style.transform = 'translateX(0) rotate(0deg)';
             newPage.style.opacity = '1';
@@ -3496,14 +3532,29 @@
                 dx = diffX;
                 hasMoved = true;
 
-                const page = document.getElementById('calendarPage');
-                if (page) {
-                    const progress = dx / container.offsetWidth;
-                    const rotate = progress * 3;
-                    const scale = 1 - Math.abs(progress) * 0.03;
-                    page.style.transition = 'none';
-                    page.style.transform = `translateX(${dx}px) rotate(${rotate}deg) scale(${scale})`;
-                    page.style.opacity = 1 - Math.abs(progress) * 0.15;
+                if (state.calendarMode === 'tear-off') {
+                    const strip = container.querySelector('.calendar-page-strip');
+                    if (strip) {
+                        strip.style.transition = 'none';
+                        strip.style.transform = `translate3d(${dx}px, 0, 0)`;
+                    } else {
+                        // 如果還沒建立 strip，拖動時建立一個臨時的
+                        const currentPage = document.getElementById('calendarPage');
+                        if (currentPage) {
+                            currentPage.style.transition = 'none';
+                            currentPage.style.transform = `translate3d(${dx}px, 0, 0)`;
+                        }
+                    }
+                } else {
+                    const page = document.getElementById('calendarPage');
+                    if (page) {
+                        const progress = dx / container.offsetWidth;
+                        const rotate = progress * 3;
+                        const scale = 1 - Math.abs(progress) * 0.03;
+                        page.style.transition = 'none';
+                        page.style.transform = `translateX(${dx}px) rotate(${rotate}deg) scale(${scale})`;
+                        page.style.opacity = 1 - Math.abs(progress) * 0.15;
+                    }
                 }
             }, { passive: false });
 
@@ -3513,7 +3564,6 @@
 
                 if (!hasMoved) return;
 
-                const page = document.getElementById('calendarPage');
                 const threshold = container.offsetWidth * 0.2;
                 const absDx = Math.abs(dx);
 
@@ -3521,20 +3571,27 @@
                     const dir = dx > 0 ? -1 : 1;
                     animating = true;
                     navigateCalendarSwipe(dir);
-                    setTimeout(() => { animating = false; }, 400);
-                } else if (absDx > 10) {
-                    const dir = dx > 0 ? -1 : 1;
-                    animating = true;
-                    navigateCalendarSwipe(dir);
-                    setTimeout(() => { animating = false; }, 400);
+                    setTimeout(() => { animating = false; }, 600);
                 } else {
-                    if (page) {
-                        page.style.transition = 'transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.3s ease';
-                        page.style.transform = '';
-                        page.style.opacity = '';
-                        setTimeout(() => {
-                            if (page) page.style.transition = '';
-                        }, 300);
+                    if (state.calendarMode === 'tear-off') {
+                        const strip = container.querySelector('.calendar-page-strip');
+                        if (strip) {
+                            strip.style.transition = 'transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
+                            strip.style.transform = '';
+                        } else {
+                            const currentPage = document.getElementById('calendarPage');
+                            if (currentPage) {
+                                currentPage.style.transition = 'transform 0.3s ease-out';
+                                currentPage.style.transform = '';
+                            }
+                        }
+                    } else {
+                        const page = document.getElementById('calendarPage');
+                        if (page) {
+                            page.style.transition = 'transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.3s ease';
+                            page.style.transform = '';
+                            page.style.opacity = '';
+                        }
                     }
                 }
                 dx = 0;
@@ -3542,12 +3599,11 @@
 
             container.addEventListener('touchcancel', () => {
                 isDragging = false;
-                const page = document.getElementById('calendarPage');
+                const page = document.getElementById('calendarPage') || container.querySelector('.calendar-page-strip');
                 if (page) {
                     page.style.transition = 'transform 0.3s ease, opacity 0.3s ease';
                     page.style.transform = '';
                     page.style.opacity = '';
-                    setTimeout(() => { if (page) page.style.transition = ''; }, 300);
                 }
             }, { passive: true });
         }
