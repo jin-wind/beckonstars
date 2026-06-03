@@ -67,6 +67,21 @@ function toTraditional(arr) {
   return arr.map(item => SIMP_TO_TRAD[item] || item);
 }
 
+const BIBLE_BOOK_NAMES = [
+  '', '創世記', '出埃及記', '利未記', '民數記', '申命記', '約書亞記', '士師記', '路得記', '撒母耳記上', '撒母耳記下',
+  '列王紀上', '列王紀下', '歷代志上', '歷代志下', '以斯拉記', '尼希米記', '以斯帖記', '約伯記', '詩篇', '箴言',
+  '傳道書', '雅歌', '以賽亞書', '耶利米書', '耶利米哀歌', '以西結書', '但以理書', '何西阿書', '約珥書', '阿摩司書',
+  '俄巴底亞書', '約拿書', '彌迦書', '那鴻書', '哈巴谷書', '西番雅書', '哈該書', '撒迦利亞書', '瑪拉基書', '馬太福音',
+  '馬可福音', '路加福音', '約翰福音', '使徒行傳', '羅馬書', '哥林多前書', '哥林多後書', '加拉太書', '以弗所書', '腓立比書',
+  '歌羅西書', '帖撒羅尼迦前書', '帖撒羅尼迦後書', '提摩太前書', '提摩太後書', '提多書', '腓利門書', '希伯來書', '雅各書',
+  '彼得前書', '彼得後書', '約翰一書', '約翰二書', '約翰三書', '猶大書', '啟示錄'
+];
+
+function formatBibleReference(book, chapter, verse, fallback = '') {
+  const bookName = BIBLE_BOOK_NAMES[Number(book)] || fallback || `CUV ${book}`;
+  return `${bookName} ${chapter}:${verse}`;
+}
+
 const host = process.env.API_HOST || '0.0.0.0';
 const port = Number(process.env.API_PORT || 8787);
 const dbPath = process.env.API_DB_PATH || path.join(process.cwd(), 'data', 'server-db.json');
@@ -192,6 +207,63 @@ function cleanLargeText(value, fallback = '') {
 function cleanTranscript(value, fallback = '') {
   if (typeof value !== 'string') return fallback;
   return value.trim().slice(0, 4000);
+}
+
+function normalizeBibleVerseText(value) {
+  return cleanText(value, '').replace(/\s+/g, ' ').trim();
+}
+
+function seededIndex(seed, length) {
+  if (!length) return 0;
+  const hash = crypto.createHash('sha256').update(String(seed)).digest();
+  return hash.readUInt32BE(0) % length;
+}
+
+const fallbackBibleVerses = [
+  { book: 43, chapter: 3, verse: 16, reference: '約翰福音 3:16' },
+  { book: 19, chapter: 23, verse: 1, reference: '詩篇 23:1' },
+  { book: 45, chapter: 12, verse: 12, reference: '羅馬書 12:12' },
+  { book: 50, chapter: 4, verse: 6, reference: '腓立比書 4:6' },
+  { book: 23, chapter: 41, verse: 10, reference: '以賽亞書 41:10' },
+  { book: 20, chapter: 3, verse: 5, reference: '箴言 3:5' },
+  { book: 40, chapter: 5, verse: 9, reference: '馬太福音 5:9' }
+];
+
+async function fetchBibleVerse(dateSeed = '') {
+  const source = 'Bolls Life Bible API';
+  const sourceUrl = 'https://bolls.life/get-random-verse/CUV/';
+  const primaryResponse = await fetch(sourceUrl);
+  if (primaryResponse.ok) {
+    const verse = await primaryResponse.json();
+    return {
+      ok: true,
+      translation: verse.translation || 'CUV',
+      book: verse.book,
+      chapter: verse.chapter,
+      verse: verse.verse,
+      reference: formatBibleReference(verse.book, verse.chapter, verse.verse),
+      text: normalizeBibleVerseText(verse.text),
+      source,
+      sourceUrl
+    };
+  }
+
+  const fallback = fallbackBibleVerses[seededIndex(dateSeed || new Date().toISOString().slice(0, 10), fallbackBibleVerses.length)];
+  const fallbackUrl = `https://bolls.life/get-verse/CUV/${fallback.book}/${fallback.chapter}/${fallback.verse}/`;
+  const fallbackResponse = await fetch(fallbackUrl);
+  if (!fallbackResponse.ok) throw new Error(`bible-api-${primaryResponse.status}-${fallbackResponse.status}`);
+  const verse = await fallbackResponse.json();
+  return {
+    ok: true,
+    translation: 'CUV',
+    book: fallback.book,
+    chapter: fallback.chapter,
+    verse: fallback.verse,
+    reference: fallback.reference,
+    text: normalizeBibleVerseText(verse.text),
+    source,
+    sourceUrl: fallbackUrl
+  };
 }
 
 function fallbackSummary(text, summaryType = 'voice') {
@@ -876,8 +948,18 @@ const server = http.createServer(async (req, res) => {
         yi: yiList,
         ji: jiList,
         yiDisplay: yiList.slice(0, 5).join('、'),
-        jiDisplay: jiList.slice(0, 5).join('、')
+        jiDisplay: jiList.slice(0, 5).join('、'),
+        source: 'lunar-javascript',
+        sourceUrl: 'https://www.npmjs.com/package/lunar-javascript'
       });
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/bible-verse') {
+      const urlObj = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+      const dateParam = urlObj.searchParams.get('date') || new Date().toISOString().slice(0, 10);
+      const verse = await fetchBibleVerse(dateParam);
+      sendJson(res, 200, verse);
       return;
     }
 

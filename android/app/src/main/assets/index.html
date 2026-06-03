@@ -174,6 +174,7 @@
             calendarYear: today.getFullYear(),
             calendarMonth: today.getMonth() + 1,
             calendarDay: today.getDate(),
+            dailyCardMode: 'almanac', // 'almanac' 或 'bible'
             points: 240,
             dailyMessages: 3,
             claimedDailyReward: false,
@@ -227,6 +228,7 @@
         };
 
         const STORAGE_KEY = 'beckon-stars-demo-state-v1';
+        const DAILY_CARD_MODE_KEY = 'beckon-stars-daily-card-mode';
         const initialState = JSON.parse(JSON.stringify(state));
         let unsubscribeMessages = null;
         let unsubscribeMemories = null;
@@ -389,6 +391,15 @@
                 .replace(/"/g, '&quot;')
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;');
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
         }
 
         function formatVoiceTime(totalSeconds) {
@@ -667,13 +678,17 @@
         function loadDemoData() {
             try {
                 const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-                if (!saved) return;
+                if (!saved) {
+                    state.dailyCardMode = localStorage.getItem(DAILY_CARD_MODE_KEY) || state.dailyCardMode;
+                    return;
+                }
                 Object.assign(state, saved, {
                     errorMsg: '',
                     showModal: null,
                     modalMessage: '',
                     selectedDate: null,
                     pendingMemoryType: saved.pendingMemoryType || 'text',
+                    dailyCardMode: localStorage.getItem(DAILY_CARD_MODE_KEY) || saved.dailyCardMode || 'almanac',
                     backendMode: 'server',
                     authUid: saved.authUid || null,
                     familyId: saved.familyId || saved.calendarCode || null,
@@ -746,6 +761,10 @@
                 throw error;
             }
             return response.status === 204 ? null : response.json();
+        }
+
+        function getDisplayedDateKey(year = state.calendarYear, month = state.calendarMonth, day = state.calendarDay || today.getDate()) {
+            return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
         }
 
         // --- 電郵/密碼認證 ---
@@ -895,6 +914,7 @@
         }
 
         const almanacCache = {};
+        const bibleVerseCache = {};
 
         async function fetchAlmanac(dateStr) {
             const key = dateStr || 'today';
@@ -911,8 +931,31 @@
             }
         }
 
+        async function fetchDailyBibleVerse(dateStr) {
+            const key = dateStr || 'today';
+            if (bibleVerseCache[key]) return bibleVerseCache[key];
+            try {
+                const dateParam = dateStr ? `?date=${dateStr}` : '';
+                const data = await serverApi(`/api/bible-verse${dateParam}`);
+                bibleVerseCache[key] = data;
+                return data;
+            } catch (e) {
+                console.warn('Bible verse fetch failed', e);
+                return null;
+            }
+        }
+
+        function prefetchDailyCard(dateStr) {
+            if (state.dailyCardMode === 'bible') {
+                fetchDailyBibleVerse(dateStr).then(() => updateCalendarContent());
+            } else {
+                fetchAlmanac(dateStr).then(() => updateCalendarContent());
+            }
+        }
+
         function resetDemoData() {
             localStorage.removeItem(STORAGE_KEY);
+            localStorage.removeItem(DAILY_CARD_MODE_KEY);
             Object.assign(state, JSON.parse(JSON.stringify(initialState)));
             state.notificationPermission = getRuntimeNotificationPermission();
             state.canInstallApp = !!deferredInstallPrompt;
@@ -1792,38 +1835,64 @@
             const isCurrentMonth = displayYear === today.getFullYear() && displayMonth === today.getMonth() + 1;
             const isToday = isCurrentMonth && displayDay === today.getDate();
             const dayMemories = memories.filter(m => m.date === displayDay && m.month === displayMonth);
-            const dateKey = `${displayYear}-${String(displayMonth).padStart(2, '0')}-${String(displayDay).padStart(2, '0')}`;
+            const dateKey = getDisplayedDateKey(displayYear, displayMonth, displayDay);
             const almanac = almanacCache[dateKey] || null;
+            const bibleVerse = bibleVerseCache[dateKey] || null;
             const hasAlmanac = almanac && almanac.ok;
+            const hasBibleVerse = bibleVerse && bibleVerse.ok;
 
             // 農曆日期顯示
-            let lunarDisplay = '';
-            if (hasAlmanac) {
+            let subDateDisplay = '';
+            if (state.dailyCardMode === 'almanac' && hasAlmanac) {
                 const lunar = almanac.lunar;
-                lunarDisplay = `<p class="bs-text-xs text-gray-400 mt-1">${lunar.dayGanZhi}日 · 農曆${lunar.month}月${lunar.day}${lunar.jieQi ? ' · ' + lunar.jieQi : ''}</p>`;
+                subDateDisplay = `<p class="bs-text-xs text-gray-400 mt-1">${lunar.dayGanZhi}日 · 農曆${lunar.month}月${lunar.day}${lunar.jieQi ? ' · ' + lunar.jieQi : ''}</p>`;
+            } else if (state.dailyCardMode === 'bible') {
+                subDateDisplay = `<p class="bs-text-xs text-gray-400 mt-1">${isToday ? '今日' : `${displayMonth}月${displayDay}日`} · 聖經金句</p>`;
             }
 
-            // 宜忌顯示
-            let yiJiHtml = '';
-            if (hasAlmanac) {
-                yiJiHtml = `
-                    <div class="bg-[#FFF8F0] border border-orange-200 rounded-xl p-4 shadow-sm inline-block text-left">
+            let dailyCardHtml = '';
+            if (state.dailyCardMode === 'bible') {
+                if (hasBibleVerse) {
+                    dailyCardHtml = `
+                        <div class="bg-[#FFF8F0] border border-amber-200 rounded-xl p-4 pb-7 shadow-sm inline-block text-left relative max-w-full">
+                            <div class="flex items-center gap-2 mb-2">
+                                <span class="bg-amber-100 text-amber-700 px-2 py-1 rounded bs-text-sm font-bold">${isToday ? '今日金句' : '金句'}</span>
+                                <span class="text-gray-500 bs-text-xs font-medium">${escapeHtml(bibleVerse.reference || '')}</span>
+                            </div>
+                            <p class="text-gray-700 font-medium leading-relaxed">${escapeHtml(bibleVerse.text || '')}</p>
+                            <p class="absolute right-3 bottom-2 bs-text-[10px] text-gray-400 tracking-wide uppercase">FROM Bolls Life Bible API</p>
+                        </div>
+                    `;
+                } else {
+                    dailyCardHtml = `
+                        <div class="bg-[#FFF8F0] border border-amber-200 rounded-xl p-4 pb-7 shadow-sm inline-block text-left relative">
+                            <span class="bg-amber-100 text-amber-700 px-2 py-1 rounded bs-text-sm font-bold mr-2">${isToday ? '今日金句' : '金句'}</span>
+                            <span class="text-gray-700 font-medium">正在載入聖經金句...</span>
+                            <p class="absolute right-3 bottom-2 bs-text-[10px] text-gray-400 tracking-wide uppercase">FROM Bolls Life Bible API</p>
+                        </div>
+                    `;
+                }
+            } else if (hasAlmanac) {
+                dailyCardHtml = `
+                    <div class="bg-[#FFF8F0] border border-orange-200 rounded-xl p-4 pb-7 shadow-sm inline-block text-left relative max-w-full">
                         <div class="mb-2">
                             <span class="bg-orange-100 text-brand-dark px-2 py-1 rounded bs-text-sm font-bold mr-2">${isToday ? '今日宜' : '宜'}</span>
-                            <span class="text-gray-700 font-medium">${almanac.yiDisplay}</span>
+                            <span class="text-gray-700 font-medium">${escapeHtml(almanac.yiDisplay)}</span>
                         </div>
                         <div>
                             <span class="bg-red-50 text-red-600 px-2 py-1 rounded bs-text-sm font-bold mr-2">忌</span>
-                            <span class="text-gray-500 font-medium">${almanac.jiDisplay}</span>
+                            <span class="text-gray-500 font-medium">${escapeHtml(almanac.jiDisplay)}</span>
                         </div>
-                        <p class="bs-text-xs text-gray-400 mt-2">${almanac.lunar.pengZu} · ${almanac.lunar.xiu}宿${almanac.lunar.xiuLuck ? ' · ' + almanac.lunar.xiuLuck : ''}</p>
+                        <p class="bs-text-xs text-gray-400 mt-2">${escapeHtml(almanac.lunar.pengZu)} · ${escapeHtml(almanac.lunar.xiu)}宿${almanac.lunar.xiuLuck ? ' · ' + escapeHtml(almanac.lunar.xiuLuck) : ''}</p>
+                        <p class="absolute right-3 bottom-2 bs-text-[10px] text-gray-400 tracking-wide uppercase">FROM lunar-javascript</p>
                     </div>
                 `;
             } else {
-                yiJiHtml = `
-                    <div class="bg-[#FFF8F0] border border-orange-200 rounded-xl p-4 shadow-sm inline-block">
+                dailyCardHtml = `
+                    <div class="bg-[#FFF8F0] border border-orange-200 rounded-xl p-4 pb-7 shadow-sm inline-block relative text-left">
                         <span class="bg-orange-100 text-brand-dark px-2 py-1 rounded bs-text-sm font-bold mr-2">${isToday ? '今日宜' : '宜'}</span>
-                        <span class="text-gray-700 font-medium">${getDailySuggestion()}</span>
+                        <span class="text-gray-700 font-medium">${escapeHtml(getDailySuggestion())}</span>
+                        <p class="absolute right-3 bottom-2 bs-text-[10px] text-gray-400 tracking-wide uppercase">FROM local suggestions</p>
                     </div>
                 `;
             }
@@ -1832,8 +1901,8 @@
                 <div class="p-8 text-center relative tear-off-bg">
                     <h3 class="bs-text-2xl font-medium text-gray-500 mb-2">${dayNames[displayDate.getDay()]}</h3>
                     <h1 class="text-8xl font-bold text-gray-800 mb-2 font-serif">${displayDay}</h1>
-                    ${lunarDisplay}
-                    <div class="mt-4">${yiJiHtml}</div>
+                    ${subDateDisplay}
+                    <div class="mt-4">${dailyCardHtml}</div>
                 </div>
                 ${dayMemories.length > 0 ? `
                     <div class="bg-orange-50 p-4 border-t border-orange-100">
@@ -1855,9 +1924,13 @@
             const daysInMonth = new Date(state.calendarYear, state.calendarMonth, 0).getDate();
             const displayDay = Math.min(state.calendarDay || today.getDate(), daysInMonth);
             const isCurrentMonth = state.calendarYear === today.getFullYear() && state.calendarMonth === today.getMonth() + 1;
-            // 預取當前顯示日期的黃曆
-            const dateKey = `${state.calendarYear}-${String(state.calendarMonth).padStart(2, '0')}-${String(displayDay).padStart(2, '0')}`;
-            if (!almanacCache[dateKey]) fetchAlmanac(dateKey);
+            // 預取當前顯示日期的每日內容
+            const dateKey = getDisplayedDateKey(state.calendarYear, state.calendarMonth, displayDay);
+            if (state.dailyCardMode === 'bible') {
+                if (!bibleVerseCache[dateKey]) fetchDailyBibleVerse(dateKey).then(() => updateCalendarContent());
+            } else if (!almanacCache[dateKey]) {
+                fetchAlmanac(dateKey).then(() => updateCalendarContent());
+            }
 
             return `
                 <div class="bg-white rounded-3xl shadow-xl overflow-hidden border-2 border-gray-100 relative" id="tearOffCalendar">
@@ -2150,6 +2223,7 @@
             const avatar = state.userAvatar || '👤';
             const isImage = avatar.startsWith('data:') || avatar.startsWith('http');
             const roleLabel = state.role === 'senior' ? '長輩' : state.role === 'child' ? '子女' : '未設定';
+            const usesBibleVerse = state.dailyCardMode === 'bible';
 
             return `
                 <div class="p-6 space-y-4">
@@ -2173,6 +2247,19 @@
                             style="background: ${state.seniorMode ? '#FF944D' : '#d1d5db'}">
                             <span class="absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow transition-transform"
                                 style="transform: translateX(${state.seniorMode ? '24px' : '0'})"></span>
+                        </button>
+                    </div>
+
+                    <!-- 手撕日曆內容開關 -->
+                    <div class="bg-white rounded-3xl shadow-sm p-5 flex items-center justify-between">
+                        <div>
+                            <p class="font-bold text-gray-800 bs-text-lg">手撕日曆內容</p>
+                            <p class="bs-text-sm text-gray-500">${usesBibleVerse ? '顯示聖經金句' : '顯示黃曆宜忌'}</p>
+                        </div>
+                        <button class="action-btn relative w-14 h-8 rounded-full transition-colors" data-action="toggleDailyCardMode" aria-label="切換手撕日曆內容"
+                            style="background: ${usesBibleVerse ? '#F59E0B' : '#d1d5db'}">
+                            <span class="absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow transition-transform"
+                                style="transform: translateX(${usesBibleVerse ? '24px' : '0'})"></span>
                         </button>
                     </div>
 
@@ -2704,6 +2791,19 @@
                         applySeniorModeVars();
                         render();
                     }
+                    else if (action === 'toggleDailyCardMode') {
+                        state.dailyCardMode = state.dailyCardMode === 'bible' ? 'almanac' : 'bible';
+                        localStorage.setItem(DAILY_CARD_MODE_KEY, state.dailyCardMode);
+                        const dateKey = getDisplayedDateKey();
+                        if (state.dailyCardMode === 'bible') {
+                            fetchDailyBibleVerse(dateKey).then(() => updateCalendarContent());
+                            showMessage('手撕日曆已切換為聖經金句。');
+                        } else {
+                            fetchAlmanac(dateKey).then(() => updateCalendarContent());
+                            showMessage('手撕日曆已切換為黃曆宜忌。');
+                        }
+                        render();
+                    }
                     else if (action === 'logout') {
                         state.showModal = 'confirmLogout';
                         render();
@@ -3134,10 +3234,10 @@
 
             let visibleMemories = state.memories;
             if (state.role === 'child') visibleMemories = visibleMemories.filter(m => m.childId === 'child_1');
-            // 預取新月份的黃曆
+            // 預取新月份的每日內容
             const targetDay = Math.min(state.calendarDay || today.getDate(), new Date(newYear, newMonth, 0).getDate());
-            const newDateKey = `${newYear}-${String(newMonth).padStart(2, '0')}-${String(targetDay).padStart(2, '0')}`;
-            fetchAlmanac(newDateKey);
+            const newDateKey = getDisplayedDateKey(newYear, newMonth, targetDay);
+            prefetchDailyCard(newDateKey);
             const newHtml = state.calendarMode === 'tear-off'
                 ? tearOffPageHtml(targetDay, newYear, newMonth, visibleMemories)
                 : monthlyPageHtml(newYear, newMonth, visibleMemories);
@@ -3184,9 +3284,9 @@
                     if (newMonth > 12) { newMonth = 1; newYear++; }
                     newDay = 1;
                 }
-                // 預取新日期的黃曆
-                const newDateKey = `${newYear}-${String(newMonth).padStart(2, '0')}-${String(newDay).padStart(2, '0')}`;
-                fetchAlmanac(newDateKey);
+                // 預取新日期的每日內容
+                const newDateKey = getDisplayedDateKey(newYear, newMonth, newDay);
+                prefetchDailyCard(newDateKey);
                 let visibleMemories = state.memories;
                 if (state.role === 'child') visibleMemories = visibleMemories.filter(m => m.childId === 'child_1');
                 newHtml = tearOffPageHtml(newDay, newYear, newMonth, visibleMemories);
@@ -3263,6 +3363,7 @@
                 if (state.calendarMonth > 12) { state.calendarMonth = 1; state.calendarYear++; }
                 state.calendarDay = 1;
             }
+            prefetchDailyCard(getDisplayedDateKey());
             updateCalendarContent();
         }
 
