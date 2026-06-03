@@ -1074,8 +1074,12 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       const now = new Date();
+      const requestedId = cleanText(body.id);
+      const messageId = requestedId && !latestFamily.messages.some(item => String(item.id) === requestedId)
+        ? requestedId
+        : `${now.getTime()}_${Math.random().toString(36).slice(2, 8)}`;
       const message = {
-        id: `${now.getTime()}_${Math.random().toString(36).slice(2, 8)}`,
+        id: messageId,
         uid: cleanText(body.uid),
         senderId: cleanText(body.senderId || body.uid, 'member'),
         senderName: cleanText(body.senderName, '家庭成員'),

@@ -1290,7 +1290,7 @@
                             }
                             continue;
                         }
-                        const newEl = createChatMessageElement(msg, false);
+                        const newEl = createChatMessageElement(msg, true);
                         if (newEl && anchor) {
                             chatMessages.insertBefore(newEl, anchor);
                             touched++;
@@ -3686,7 +3686,16 @@
                         const serverMessage = normalizeCloudMessage(result.message.id, result.message);
                         const index = state.messages.findIndex(item => String(item.id) === String(message.id));
                         if (index >= 0) state.messages[index] = serverMessage;
-                        refreshVisibleContent();
+
+                        const localEl = document.querySelector(`[data-msg-id="${CSS.escape(String(message.id))}"]`);
+                        if (localEl) {
+                            localEl.setAttribute('data-msg-id', String(serverMessage.id));
+                            localEl.setAttribute('data-msg-key', getMessageRenderKey(serverMessage));
+                            const replacement = createChatMessageElement(serverMessage, true);
+                            if (replacement) localEl.replaceWith(replacement);
+                        } else {
+                            refreshVisibleContent();
+                        }
                         return serverMessage;
                     }
                 } catch (error) {
