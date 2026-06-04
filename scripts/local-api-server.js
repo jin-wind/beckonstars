@@ -8,6 +8,30 @@ const { Lunar, Solar } = require('lunar-javascript');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 
+function loadEnvFile(filePath = path.join(process.cwd(), '.env')) {
+  if (!fs.existsSync(filePath)) return;
+
+  const lines = fs.readFileSync(filePath, 'utf8').split(/\r?\n/);
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+
+    const match = line.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+    if (!match) continue;
+
+    const [, key, rawValue] = match;
+    if (Object.prototype.hasOwnProperty.call(process.env, key)) continue;
+
+    let value = rawValue.trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    process.env[key] = value;
+  }
+}
+
+loadEnvFile();
+
 const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
 const JWT_EXPIRES_IN = '30d';
 const BCRYPT_ROUNDS = 10;
@@ -87,7 +111,7 @@ const port = Number(process.env.API_PORT || 8787);
 const dbPath = process.env.API_DB_PATH || path.join(process.cwd(), 'data', 'server-db.json');
 const maxBodyBytes = Number(process.env.API_MAX_BODY_BYTES || 24_000_000);
 const llmBaseUrl = (process.env.LLM_OPENAI_BASE_URL || 'https://fufu.iqach.top/v1').replace(/\/+$/, '');
-const llmApiKey = process.env.LLM_SUMMARY_API_KEY || process.env.OPENAI_API_KEY || 'dummy-key';
+const llmApiKey = process.env.LLM_SUMMARY_API_KEY || process.env.OPENAI_API_KEY || '';
 const llmModel = process.env.LLM_SUMMARY_MODEL || process.env.OPENAI_SUMMARY_MODEL || 'mimo-v2.5';
 const llmTranscribeModel = process.env.LLM_TRANSCRIBE_MODEL || process.env.LLM_AUDIO_MODEL || 'mimo-v2-omni';
 
@@ -102,6 +126,10 @@ const azureSttRecognitionHost = (process.env.AZURE_STT_RECOGNITION_HOST || `${az
 // OpenRouter (AI 摘要)
 const openrouterApiKey = process.env.OPENROUTER_API_KEY || '';
 const openrouterModel = process.env.OPENROUTER_MODEL || 'moonshotai/kimi-k2.6:free';
+const openrouterModels = (process.env.OPENROUTER_FALLBACK_MODELS || openrouterModel)
+  .split(',')
+  .map(model => model.trim())
+  .filter(Boolean);
 const openrouterReferer = process.env.OPENROUTER_HTTP_REFERER || (process.env.OPENROUTER_SITE_URL || 'https://beckonstars.app');
 
 const serverLogEntries = [];
@@ -519,48 +547,66 @@ async function summarizeWithLlm(text, options = {}) {
   const messages = buildSummaryMessages(content, summaryType);
   const fallback = fallbackSummary(content, summaryType);
 
+  const readErrorBody = async response => {
+    const body = await response.text().catch(() => '');
+    return body ? `: ${body.replace(/\s+/g, ' ').slice(0, 300)}` : '';
+  };
+
   // 優先：OpenRouter（如果配置了 key）
   if (openrouterApiKey) {
-    try {
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${openrouterApiKey}`,
-          'HTTP-Referer': openrouterReferer,
-          'X-Title': process.env.OPENROUTER_APP_TITLE || 'Beckon Stars'
-        },
-        body: JSON.stringify({
-          model: openrouterModel,
-          messages,
-          temperature: 0.3
-        })
-      });
-      if (!response.ok) throw new Error(`openrouter-${response.status}`);
-      const payload = await response.json();
-      const summary = cleanText(payload.choices?.[0]?.message?.content, fallback);
-      if (summary) return summary;
-    } catch (error) {
-      console.warn('[openrouter] summary failed, trying fallback', error.message || error);
+    for (const model of openrouterModels) {
+      try {
+        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${openrouterApiKey}`,
+            'HTTP-Referer': openrouterReferer,
+            'X-Title': process.env.OPENROUTER_APP_TITLE || 'Beckon Stars'
+          },
+          body: JSON.stringify({
+            model,
+            messages,
+            temperature: 0.3
+          })
+        });
+        if (!response.ok) throw new Error(`openrouter-${response.status}${await readErrorBody(response)}`);
+        const payload = await response.json();
+        const summary = cleanText(payload.choices?.[0]?.message?.content, fallback);
+        if (summary) return summary;
+      } catch (error) {
+        console.warn(`[openrouter] summary failed for ${model}`, error.message || error);
+      }
     }
+    console.warn('[openrouter] all summary models failed, trying fallback LLM');
   }
 
   // Fallback 1：LLM_SUMMARY_ENDPOINT（非 OpenAI 兼容的自定義端點）
   if (process.env.LLM_SUMMARY_ENDPOINT && !process.env.LLM_SUMMARY_ENDPOINT.includes('/v1/')) {
-    const response = await fetch(process.env.LLM_SUMMARY_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(process.env.LLM_SUMMARY_API_KEY ? { Authorization: `Bearer ${process.env.LLM_SUMMARY_API_KEY}` } : {})
-      },
-      body: JSON.stringify({ text: content })
-    });
-    if (!response.ok) throw new Error(`llm-${response.status}`);
-    const payload = await response.json();
-    return cleanText(payload.summary || payload.text || payload.result, fallback);
+    try {
+      const response = await fetch(process.env.LLM_SUMMARY_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(process.env.LLM_SUMMARY_API_KEY ? { Authorization: `Bearer ${process.env.LLM_SUMMARY_API_KEY}` } : {})
+        },
+        body: JSON.stringify({ text: content })
+      });
+      if (!response.ok) throw new Error(`llm-endpoint-${response.status}${await readErrorBody(response)}`);
+      const payload = await response.json();
+      const summary = cleanText(payload.summary || payload.text || payload.result, fallback);
+      if (summary) return summary;
+    } catch (error) {
+      console.warn('[llm-endpoint] summary failed, trying OpenAI-compatible fallback', error.message || error);
+    }
   }
 
   // Fallback 2：原有 OpenAI 兼容 API
+  if (!llmApiKey) {
+    console.warn('[llm] summary fallback skipped: LLM_SUMMARY_API_KEY or OPENAI_API_KEY is not configured');
+    return fallback;
+  }
+
   try {
     const response = await fetch(`${llmBaseUrl}/chat/completions`, {
       method: 'POST',
@@ -574,7 +620,7 @@ async function summarizeWithLlm(text, options = {}) {
         temperature: 0.3
       })
     });
-    if (!response.ok) throw new Error(`llm-${response.status}`);
+    if (!response.ok) throw new Error(`llm-${response.status}${await readErrorBody(response)}`);
     const payload = await response.json();
     return cleanText(payload.choices?.[0]?.message?.content, fallback);
   } catch (error) {
@@ -1372,8 +1418,8 @@ server.listen(port, host, async () => {
     console.log(`📊 資料庫: (讀取統計失敗)`);
   }
 
-  console.log(`\n🤖 OpenRouter 摘要: ${openrouterApiKey ? openrouterModel : '未配置'}`);
-  console.log(`🤖 備用 LLM 摘要: ${llmBaseUrl} (${llmModel})`);
+  console.log(`\n🤖 OpenRouter 摘要: ${openrouterApiKey ? openrouterModels.join(', ') : '未配置'}`);
+  console.log(`🤖 備用 LLM 摘要: ${llmApiKey ? `${llmBaseUrl} (${llmModel})` : '未配置'}`);
   console.log(`🎤 Azure STT: ${azureSttKey ? `https://${azureSttRecognitionHost} (${azureSttLanguage})` : '未配置'}`);
   console.log(`🎤 LLM 轉譯: ${llmTranscribeModel}`);
   console.log(`💾 資料庫: ${dbPath}`);

@@ -184,17 +184,13 @@ pm2 save
 ### 方式三：.env 文件
 
 ```bash
-# 1. 安裝 dotenv（一次性）
-npm install dotenv
-
-# 2. 在服務器根目錄創建 .env 文件
+# 1. 在服務器根目錄創建 .env 文件
 cp .env.example .env
 # 編輯 .env 填入實際值
 vim .env
 
-# 3. 在 local-api-server.js 最頂部添加（但我們不這樣做）
-# 推薦在啟動命令中加載：
-node -r dotenv/config scripts/local-api-server.js
+# 2. 啟動服務器（會自動讀取 .env）
+node scripts/local-api-server.js
 ```
 
 ---
