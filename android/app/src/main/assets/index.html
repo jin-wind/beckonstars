@@ -191,11 +191,6 @@
             seniorMode: false,
             summarizingChat: false,
             chatSummaryContent: '',
-            suggestions: [
-                "今日適宜同屋企人去飲茶 🍵", "今日適宜同媽咪打個視像電話 📱", 
-                "今日適宜一齊去行公園散步 🌳", "今日適宜分享一張靚靚風景相 📸", "今日適宜同屋企人分享一件開心事 ✨"
-            ],
-            
             memories: [
                 { id: 1, date: today.getDate(), month: today.getMonth() + 1, childId: 'child_1', childName: '大仔 (阿強)', type: 'photo', content: '今日去咗飲茶，啲點心好靚！', img: 'https://images.unsplash.com/photo-1563245372-f21724e3856d?auto=format&fit=crop&w=300&q=80' },
                 { id: 2, date: today.getDate() - 2, month: today.getMonth() + 1, childId: 'child_2', childName: '細女 (阿妹)', type: 'text', content: '買咗件新衫俾媽咪，週末攞返去！', img: null },
@@ -756,6 +751,15 @@
             return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
         }
 
+        function getShiftedCalendarDate(year, month, day, offset) {
+            const date = new Date(year, month - 1, day + offset);
+            return {
+                year: date.getFullYear(),
+                month: date.getMonth() + 1,
+                day: date.getDate()
+            };
+        }
+
         // --- 電郵/密碼認證 ---
 
         function handleAuthSuccess(result) {
@@ -904,20 +908,28 @@
 
         const almanacCache = {};
         const bibleVerseCache = {};
+        const almanacRequests = {};
+        const bibleVerseRequests = {};
 
         async function fetchAlmanac(dateStr) {
             const key = dateStr || 'today';
             if (almanacCache[key]) return almanacCache[key];
-            try {
-                const dateParam = dateStr ? `?date=${dateStr}` : '';
-                const data = await serverApi(`/api/almanac${dateParam}`);
-                almanacCache[key] = data;
-                if (!dateStr) state.almanac = data;
-                return data;
-            } catch (e) {
-                console.warn('Almanac fetch failed', e);
-                return null;
-            }
+            if (almanacRequests[key]) return almanacRequests[key];
+            almanacRequests[key] = (async () => {
+                try {
+                    const dateParam = dateStr ? `?date=${dateStr}` : '';
+                    const data = await serverApi(`/api/almanac${dateParam}`);
+                    almanacCache[key] = data;
+                    if (!dateStr) state.almanac = data;
+                    return data;
+                } catch (e) {
+                    console.warn('Almanac fetch failed', e);
+                    return null;
+                } finally {
+                    delete almanacRequests[key];
+                }
+            })();
+            return almanacRequests[key];
         }
 
         function getDailyBibleVerseTarget(dateStr) {
@@ -985,30 +997,49 @@
         async function fetchDailyBibleVerse(dateStr) {
             const key = dateStr || 'today';
             if (bibleVerseCache[key]) return bibleVerseCache[key];
-            try {
-                const data = await fetchFhlBibleVerse(dateStr);
-                bibleVerseCache[key] = data;
-                return data;
-            } catch (e) {
-                console.warn('FHL Bible verse fetch failed, falling back to Bolls Life', e);
+            if (bibleVerseRequests[key]) return bibleVerseRequests[key];
+            bibleVerseRequests[key] = (async () => {
                 try {
-                    const data = await fetchBollsLifeBibleVerse();
+                    const data = await fetchFhlBibleVerse(dateStr);
                     bibleVerseCache[key] = data;
                     return data;
-                } catch (fallbackError) {
-                    console.warn('Bible verse fallback fetch failed', fallbackError);
-                    bibleVerseCache[key] = { ok: false, error: 'bible-verse-unavailable', source: '信望愛站聖經 JSON API' };
-                    return bibleVerseCache[key];
+                } catch (e) {
+                    console.warn('FHL Bible verse fetch failed, falling back to Bolls Life', e);
+                    try {
+                        const data = await fetchBollsLifeBibleVerse();
+                        bibleVerseCache[key] = data;
+                        return data;
+                    } catch (fallbackError) {
+                        console.warn('Bible verse fallback fetch failed', fallbackError);
+                        bibleVerseCache[key] = { ok: false, error: 'bible-verse-unavailable', source: '信望愛站聖經 JSON API' };
+                        return bibleVerseCache[key];
+                    }
+                } finally {
+                    delete bibleVerseRequests[key];
                 }
-            }
+            })();
+            return bibleVerseRequests[key];
         }
 
         function prefetchDailyCard(dateStr) {
+            const key = dateStr || 'today';
             if (state.dailyCardMode === 'bible') {
-                fetchDailyBibleVerse(dateStr).then(() => updateCalendarContent());
-            } else {
-                fetchAlmanac(dateStr).then(() => updateCalendarContent());
+                if (bibleVerseCache[key] || bibleVerseRequests[key]) return bibleVerseCache[key] || bibleVerseRequests[key];
+                const request = fetchDailyBibleVerse(dateStr);
+                request.then(result => { if (result) updateCalendarContent(); });
+                return request;
             }
+            if (almanacCache[key] || almanacRequests[key]) return almanacCache[key] || almanacRequests[key];
+            const request = fetchAlmanac(dateStr);
+            request.then(result => { if (result) updateCalendarContent(); });
+            return request;
+        }
+
+        function prefetchDailyCardWindow(year = state.calendarYear, month = state.calendarMonth, day = state.calendarDay || today.getDate()) {
+            return [-1, 0, 1].map(offset => {
+                const shifted = getShiftedCalendarDate(year, month, day, offset);
+                return prefetchDailyCard(getDisplayedDateKey(shifted.year, shifted.month, shifted.day));
+            });
         }
 
         function resetDemoData() {
@@ -1193,9 +1224,6 @@
             senior: ['👵', '👴', '🧓', '👨‍🦳', '🐶', '🐱'],
             child: ['👩', '👨', '👧', '👦', '🐼', '🐰']
         };
-
-        // --- 獲取今日隨機提示 ---
-        const getDailySuggestion = () => state.suggestions[today.getDate() % state.suggestions.length];
 
         async function initCloudBackend() {
             return initServerBackend();
@@ -1906,7 +1934,6 @@
             const bibleVerse = bibleVerseCache[dateKey] || null;
             const hasAlmanac = almanac && almanac.ok;
             const hasBibleVerse = bibleVerse && bibleVerse.ok;
-            const bibleVerseFailed = bibleVerse && bibleVerse.ok === false;
 
             // 農曆日期顯示
             let subDateDisplay = '';
@@ -1930,14 +1957,6 @@
                             <p class="absolute right-3 bottom-2 bs-text-[10px] text-gray-400 tracking-wide uppercase">FROM ${escapeHtml(bibleVerse.source || '信望愛站聖經 JSON API')}</p>
                         </div>
                     `;
-                } else {
-                    dailyCardHtml = `
-                        <div class="bg-[#FFF8F0] border border-amber-200 rounded-xl p-4 pb-7 shadow-sm inline-block text-left relative">
-                            <span class="bg-amber-100 text-amber-700 px-2 py-1 rounded bs-text-sm font-bold mr-2">${isToday ? '今日金句' : '金句'}</span>
-                            <span class="text-gray-700 font-medium">${bibleVerseFailed ? '暫時未能載入聖經金句' : '正在載入聖經金句...'}</span>
-                            <p class="absolute right-3 bottom-2 bs-text-[10px] text-gray-400 tracking-wide uppercase">FROM ${escapeHtml(bibleVerse?.source || '信望愛站聖經 JSON API')}</p>
-                        </div>
-                    `;
                 }
             } else if (hasAlmanac) {
                 dailyCardHtml = `
@@ -1952,14 +1971,6 @@
                         </div>
                         <p class="bs-text-xs text-gray-400 mt-2">${escapeHtml(almanac.lunar.pengZu)} · ${escapeHtml(almanac.lunar.xiu)}宿${almanac.lunar.xiuLuck ? ' · ' + escapeHtml(almanac.lunar.xiuLuck) : ''}</p>
                         <p class="absolute right-3 bottom-2 bs-text-[10px] text-gray-400 tracking-wide uppercase">FROM lunar-javascript</p>
-                    </div>
-                `;
-            } else {
-                dailyCardHtml = `
-                    <div class="bg-[#FFF8F0] border border-orange-200 rounded-xl p-4 pb-7 shadow-sm inline-block relative text-left">
-                        <span class="bg-orange-100 text-brand-dark px-2 py-1 rounded bs-text-sm font-bold mr-2">${isToday ? '今日宜' : '宜'}</span>
-                        <span class="text-gray-700 font-medium">${escapeHtml(getDailySuggestion())}</span>
-                        <p class="absolute right-3 bottom-2 bs-text-[10px] text-gray-400 tracking-wide uppercase">FROM local suggestions</p>
                     </div>
                 `;
             }
@@ -1991,13 +2002,9 @@
             const daysInMonth = new Date(state.calendarYear, state.calendarMonth, 0).getDate();
             const displayDay = Math.min(state.calendarDay || today.getDate(), daysInMonth);
             const isCurrentMonth = state.calendarYear === today.getFullYear() && state.calendarMonth === today.getMonth() + 1;
-            // 預取當前顯示日期的每日內容
-            const dateKey = getDisplayedDateKey(state.calendarYear, state.calendarMonth, displayDay);
-            if (state.dailyCardMode === 'bible') {
-                if (!bibleVerseCache[dateKey]) fetchDailyBibleVerse(dateKey).then(() => updateCalendarContent());
-            } else if (!almanacCache[dateKey]) {
-                fetchAlmanac(dateKey).then(() => updateCalendarContent());
-            }
+            const prevDate = getShiftedCalendarDate(state.calendarYear, state.calendarMonth, displayDay, -1);
+            const nextDate = getShiftedCalendarDate(state.calendarYear, state.calendarMonth, displayDay, 1);
+            prefetchDailyCardWindow(state.calendarYear, state.calendarMonth, displayDay);
 
             return `
                 <div class="bg-white rounded-3xl shadow-xl overflow-hidden border-2 border-gray-100 relative" id="tearOffCalendar">
@@ -2008,8 +2015,14 @@
                     </div>
 
                     <div class="calendar-page-container overflow-hidden relative" id="calendarPageContainer">
+                        <div class="calendar-page calendar-page-adjacent" data-calendar-preview="-1" aria-hidden="true" style="transform: translate3d(-100%, 0, 0);">
+                            ${tearOffPageHtml(prevDate.day, prevDate.year, prevDate.month, memories)}
+                        </div>
                         <div class="calendar-page" id="calendarPage">
                             ${tearOffPageHtml(displayDay, state.calendarYear, state.calendarMonth, memories)}
+                        </div>
+                        <div class="calendar-page calendar-page-adjacent" data-calendar-preview="1" aria-hidden="true" style="transform: translate3d(100%, 0, 0);">
+                            ${tearOffPageHtml(nextDate.day, nextDate.year, nextDate.month, memories)}
                         </div>
                     </div>
                 </div>
@@ -2056,12 +2069,20 @@
         function renderMonthlyCalendar(memories) {
             const calYear = state.calendarYear;
             const calMonth = state.calendarMonth;
+            const prevMonth = getShiftedCalendarMonth(calYear, calMonth, -1);
+            const nextMonth = getShiftedCalendarMonth(calYear, calMonth, 1);
 
             return `
                 <div class="bg-white rounded-3xl shadow-lg p-5 border border-gray-100 relative" id="monthlyCalendar">
                     <div class="calendar-page-container overflow-hidden relative" id="calendarPageContainer">
+                        <div class="calendar-page calendar-page-adjacent" data-calendar-preview="-1" aria-hidden="true" style="transform: translate3d(-100%, 0, 0);">
+                            ${monthlyPageHtml(prevMonth.year, prevMonth.month, memories)}
+                        </div>
                         <div class="calendar-page" id="calendarPage">
                             ${monthlyPageHtml(calYear, calMonth, memories)}
+                        </div>
+                        <div class="calendar-page calendar-page-adjacent" data-calendar-preview="1" aria-hidden="true" style="transform: translate3d(100%, 0, 0);">
+                            ${monthlyPageHtml(nextMonth.year, nextMonth.month, memories)}
                         </div>
                     </div>
 
@@ -2861,12 +2882,10 @@
                     else if (action === 'toggleDailyCardMode') {
                         state.dailyCardMode = state.dailyCardMode === 'bible' ? 'almanac' : 'bible';
                         localStorage.setItem(DAILY_CARD_MODE_KEY, state.dailyCardMode);
-                        const dateKey = getDisplayedDateKey();
+                        prefetchDailyCardWindow();
                         if (state.dailyCardMode === 'bible') {
-                            fetchDailyBibleVerse(dateKey).then(() => updateCalendarContent());
                             showMessage('手撕日曆已切換為聖經金句。');
                         } else {
-                            fetchAlmanac(dateKey).then(() => updateCalendarContent());
                             showMessage('手撕日曆已切換為黃曆宜忌。');
                         }
                         render();
@@ -3312,6 +3331,9 @@
             return {
                 html,
                 dateKey: mode === 'tear-off' ? getDisplayedDateKey(shifted.year, shifted.month, targetDay) : null,
+                year: mode === 'tear-off' ? shifted.year : null,
+                month: mode === 'tear-off' ? shifted.month : null,
+                day: mode === 'tear-off' ? targetDay : null,
                 apply() {
                     state.calendarMonth = shifted.month;
                     state.calendarYear = shifted.year;
@@ -3329,27 +3351,18 @@
             const visibleMemories = getVisibleCalendarMemories();
 
             if (mode === 'tear-off') {
-                let newDay = (state.calendarDay || today.getDate()) + dir;
-                let newMonth = state.calendarMonth;
-                let newYear = state.calendarYear;
-                const dim = new Date(newYear, newMonth, 0).getDate();
-                if (newDay < 1) {
-                    newMonth--;
-                    if (newMonth < 1) { newMonth = 12; newYear--; }
-                    newDay = new Date(newYear, newMonth, 0).getDate();
-                } else if (newDay > dim) {
-                    newMonth++;
-                    if (newMonth > 12) { newMonth = 1; newYear++; }
-                    newDay = 1;
-                }
+                const shifted = getShiftedCalendarDate(state.calendarYear, state.calendarMonth, state.calendarDay || today.getDate(), dir);
 
                 return {
-                    html: tearOffPageHtml(newDay, newYear, newMonth, visibleMemories),
-                    dateKey: getDisplayedDateKey(newYear, newMonth, newDay),
+                    html: tearOffPageHtml(shifted.day, shifted.year, shifted.month, visibleMemories),
+                    dateKey: getDisplayedDateKey(shifted.year, shifted.month, shifted.day),
+                    year: shifted.year,
+                    month: shifted.month,
+                    day: shifted.day,
                     apply() {
-                        state.calendarDay = newDay;
-                        state.calendarMonth = newMonth;
-                        state.calendarYear = newYear;
+                        state.calendarDay = shifted.day;
+                        state.calendarMonth = shifted.month;
+                        state.calendarYear = shifted.year;
                     }
                 };
             }
@@ -3371,7 +3384,11 @@
         }
 
         function prefetchCalendarTarget(target) {
-            if (target?.dateKey) prefetchDailyCard(target.dateKey);
+            if (target?.dateKey && target.year && target.month && target.day) {
+                prefetchDailyCardWindow(target.year, target.month, target.day);
+            } else if (target?.dateKey) {
+                prefetchDailyCard(target.dateKey);
+            }
         }
 
         function createCalendarPageFromHtml(html) {
@@ -3409,8 +3426,10 @@
             const prevTarget = getCalendarMotionTarget(-1, intent);
             const nextTarget = getCalendarMotionTarget(1, intent);
             const height = container.getBoundingClientRect().height || currentPage.getBoundingClientRect().height;
-            const prevPage = createCalendarPageFromHtml(prevTarget.html);
-            const nextPage = createCalendarPageFromHtml(nextTarget.html);
+            let prevPage = container.querySelector('[data-calendar-preview="-1"]');
+            let nextPage = container.querySelector('[data-calendar-preview="1"]');
+            if (!prevPage) prevPage = createCalendarPageFromHtml(prevTarget.html);
+            if (!nextPage) nextPage = createCalendarPageFromHtml(nextTarget.html);
 
             calendarMotionLocked = true;
             pendingCalendarContentUpdate = false;
@@ -3423,11 +3442,13 @@
             currentPage.style.transform = 'translate3d(0, 0, 0)';
             prevPage.classList.add('calendar-page-adjacent');
             nextPage.classList.add('calendar-page-adjacent');
+            prevPage.setAttribute('aria-hidden', 'true');
+            nextPage.setAttribute('aria-hidden', 'true');
             prevPage.style.zIndex = '1';
             nextPage.style.zIndex = '1';
 
-            container.appendChild(prevPage);
-            container.appendChild(nextPage);
+            if (!prevPage.parentElement) container.appendChild(prevPage);
+            if (!nextPage.parentElement) container.appendChild(nextPage);
 
             const motion = { container, width, baseX: 0, currentX: 0, currentPage, prevPage, nextPage, prevTarget, nextTarget };
             setCalendarMotionX(motion, 0);
@@ -3540,7 +3561,7 @@
                 if (state.calendarMonth > 12) { state.calendarMonth = 1; state.calendarYear++; }
                 state.calendarDay = 1;
             }
-            prefetchDailyCard(getDisplayedDateKey());
+            prefetchDailyCardWindow(state.calendarYear, state.calendarMonth, state.calendarDay);
             updateCalendarContent();
         }
 
@@ -3554,6 +3575,10 @@
                 state.calendarYear--;
             }
             state.calendarDay = null;
+            if (state.calendarMode === 'tear-off') {
+                const displayDay = Math.min(today.getDate(), new Date(state.calendarYear, state.calendarMonth, 0).getDate());
+                prefetchDailyCardWindow(state.calendarYear, state.calendarMonth, displayDay);
+            }
             updateCalendarContent();
         }
 
