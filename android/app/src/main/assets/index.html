@@ -77,17 +77,20 @@
         @keyframes recordingPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
         .recording-pulse { animation: recordingPulse 1.1s ease-in-out infinite; }
 
-        /* 日曆彈性滑帶動畫 */
+        /* 日曆連續跟手滑帶動畫 */
         .calendar-page-container { position: relative; overflow: hidden; touch-action: pan-y; background: #fff; }
         .calendar-page-strip {
             display: flex;
-            width: 200%;
+            width: 300%;
             height: 100%;
             will-change: transform;
             pointer-events: none;
+            transform: translate3d(-33.3333%, 0, 0);
+            backface-visibility: hidden;
         }
         .calendar-page-strip > .calendar-page {
-            width: 50%;
+            width: 33.3333%;
+            flex-basis: 33.3333%;
             flex-shrink: 0;
             pointer-events: auto;
             transform: none !important;
@@ -95,17 +98,7 @@
             filter: none !important;
         }
         .calendar-page-strip.is-animating {
-            transition: transform 0.58s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-        }
-        .calendar-page-strip.slide-forward { transform: translate3d(-50%, 0, 0); }
-        .calendar-page-strip.slide-backward { transform: translate3d(50%, 0, 0); }
-        /* 修正 strip backward 初始位置：需要讓 next 在 left (-50%)，current 在 right (0) */
-        .calendar-page-strip.prep-backward { transform: translate3d(-50%, 0, 0); }
-        .calendar-page-strip.prep-backward.slide-to-current { transform: translate3d(0, 0, 0); }
-
-        @keyframes calendarElasticStripSlide {
-            from { transform: translate3d(0, 0, 0); }
-            to { transform: translate3d(-50%, 0, 0); }
+            transition: transform 0.42s cubic-bezier(0.22, 1, 0.36, 1);
         }
 
         /* 日曆底部指示點 */
@@ -1864,8 +1857,16 @@
             `;
         }
 
+        let calendarMotionLocked = false;
+        let pendingCalendarContentUpdate = false;
+
         // 只更新日曆容器（不重建整個 DOM，避免閃爍）
         function updateCalendarContent() {
+            if (calendarMotionLocked) {
+                pendingCalendarContentUpdate = true;
+                return;
+            }
+
             let visibleMemories = state.memories;
             if (state.role === 'child') {
                 visibleMemories = state.memories.filter(m => m.childId === 'child_1');
@@ -3289,60 +3290,50 @@
         }
 
         // --- 日曆導航 ---
-        // 箭頭按鈕：切換月份
-        function navigateCalendarMonth(dir) {
-            const container = document.getElementById('calendarPageContainer');
-            const page = document.getElementById('calendarPage');
-            if (!container || !page) {
-                changeCalendarMonth(dir);
-                return;
-            }
-
-            let newMonth = state.calendarMonth + dir;
-            let newYear = state.calendarYear;
-            if (newMonth > 12) { newMonth = 1; newYear++; }
-            else if (newMonth < 1) { newMonth = 12; newYear--; }
-
+        function getVisibleCalendarMemories() {
             let visibleMemories = state.memories;
             if (state.role === 'child') visibleMemories = visibleMemories.filter(m => m.childId === 'child_1');
-            // 預取新月份的每日內容
-            const targetDay = Math.min(state.calendarDay || today.getDate(), new Date(newYear, newMonth, 0).getDate());
-            const newDateKey = getDisplayedDateKey(newYear, newMonth, targetDay);
-            prefetchDailyCard(newDateKey);
-            const newHtml = state.calendarMode === 'tear-off'
-                ? tearOffPageHtml(targetDay, newYear, newMonth, visibleMemories)
-                : monthlyPageHtml(newYear, newMonth, visibleMemories);
-
-            const transition = state.calendarMode === 'tear-off' ? doElasticCalendarStripTransition : doCalendarTransition;
-            transition(page, container, dir, newHtml, () => {
-                state.calendarMonth = newMonth;
-                state.calendarYear = newYear;
-                // 手撕日曆：如果新月的天數比當前日期小，調整日期
-                if (state.calendarMode === 'tear-off') {
-                    const maxDay = new Date(newYear, newMonth, 0).getDate();
-                    if (state.calendarDay > maxDay) state.calendarDay = maxDay;
-                } else {
-                    state.calendarDay = null;
-                }
-                updateCalendarContent();
-            });
+            return visibleMemories;
         }
 
-        // 滑動：切換日期（手撕）或月份（月曆）
-        function navigateCalendarSwipe(dir) {
-            const container = document.getElementById('calendarPageContainer');
-            const page = document.getElementById('calendarPage');
-            if (!container || !page) {
-                if (state.calendarMode === 'tear-off') changeCalendarDay(dir);
-                else changeCalendarMonth(dir);
-                return;
-            }
+        function getShiftedCalendarMonth(year, month, dir) {
+            let nextMonth = month + dir;
+            let nextYear = year;
+            if (nextMonth > 12) { nextMonth = 1; nextYear++; }
+            else if (nextMonth < 1) { nextMonth = 12; nextYear--; }
+            return { year: nextYear, month: nextMonth };
+        }
 
-            let newHtml = '';
-            let onDone = () => {};
+        function getCalendarMonthTarget(dir) {
+            const mode = state.calendarMode;
+            const shifted = getShiftedCalendarMonth(state.calendarYear, state.calendarMonth, dir);
+            const maxDay = new Date(shifted.year, shifted.month, 0).getDate();
+            const targetDay = Math.min(state.calendarDay || today.getDate(), maxDay);
+            const visibleMemories = getVisibleCalendarMemories();
+            const html = mode === 'tear-off'
+                ? tearOffPageHtml(targetDay, shifted.year, shifted.month, visibleMemories)
+                : monthlyPageHtml(shifted.year, shifted.month, visibleMemories);
 
-            if (state.calendarMode === 'tear-off') {
-                // 滑動切換日期
+            return {
+                html,
+                dateKey: mode === 'tear-off' ? getDisplayedDateKey(shifted.year, shifted.month, targetDay) : null,
+                apply() {
+                    state.calendarMonth = shifted.month;
+                    state.calendarYear = shifted.year;
+                    if (mode === 'tear-off') {
+                        if (state.calendarDay) state.calendarDay = Math.min(state.calendarDay, maxDay);
+                    } else {
+                        state.calendarDay = null;
+                    }
+                }
+            };
+        }
+
+        function getCalendarSwipeTarget(dir) {
+            const mode = state.calendarMode;
+            const visibleMemories = getVisibleCalendarMemories();
+
+            if (mode === 'tear-off') {
                 let newDay = (state.calendarDay || today.getDate()) + dir;
                 let newMonth = state.calendarMonth;
                 let newYear = state.calendarYear;
@@ -3356,105 +3347,183 @@
                     if (newMonth > 12) { newMonth = 1; newYear++; }
                     newDay = 1;
                 }
-                // 預取新日期的每日內容
-                const newDateKey = getDisplayedDateKey(newYear, newMonth, newDay);
-                prefetchDailyCard(newDateKey);
-                let visibleMemories = state.memories;
-                if (state.role === 'child') visibleMemories = visibleMemories.filter(m => m.childId === 'child_1');
-                newHtml = tearOffPageHtml(newDay, newYear, newMonth, visibleMemories);
-                onDone = () => {
-                    state.calendarDay = newDay;
-                    state.calendarMonth = newMonth;
-                    state.calendarYear = newYear;
-                    updateCalendarContent();
+
+                return {
+                    html: tearOffPageHtml(newDay, newYear, newMonth, visibleMemories),
+                    dateKey: getDisplayedDateKey(newYear, newMonth, newDay),
+                    apply() {
+                        state.calendarDay = newDay;
+                        state.calendarMonth = newMonth;
+                        state.calendarYear = newYear;
+                    }
                 };
-            } else {
-                // 滑動切換月份
-                let newMonth = state.calendarMonth + dir;
-                let newYear = state.calendarYear;
-                if (newMonth > 12) { newMonth = 1; newYear++; }
-                else if (newMonth < 1) { newMonth = 12; newYear--; }
-                let visibleMemories = state.memories;
-                if (state.role === 'child') visibleMemories = visibleMemories.filter(m => m.childId === 'child_1');
-                newHtml = monthlyPageHtml(newYear, newMonth, visibleMemories);
-                onDone = () => {
-                    state.calendarMonth = newMonth;
-                    state.calendarYear = newYear;
+            }
+
+            const shifted = getShiftedCalendarMonth(state.calendarYear, state.calendarMonth, dir);
+            return {
+                html: monthlyPageHtml(shifted.year, shifted.month, visibleMemories),
+                dateKey: null,
+                apply() {
+                    state.calendarMonth = shifted.month;
+                    state.calendarYear = shifted.year;
                     state.calendarDay = null;
-                    updateCalendarContent();
-                };
-            }
-
-            const transition = state.calendarMode === 'tear-off' ? doElasticCalendarStripTransition : doCalendarTransition;
-            transition(page, container, dir, newHtml, onDone);
+                }
+            };
         }
 
-        function doElasticCalendarStripTransition(oldPage, container, dir, newHtml, onDone) {
+        function getCalendarMotionTarget(dir, intent) {
+            return intent === 'month' ? getCalendarMonthTarget(dir) : getCalendarSwipeTarget(dir);
+        }
+
+        function prefetchCalendarTarget(target) {
+            if (target?.dateKey) prefetchDailyCard(target.dateKey);
+        }
+
+        function createCalendarPageFromHtml(html) {
+            const page = document.createElement('div');
+            page.className = 'calendar-page';
+            page.innerHTML = html;
+            return page;
+        }
+
+        function setCalendarStripX(strip, x) {
+            strip.dataset.calendarX = String(x);
+            strip.style.transform = `translate3d(${x}px, 0, 0)`;
+        }
+
+        function getBoundedCalendarDragDelta(delta, width) {
+            const limit = width * 1.05;
+            const abs = Math.abs(delta);
+            if (abs <= limit) return delta;
+            return Math.sign(delta) * (limit + (abs - limit) * 0.18);
+        }
+
+        function beginCalendarMotion(container, currentPage, intent) {
+            if (calendarMotionLocked) return null;
+            const width = container.getBoundingClientRect().width || container.offsetWidth;
+            if (!width) return null;
+
+            const prevTarget = getCalendarMotionTarget(-1, intent);
+            const nextTarget = getCalendarMotionTarget(1, intent);
+            const height = container.getBoundingClientRect().height || currentPage.getBoundingClientRect().height;
             const strip = document.createElement('div');
+            const currentClone = currentPage.cloneNode(true);
+
+            calendarMotionLocked = true;
+            pendingCalendarContentUpdate = false;
+
             strip.className = 'calendar-page-strip';
-            const nextContent = document.createElement('div');
-            nextContent.className = 'calendar-page';
-            nextContent.innerHTML = newHtml;
+            currentClone.className = 'calendar-page';
+            currentClone.id = 'calendarPage';
+            currentClone.style.transition = '';
+            currentClone.style.transform = '';
+            currentClone.style.opacity = '';
 
-            if (dir > 0) {
-                // Forward: current at left (0), next at right (50%)
-                strip.appendChild(oldPage.cloneNode(true));
-                strip.appendChild(nextContent);
-                container.innerHTML = '';
-                container.appendChild(strip);
-                strip.offsetHeight; // force reflow
-                strip.classList.add('is-animating', 'slide-forward');
-            } else {
-                // Backward: next at left (0), current at right (50%)
-                // Use prep-backward to set initial -50% offset so next is visible
-                strip.classList.add('prep-backward');
-                strip.appendChild(nextContent);
-                strip.appendChild(oldPage.cloneNode(true));
-                container.innerHTML = '';
-                container.appendChild(strip);
-                strip.offsetHeight; // force reflow
-                strip.classList.add('is-animating', 'slide-to-current');
-            }
+            strip.appendChild(createCalendarPageFromHtml(prevTarget.html));
+            strip.appendChild(currentClone);
+            strip.appendChild(createCalendarPageFromHtml(nextTarget.html));
 
-            const duration = 580;
-            setTimeout(() => {
-                onDone();
-            }, duration);
+            container.innerHTML = '';
+            if (height) container.style.height = `${Math.ceil(height)}px`;
+            container.appendChild(strip);
+
+            const baseX = -width;
+            setCalendarStripX(strip, baseX);
+            return { strip, width, baseX, prevTarget, nextTarget };
         }
 
-        // 共用的過渡動畫
-        function doCalendarTransition(oldPage, container, dir, newHtml, onDone) {
-            const newPage = document.createElement('div');
-            newPage.className = 'calendar-page';
-            newPage.innerHTML = newHtml;
-            newPage.style.position = 'absolute';
-            newPage.style.top = '0';
-            newPage.style.left = '0';
-            newPage.style.right = '0';
-            newPage.style.zIndex = '1';
-            container.appendChild(newPage);
+        function releaseCalendarMotion(renderLatest = true) {
+            const shouldUpdate = renderLatest || pendingCalendarContentUpdate;
+            calendarMotionLocked = false;
+            pendingCalendarContentUpdate = false;
+            if (shouldUpdate) updateCalendarContent();
+        }
 
-            const offset = dir > 0 ? '100%' : '-100%';
-            newPage.style.transform = `translateX(${offset}) rotate(${dir > 0 ? 3 : -3}deg)`;
-            newPage.style.opacity = '0';
+        function animateCalendarStrip(motion, toX, duration, onDone) {
+            const strip = motion?.strip;
+            if (!strip) {
+                onDone?.();
+                return;
+            }
 
-            oldPage.offsetHeight;
-            newPage.offsetHeight;
+            let finished = false;
+            const finish = () => {
+                if (finished) return;
+                finished = true;
+                clearTimeout(timer);
+                strip.removeEventListener('transitionend', handleTransitionEnd);
+                onDone?.();
+            };
+            const handleTransitionEnd = event => {
+                if (event.target === strip && event.propertyName === 'transform') finish();
+            };
+            const timer = setTimeout(finish, duration + 90);
 
-            const duration = 350;
-            const ease = 'cubic-bezier(0.25, 0.46, 0.45, 0.94)';
-            oldPage.style.transition = `transform ${duration}ms ${ease}, opacity ${duration}ms ease`;
-            newPage.style.transition = `transform ${duration}ms ${ease}, opacity ${duration}ms ease`;
+            strip.addEventListener('transitionend', handleTransitionEnd);
+            strip.classList.add('is-animating');
+            strip.style.transition = `transform ${duration}ms cubic-bezier(0.22, 1, 0.36, 1)`;
+            requestAnimationFrame(() => setCalendarStripX(strip, toX));
+        }
 
-            const exitOffset = dir > 0 ? '-100%' : '100%';
-            oldPage.style.transform = `translateX(${exitOffset}) rotate(${dir > 0 ? -3 : 3}deg)`;
-            oldPage.style.opacity = '0';
-            newPage.style.transform = 'translateX(0) rotate(0deg)';
-            newPage.style.opacity = '1';
+        function completeCalendarMotion(motion, dir) {
+            const target = dir > 0 ? motion?.nextTarget : motion?.prevTarget;
+            if (!motion || !target) {
+                releaseCalendarMotion(true);
+                return;
+            }
 
-            setTimeout(() => {
-                onDone();
-            }, duration);
+            prefetchCalendarTarget(target);
+            const finalX = motion.baseX - dir * motion.width;
+            const currentX = Number(motion.strip.dataset.calendarX || motion.baseX);
+            const distance = Math.abs(finalX - currentX);
+            const duration = Math.max(180, Math.min(360, Math.round(150 + (distance / motion.width) * 210)));
+
+            animateCalendarStrip(motion, finalX, duration, () => {
+                target.apply();
+                releaseCalendarMotion(true);
+            });
+        }
+
+        function cancelCalendarMotion(motion) {
+            if (!motion) {
+                releaseCalendarMotion(true);
+                return;
+            }
+
+            const currentX = Number(motion.strip.dataset.calendarX || motion.baseX);
+            const distance = Math.abs(motion.baseX - currentX);
+            const duration = Math.max(160, Math.min(280, Math.round(120 + (distance / motion.width) * 180)));
+
+            animateCalendarStrip(motion, motion.baseX, duration, () => releaseCalendarMotion(true));
+        }
+
+        // 箭頭按鈕：切換月份
+        function navigateCalendarMonth(dir) {
+            const container = document.getElementById('calendarPageContainer');
+            const page = document.getElementById('calendarPage');
+            if (!container || !page) {
+                changeCalendarMonth(dir);
+                return;
+            }
+
+            const motion = beginCalendarMotion(container, page, 'month');
+            if (!motion) return;
+            completeCalendarMotion(motion, dir);
+        }
+
+        // 滑動：切換日期（手撕）或月份（月曆）
+        function navigateCalendarSwipe(dir) {
+            const container = document.getElementById('calendarPageContainer');
+            const page = document.getElementById('calendarPage');
+            if (!container || !page) {
+                if (state.calendarMode === 'tear-off') changeCalendarDay(dir);
+                else changeCalendarMonth(dir);
+                return;
+            }
+
+            const motion = beginCalendarMotion(container, page, 'swipe');
+            if (!motion) return;
+            completeCalendarMotion(motion, dir);
         }
 
         function changeCalendarDay(dir) {
@@ -3493,19 +3562,54 @@
             let startX = 0;
             let startY = 0;
             let dx = 0;
+            let lastX = 0;
+            let lastMoveAt = 0;
+            let velocityX = 0;
             let isDragging = false;
             let isHorizontal = null;
-            let animating = false;
             let hasMoved = false;
+            let motion = null;
+            let pendingX = null;
+            let rafId = null;
+
+            const applyDragX = () => {
+                rafId = null;
+                if (!motion || pendingX === null) return;
+                motion.strip.style.transition = 'none';
+                motion.strip.classList.remove('is-animating');
+                setCalendarStripX(motion.strip, pendingX);
+                pendingX = null;
+            };
+
+            const scheduleDragX = x => {
+                pendingX = x;
+                if (!rafId) rafId = requestAnimationFrame(applyDragX);
+            };
+
+            const resetGesture = () => {
+                if (rafId) cancelAnimationFrame(rafId);
+                rafId = null;
+                pendingX = null;
+                dx = 0;
+                velocityX = 0;
+                motion = null;
+                isDragging = false;
+                isHorizontal = null;
+                hasMoved = false;
+            };
 
             container.addEventListener('touchstart', event => {
-                if (animating || event.touches.length !== 1) return;
+                if (calendarMotionLocked || event.touches.length !== 1) return;
                 startX = event.touches[0].clientX;
                 startY = event.touches[0].clientY;
+                lastX = startX;
+                lastMoveAt = performance.now();
                 dx = 0;
+                velocityX = 0;
                 isDragging = true;
                 isHorizontal = null;
                 hasMoved = false;
+                motion = null;
             }, { passive: true });
 
             container.addEventListener('touchmove', event => {
@@ -3513,6 +3617,7 @@
 
                 const touchX = event.touches[0].clientX;
                 const touchY = event.touches[0].clientY;
+                const now = performance.now();
                 const diffX = touchX - startX;
                 const diffY = touchY - startY;
 
@@ -3531,80 +3636,60 @@
                 event.preventDefault();
                 dx = diffX;
                 hasMoved = true;
+                const elapsed = Math.max(1, now - lastMoveAt);
+                velocityX = (touchX - lastX) / elapsed;
+                lastX = touchX;
+                lastMoveAt = now;
 
-                if (state.calendarMode === 'tear-off') {
-                    const strip = container.querySelector('.calendar-page-strip');
-                    if (strip) {
-                        strip.style.transition = 'none';
-                        strip.style.transform = `translate3d(${dx}px, 0, 0)`;
-                    } else {
-                        // 如果還沒建立 strip，拖動時建立一個臨時的
-                        const currentPage = document.getElementById('calendarPage');
-                        if (currentPage) {
-                            currentPage.style.transition = 'none';
-                            currentPage.style.transform = `translate3d(${dx}px, 0, 0)`;
-                        }
-                    }
-                } else {
-                    const page = document.getElementById('calendarPage');
-                    if (page) {
-                        const progress = dx / container.offsetWidth;
-                        const rotate = progress * 3;
-                        const scale = 1 - Math.abs(progress) * 0.03;
-                        page.style.transition = 'none';
-                        page.style.transform = `translateX(${dx}px) rotate(${rotate}deg) scale(${scale})`;
-                        page.style.opacity = 1 - Math.abs(progress) * 0.15;
+                if (!motion) {
+                    const currentPage = document.getElementById('calendarPage');
+                    motion = currentPage ? beginCalendarMotion(container, currentPage, 'swipe') : null;
+                    if (!motion) {
+                        resetGesture();
+                        return;
                     }
                 }
+
+                const boundedDx = getBoundedCalendarDragDelta(dx, motion.width);
+                scheduleDragX(motion.baseX + boundedDx);
             }, { passive: false });
 
             container.addEventListener('touchend', () => {
                 if (!isDragging) return;
                 isDragging = false;
 
-                if (!hasMoved) return;
-
-                const threshold = container.offsetWidth * 0.2;
-                const absDx = Math.abs(dx);
-
-                if (absDx > threshold) {
-                    const dir = dx > 0 ? -1 : 1;
-                    animating = true;
-                    navigateCalendarSwipe(dir);
-                    setTimeout(() => { animating = false; }, 600);
-                } else {
-                    if (state.calendarMode === 'tear-off') {
-                        const strip = container.querySelector('.calendar-page-strip');
-                        if (strip) {
-                            strip.style.transition = 'transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
-                            strip.style.transform = '';
-                        } else {
-                            const currentPage = document.getElementById('calendarPage');
-                            if (currentPage) {
-                                currentPage.style.transition = 'transform 0.3s ease-out';
-                                currentPage.style.transform = '';
-                            }
-                        }
-                    } else {
-                        const page = document.getElementById('calendarPage');
-                        if (page) {
-                            page.style.transition = 'transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.3s ease';
-                            page.style.transform = '';
-                            page.style.opacity = '';
-                        }
-                    }
+                if (rafId) {
+                    cancelAnimationFrame(rafId);
+                    applyDragX();
                 }
-                dx = 0;
+
+                if (!hasMoved || !motion) {
+                    resetGesture();
+                    return;
+                }
+
+                const threshold = motion.width * 0.22;
+                const velocityThreshold = 0.42;
+                const absDx = Math.abs(dx);
+                const projectedDx = dx + velocityX * 180;
+
+                if (absDx > threshold || Math.abs(velocityX) > velocityThreshold || Math.abs(projectedDx) > threshold) {
+                    const commitDx = absDx > threshold ? dx : projectedDx;
+                    const dir = commitDx > 0 ? -1 : 1;
+                    const finishingMotion = motion;
+                    resetGesture();
+                    completeCalendarMotion(finishingMotion, dir);
+                } else {
+                    const cancellingMotion = motion;
+                    resetGesture();
+                    cancelCalendarMotion(cancellingMotion);
+                }
             }, { passive: true });
 
             container.addEventListener('touchcancel', () => {
-                isDragging = false;
-                const page = document.getElementById('calendarPage') || container.querySelector('.calendar-page-strip');
-                if (page) {
-                    page.style.transition = 'transform 0.3s ease, opacity 0.3s ease';
-                    page.style.transform = '';
-                    page.style.opacity = '';
-                }
+                const cancellingMotion = motion;
+                resetGesture();
+                if (cancellingMotion) cancelCalendarMotion(cancellingMotion);
             }, { passive: true });
         }
 

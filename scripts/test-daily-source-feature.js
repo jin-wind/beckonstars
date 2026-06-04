@@ -32,9 +32,13 @@ includes(serverJs, 'https://bolls.life/get-random-verse/CUV/', 'server should fe
 includes(serverJs, 'Bolls Life Bible API', 'server response should identify the Bible verse source');
 includes(serverJs, 'lunar-javascript', 'almanac response should identify the lunar-javascript source');
 includes(appHtml, 'calendar-page-strip', 'tear-off calendar should animate an internal content strip inside a fixed card');
-includes(appHtml, 'calendarElasticStripSlide', 'tear-off calendar should use an elastic strip slide keyframe animation');
-includes(appHtml, 'cubic-bezier(0.68, -0.55, 0.265, 1.55)', 'tear-off strip slide should use the requested springy easing');
-includes(appHtml, 'doElasticCalendarStripTransition', 'tear-off navigation should use the dedicated elastic strip transition');
+includes(appHtml, 'beginCalendarMotion', 'calendar navigation should build a continuous three-page motion strip');
+includes(appHtml, 'requestAnimationFrame(applyDragX)', 'calendar drag updates should be frame-scheduled for smoother WebView motion');
+includes(appHtml, 'getBoundedCalendarDragDelta', 'calendar swipe should bound overdrag while staying finger-following');
+includes(appHtml, 'calendarMotionLocked', 'calendar async refreshes should not replace DOM during an in-flight motion');
+notIncludes(appHtml, 'calendarElasticStripSlide', 'calendar should not rely on the older keyframe-only strip animation');
+notIncludes(appHtml, 'cubic-bezier(0.68, -0.55, 0.265, 1.55)', 'calendar should not use the older bouncy easing that can feel discontinuous');
+notIncludes(appHtml, 'doElasticCalendarStripTransition', 'calendar navigation should not use the older post-release-only strip transition');
 notIncludes(appHtml, 'paperTearPeelAway', 'tear-off calendar should not use the rejected paper peel-away animation');
 notIncludes(appHtml, 'calendar-page-next-shadow', 'tear-off calendar should not render the rejected paper shadow layer');
 notIncludes(appHtml, 'doTearOffPageTransition', 'tear-off navigation should not use the rejected paper tear transition');
