@@ -77,27 +77,22 @@
         @keyframes recordingPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
         .recording-pulse { animation: recordingPulse 1.1s ease-in-out infinite; }
 
-        /* 日曆連續跟手滑帶動畫 */
+        /* 日曆連續跟手疊頁動畫 */
         .calendar-page-container { position: relative; overflow: hidden; touch-action: pan-y; background: #fff; }
-        .calendar-page-strip {
-            display: flex;
-            width: 300%;
-            height: 100%;
+        .calendar-page-container.is-calendar-motion { overflow: hidden; }
+        .calendar-page-container.is-calendar-motion .calendar-page {
+            backface-visibility: hidden;
             will-change: transform;
+        }
+        .calendar-page-adjacent {
+            position: absolute;
+            inset: 0;
+            width: 100%;
             pointer-events: none;
-            transform: translate3d(-33.3333%, 0, 0);
+            will-change: transform;
             backface-visibility: hidden;
         }
-        .calendar-page-strip > .calendar-page {
-            width: 33.3333%;
-            flex-basis: 33.3333%;
-            flex-shrink: 0;
-            pointer-events: auto;
-            transform: none !important;
-            opacity: 1 !important;
-            filter: none !important;
-        }
-        .calendar-page-strip.is-animating {
+        .calendar-page-container.is-calendar-motion .is-animating {
             transition: transform 0.42s cubic-bezier(0.22, 1, 0.36, 1);
         }
 
@@ -3386,9 +3381,17 @@
             return page;
         }
 
-        function setCalendarStripX(strip, x) {
-            strip.dataset.calendarX = String(x);
-            strip.style.transform = `translate3d(${x}px, 0, 0)`;
+        function setCalendarMotionTransition(motion, transition) {
+            [motion.prevPage, motion.currentPage, motion.nextPage].forEach(page => {
+                if (page) page.style.transition = transition;
+            });
+        }
+
+        function setCalendarMotionX(motion, x) {
+            motion.currentX = x;
+            motion.currentPage.style.transform = `translate3d(${x}px, 0, 0)`;
+            motion.prevPage.style.transform = `translate3d(${x - motion.width}px, 0, 0)`;
+            motion.nextPage.style.transform = `translate3d(${x + motion.width}px, 0, 0)`;
         }
 
         function getBoundedCalendarDragDelta(delta, width) {
@@ -3406,30 +3409,29 @@
             const prevTarget = getCalendarMotionTarget(-1, intent);
             const nextTarget = getCalendarMotionTarget(1, intent);
             const height = container.getBoundingClientRect().height || currentPage.getBoundingClientRect().height;
-            const strip = document.createElement('div');
-            const currentClone = currentPage.cloneNode(true);
+            const prevPage = createCalendarPageFromHtml(prevTarget.html);
+            const nextPage = createCalendarPageFromHtml(nextTarget.html);
 
             calendarMotionLocked = true;
             pendingCalendarContentUpdate = false;
 
-            strip.className = 'calendar-page-strip';
-            currentClone.className = 'calendar-page';
-            currentClone.id = 'calendarPage';
-            currentClone.style.transition = '';
-            currentClone.style.transform = '';
-            currentClone.style.opacity = '';
-
-            strip.appendChild(createCalendarPageFromHtml(prevTarget.html));
-            strip.appendChild(currentClone);
-            strip.appendChild(createCalendarPageFromHtml(nextTarget.html));
-
-            container.innerHTML = '';
+            container.classList.add('is-calendar-motion');
             if (height) container.style.height = `${Math.ceil(height)}px`;
-            container.appendChild(strip);
+            currentPage.style.position = 'relative';
+            currentPage.style.zIndex = '2';
+            currentPage.style.transition = 'none';
+            currentPage.style.transform = 'translate3d(0, 0, 0)';
+            prevPage.classList.add('calendar-page-adjacent');
+            nextPage.classList.add('calendar-page-adjacent');
+            prevPage.style.zIndex = '1';
+            nextPage.style.zIndex = '1';
 
-            const baseX = -width;
-            setCalendarStripX(strip, baseX);
-            return { strip, width, baseX, prevTarget, nextTarget };
+            container.appendChild(prevPage);
+            container.appendChild(nextPage);
+
+            const motion = { container, width, baseX: 0, currentX: 0, currentPage, prevPage, nextPage, prevTarget, nextTarget };
+            setCalendarMotionX(motion, 0);
+            return motion;
         }
 
         function releaseCalendarMotion(renderLatest = true) {
@@ -3439,9 +3441,9 @@
             if (shouldUpdate) updateCalendarContent();
         }
 
-        function animateCalendarStrip(motion, toX, duration, onDone) {
-            const strip = motion?.strip;
-            if (!strip) {
+        function animateCalendarMotion(motion, toX, duration, onDone) {
+            const currentPage = motion?.currentPage;
+            if (!currentPage) {
                 onDone?.();
                 return;
             }
@@ -3451,18 +3453,18 @@
                 if (finished) return;
                 finished = true;
                 clearTimeout(timer);
-                strip.removeEventListener('transitionend', handleTransitionEnd);
+                currentPage.removeEventListener('transitionend', handleTransitionEnd);
                 onDone?.();
             };
             const handleTransitionEnd = event => {
-                if (event.target === strip && event.propertyName === 'transform') finish();
+                if (event.target === currentPage && event.propertyName === 'transform') finish();
             };
             const timer = setTimeout(finish, duration + 90);
 
-            strip.addEventListener('transitionend', handleTransitionEnd);
-            strip.classList.add('is-animating');
-            strip.style.transition = `transform ${duration}ms cubic-bezier(0.22, 1, 0.36, 1)`;
-            requestAnimationFrame(() => setCalendarStripX(strip, toX));
+            currentPage.addEventListener('transitionend', handleTransitionEnd);
+            [motion.prevPage, motion.currentPage, motion.nextPage].forEach(page => page?.classList.add('is-animating'));
+            setCalendarMotionTransition(motion, `transform ${duration}ms cubic-bezier(0.22, 1, 0.36, 1)`);
+            requestAnimationFrame(() => setCalendarMotionX(motion, toX));
         }
 
         function completeCalendarMotion(motion, dir) {
@@ -3474,11 +3476,11 @@
 
             prefetchCalendarTarget(target);
             const finalX = motion.baseX - dir * motion.width;
-            const currentX = Number(motion.strip.dataset.calendarX || motion.baseX);
+            const currentX = Number.isFinite(motion.currentX) ? motion.currentX : motion.baseX;
             const distance = Math.abs(finalX - currentX);
             const duration = Math.max(180, Math.min(360, Math.round(150 + (distance / motion.width) * 210)));
 
-            animateCalendarStrip(motion, finalX, duration, () => {
+            animateCalendarMotion(motion, finalX, duration, () => {
                 target.apply();
                 releaseCalendarMotion(true);
             });
@@ -3490,11 +3492,11 @@
                 return;
             }
 
-            const currentX = Number(motion.strip.dataset.calendarX || motion.baseX);
+            const currentX = Number.isFinite(motion.currentX) ? motion.currentX : motion.baseX;
             const distance = Math.abs(motion.baseX - currentX);
             const duration = Math.max(160, Math.min(280, Math.round(120 + (distance / motion.width) * 180)));
 
-            animateCalendarStrip(motion, motion.baseX, duration, () => releaseCalendarMotion(true));
+            animateCalendarMotion(motion, motion.baseX, duration, () => releaseCalendarMotion(true));
         }
 
         // 箭頭按鈕：切換月份
@@ -3581,9 +3583,9 @@
             const applyDragX = () => {
                 rafId = null;
                 if (!motion || pendingX === null) return;
-                motion.strip.style.transition = 'none';
-                motion.strip.classList.remove('is-animating');
-                setCalendarStripX(motion.strip, pendingX);
+                setCalendarMotionTransition(motion, 'none');
+                [motion.prevPage, motion.currentPage, motion.nextPage].forEach(page => page?.classList.remove('is-animating'));
+                setCalendarMotionX(motion, pendingX);
                 pendingX = null;
             };
 
