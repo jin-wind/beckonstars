@@ -104,6 +104,35 @@ const openrouterApiKey = process.env.OPENROUTER_API_KEY || '';
 const openrouterModel = process.env.OPENROUTER_MODEL || 'moonshotai/kimi-k2.6:free';
 const openrouterReferer = process.env.OPENROUTER_HTTP_REFERER || (process.env.OPENROUTER_SITE_URL || 'https://beckonstars.app');
 
+const serverLogEntries = [];
+
+function formatServerLogValue(value) {
+  if (value instanceof Error) return value.stack || value.message;
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value);
+  } catch (error) {
+    return String(value);
+  }
+}
+
+function appendServerLog(level, args) {
+  serverLogEntries.push({
+    time: new Date().toISOString(),
+    level,
+    message: args.map(formatServerLogValue).join(' ')
+  });
+  if (serverLogEntries.length > 200) serverLogEntries.shift();
+}
+
+['log', 'warn', 'error'].forEach(level => {
+  const original = console[level].bind(console);
+  console[level] = (...args) => {
+    appendServerLog(level, args);
+    original(...args);
+  };
+});
+
 function ensureDb() {
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   if (!fs.existsSync(dbPath)) {
@@ -694,6 +723,16 @@ const server = http.createServer(async (req, res) => {
         name: 'beckon-stars-local-api',
         time: new Date().toISOString(),
         auth: true
+      });
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/logs') {
+      const limit = Math.max(1, Math.min(200, Number(url.searchParams.get('limit')) || 80));
+      sendJson(res, 200, {
+        ok: true,
+        time: new Date().toISOString(),
+        logs: serverLogEntries.slice(-limit)
       });
       return;
     }

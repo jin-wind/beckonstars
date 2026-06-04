@@ -386,6 +386,38 @@
                 .replace(/'/g, '&#39;');
         }
 
+        const appLogEntries = [];
+        let serverLogEntries = [];
+        let serverLogsLoading = false;
+        let serverLogsError = '';
+
+        function formatLogValue(value) {
+            if (value instanceof Error) return value.stack || value.message;
+            if (typeof value === 'string') return value;
+            try {
+                return JSON.stringify(value);
+            } catch (error) {
+                return String(value);
+            }
+        }
+
+        function pushAppLog(level, args) {
+            appLogEntries.push({
+                time: new Date().toISOString().slice(11, 19),
+                level,
+                message: args.map(formatLogValue).join(' ')
+            });
+            if (appLogEntries.length > 120) appLogEntries.shift();
+        }
+
+        ['log', 'warn', 'error'].forEach(level => {
+            const original = console[level]?.bind(console);
+            console[level] = (...args) => {
+                pushAppLog(level, args);
+                if (original) original(...args);
+            };
+        });
+
         function formatVoiceTime(totalSeconds) {
             const safeSeconds = Math.max(0, Math.floor(Number(totalSeconds) || 0));
             const minutes = Math.floor(safeSeconds / 60);
@@ -745,6 +777,47 @@
                 throw error;
             }
             return response.status === 204 ? null : response.json();
+        }
+
+        function refreshServerLogs() {
+            serverLogsLoading = true;
+            serverLogsError = '';
+            serverApi('/api/logs?limit=80')
+                .then(data => {
+                    serverLogEntries = Array.isArray(data?.logs) ? data.logs : [];
+                })
+                .catch(error => {
+                    serverLogsError = error?.message || 'server-log-fetch-failed';
+                })
+                .finally(() => {
+                    serverLogsLoading = false;
+                    if (state.showModal === 'architecture') render();
+                });
+        }
+
+        function formatDisplayLogLine(entry) {
+            const rawTime = entry?.time ? String(entry.time) : '';
+            const time = rawTime ? (rawTime.includes('T') ? rawTime.slice(11, 19) : rawTime) : '--:--:--';
+            const level = String(entry?.level || 'log').toUpperCase().padEnd(5, ' ');
+            return `[${time}] ${level} ${entry?.message || ''}`;
+        }
+
+        function renderLogPanel(title, icon, logs, emptyText, options = {}) {
+            const isLoading = !!options.loading;
+            const errorText = options.error || '';
+            const lines = logs.slice(-80).map(formatDisplayLogLine);
+            const body = errorText
+                ? `讀取失敗：${errorText}`
+                : (lines.length ? lines.join('\n') : (isLoading ? '讀取中...' : emptyText));
+            return `
+                <section class="border border-gray-200 rounded-2xl overflow-hidden bg-white">
+                    <div class="px-3 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                        <p class="font-bold text-gray-700 bs-text-sm"><i class="fa-solid ${icon} mr-2"></i>${title}</p>
+                        ${isLoading ? '<i class="fa-solid fa-spinner fa-spin text-gray-400 bs-text-xs"></i>' : ''}
+                    </div>
+                    <pre class="bg-gray-950 text-gray-100 font-mono bs-text-xs leading-relaxed p-3 h-44 overflow-y-auto whitespace-pre-wrap">${escapeHtml(body)}</pre>
+                </section>
+            `;
         }
 
         function getDisplayedDateKey(year = state.calendarYear, month = state.calendarMonth, day = state.calendarDay || today.getDate()) {
@@ -1788,8 +1861,6 @@
         function renderHeader() {
             const titles = { 'calendar': '共用日曆', 'chat': '溫馨對話', 'rewards': '家庭獎勵', 'leaderboard': '活躍度排行榜', 'profile': '我' };
             const currentTitle = titles[state.currentTab] || '星喚';
-            const backendLabel = '自架';
-            const backendIcon = 'fa-cloud';
             return `
                 <header class="bg-white px-6 pt-12 pb-4 shadow-sm z-10 sticky top-0 flex justify-between items-center rounded-b-2xl">
                     <div class="flex items-center">
@@ -1799,14 +1870,8 @@
                         <h2 class="bs-text-2xl font-bold text-gray-800">${currentTitle}</h2>
                     </div>
                     <div class="flex items-center gap-2">
-                        <button class="action-btn hidden sm:flex bg-green-50 text-green-700 px-3 py-1.5 rounded-full font-bold items-center bs-text-xs border border-green-100" data-action="openModal" data-modal="architecture" title="展示技術架構">
-                            <i class="fa-solid fa-bolt mr-1.5"></i> Demo
-                        </button>
                         <div class="bg-orange-100 text-brand-dark px-3 py-1.5 rounded-full font-bold flex items-center shadow-inner">
                             <i class="fa-solid fa-coins mr-1.5 text-yellow-500"></i> ${state.points}
-                        </div>
-                        <div class="hidden sm:flex bg-blue-50 text-blue-700 px-3 py-1.5 rounded-full font-bold items-center bs-text-xs border border-blue-100">
-                            <i class="fa-solid ${backendIcon} mr-1.5"></i> ${backendLabel}
                         </div>
                         <button class="action-btn w-9 h-9 rounded-full ${state.notificationPermission === 'granted' ? 'bg-green-50 text-green-600' : 'bg-yellow-50 text-yellow-600'} flex items-center justify-center hover:bg-yellow-100 transition-colors" data-action="requestNotifications" title="開啟通知提示">
                             <i class="fa-solid ${state.notificationPermission === 'granted' ? 'fa-bell' : 'fa-bell-slash'}"></i>
@@ -1816,8 +1881,8 @@
                                 <i class="fa-solid fa-mobile-screen-button"></i>
                             </button>
                         ` : ''}
-                        <button class="action-btn w-9 h-9 rounded-full bg-green-50 text-green-600 flex items-center justify-center hover:bg-green-100 transition-colors" data-action="openModal" data-modal="architecture" title="展示技術架構">
-                            <i class="fa-solid fa-diagram-project"></i>
+                        <button class="action-btn w-9 h-9 rounded-full bg-gray-900 text-green-300 flex items-center justify-center hover:bg-gray-800 transition-colors" data-action="openModal" data-modal="architecture" title="查看 Log">
+                            <i class="fa-solid fa-terminal"></i>
                         </button>
                         <button class="action-btn w-9 h-9 rounded-full bg-gray-50 text-gray-400 flex items-center justify-center hover:bg-red-50 hover:text-red-500 transition-colors" data-action="openModal" data-modal="confirmReset" title="清除數據並重新開始">
                             <i class="fa-solid fa-trash-can"></i>
@@ -2441,28 +2506,27 @@
 
             if (state.showModal === 'architecture') {
                 modalContent = `
-                    <div class="bg-white w-[90%] max-w-sm rounded-3xl p-6 shadow-2xl animate-fadeIn relative">
+                    <div class="bg-white w-[94%] max-w-lg rounded-3xl p-5 shadow-2xl animate-fadeIn relative max-h-[86vh] flex flex-col">
                         <button class="action-btn absolute top-4 right-4 w-8 h-8 bg-gray-100 rounded-full text-gray-500 flex items-center justify-center" data-action="closeModal">
                             <i class="fa-solid fa-times"></i>
                         </button>
-                        <div class="w-14 h-14 bg-green-100 text-green-600 rounded-2xl flex items-center justify-center bs-text-2xl mb-4">
-                            <i class="fa-solid fa-diagram-project"></i>
+                        <div class="flex items-center justify-between pr-10 mb-4">
+                            <div class="flex items-center gap-3">
+                                <div class="w-11 h-11 bg-gray-900 text-green-300 rounded-2xl flex items-center justify-center bs-text-xl">
+                                    <i class="fa-solid fa-terminal"></i>
+                                </div>
+                                <div>
+                                    <h3 class="bs-text-xl font-bold text-gray-800">系統 Log</h3>
+                                    <p class="bs-text-xs text-gray-400">${state.backendMode === 'server' ? 'SERVER CONNECTED' : 'SERVER OFFLINE'}</p>
+                                </div>
+                            </div>
+                            <button class="action-btn w-9 h-9 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center hover:bg-gray-200 transition-colors" data-action="refreshLogs" title="刷新 Log">
+                                <i class="fa-solid fa-rotate-right"></i>
+                            </button>
                         </div>
-                        <h3 class="bs-text-2xl font-bold text-gray-800 mb-2">技術架構</h3>
-                        <p class="bs-text-sm text-gray-500 mb-5">使用自託管 API 伺服器同步家庭資料。</p>
-                        <div class="space-y-3">
-                            <div class="bg-orange-50 border border-orange-100 rounded-2xl p-4">
-                                <p class="font-bold text-brand-dark mb-1"><i class="fa-solid fa-display mr-2"></i>目前狀態</p>
-                                <p class="bs-text-sm text-gray-600">已連接自架服務器。家庭碼：${state.familyId || state.calendarCode || '尚未建立'}。</p>
-                            </div>
-                            <div class="bg-blue-50 border border-blue-100 rounded-2xl p-4">
-                                <p class="font-bold text-blue-700 mb-1"><i class="fa-solid fa-server mr-2"></i>自託管伺服器</p>
-                                <p class="bs-text-sm text-gray-600">使用自架 API 伺服器同步家庭訊息和回憶資料。</p>
-                            </div>
-                            <div class="bg-gray-50 border border-gray-100 rounded-2xl p-4">
-                                <p class="font-bold text-gray-700 mb-1"><i class="fa-solid fa-shield-halved mr-2"></i>資料安全</p>
-                                <p class="bs-text-sm text-gray-600">資料通過自託管伺服器同步，可自行控制數據存放位置。</p>
-                            </div>
+                        <div class="space-y-3 overflow-y-auto pr-1">
+                            ${renderLogPanel('App Log', 'fa-mobile-screen-button', appLogEntries, '暫時未有 App log')}
+                            ${renderLogPanel('Server Log', 'fa-server', serverLogEntries, '暫時未有 server log', { loading: serverLogsLoading, error: serverLogsError })}
                         </div>
                     </div>
                 `;
@@ -3001,6 +3065,13 @@
                             state.videoError = null;
                             state.videoGenerating = false;
                         }
+                        if (state.showModal === 'architecture') {
+                            refreshServerLogs();
+                        }
+                        render();
+                    }
+                    else if (action === 'refreshLogs') {
+                        refreshServerLogs();
                         render();
                     }
                     else if (action === 'generateVideo') {
