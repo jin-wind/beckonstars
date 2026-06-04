@@ -35,6 +35,8 @@ includes(appHtml, 'calendar-page-strip', 'tear-off calendar should animate an in
 includes(appHtml, 'beginCalendarMotion', 'calendar navigation should build a continuous three-page motion strip');
 includes(appHtml, 'requestAnimationFrame(applyDragX)', 'calendar drag updates should be frame-scheduled for smoother WebView motion');
 includes(appHtml, 'getBoundedCalendarDragDelta', 'calendar swipe should bound overdrag while staying finger-following');
+includes(appHtml, "document.addEventListener('touchmove', move", 'calendar swipe should keep receiving touchmove after replacing the page DOM');
+includes(appHtml, 'cleanupDocumentSwipeListeners', 'calendar swipe should clean up temporary document-level gesture listeners');
 includes(appHtml, 'calendarMotionLocked', 'calendar async refreshes should not replace DOM during an in-flight motion');
 notIncludes(appHtml, 'calendarElasticStripSlide', 'calendar should not rely on the older keyframe-only strip animation');
 notIncludes(appHtml, 'cubic-bezier(0.68, -0.55, 0.265, 1.55)', 'calendar should not use the older bouncy easing that can feel discontinuous');

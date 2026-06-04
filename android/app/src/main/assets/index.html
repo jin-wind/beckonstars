@@ -3572,6 +3572,12 @@
             let pendingX = null;
             let rafId = null;
 
+            const cleanupDocumentSwipeListeners = () => {
+                document.removeEventListener('touchmove', move, true);
+                document.removeEventListener('touchend', finish, true);
+                document.removeEventListener('touchcancel', cancel, true);
+            };
+
             const applyDragX = () => {
                 rafId = null;
                 if (!motion || pendingX === null) return;
@@ -3598,8 +3604,8 @@
                 hasMoved = false;
             };
 
-            container.addEventListener('touchstart', event => {
-                if (calendarMotionLocked || event.touches.length !== 1) return;
+            const start = event => {
+                if (isDragging || calendarMotionLocked || event.touches.length !== 1) return;
                 startX = event.touches[0].clientX;
                 startY = event.touches[0].clientY;
                 lastX = startX;
@@ -3610,10 +3616,18 @@
                 isHorizontal = null;
                 hasMoved = false;
                 motion = null;
-            }, { passive: true });
 
-            container.addEventListener('touchmove', event => {
-                if (!isDragging || event.touches.length !== 1) return;
+                document.addEventListener('touchmove', move, { passive: false, capture: true });
+                document.addEventListener('touchend', finish, true);
+                document.addEventListener('touchcancel', cancel, true);
+            };
+
+            const move = event => {
+                if (!isDragging) return;
+                if (event.touches.length !== 1) {
+                    cancel();
+                    return;
+                }
 
                 const touchX = event.touches[0].clientX;
                 const touchY = event.touches[0].clientY;
@@ -3627,6 +3641,7 @@
                     }
                     if (!isHorizontal) {
                         isDragging = false;
+                        cleanupDocumentSwipeListeners();
                         return;
                     }
                 }
@@ -3652,11 +3667,15 @@
 
                 const boundedDx = getBoundedCalendarDragDelta(dx, motion.width);
                 scheduleDragX(motion.baseX + boundedDx);
-            }, { passive: false });
+            };
 
-            container.addEventListener('touchend', () => {
-                if (!isDragging) return;
+            const finish = () => {
+                if (!isDragging) {
+                    cleanupDocumentSwipeListeners();
+                    return;
+                }
                 isDragging = false;
+                cleanupDocumentSwipeListeners();
 
                 if (rafId) {
                     cancelAnimationFrame(rafId);
@@ -3684,13 +3703,16 @@
                     resetGesture();
                     cancelCalendarMotion(cancellingMotion);
                 }
-            }, { passive: true });
+            };
 
-            container.addEventListener('touchcancel', () => {
+            const cancel = () => {
                 const cancellingMotion = motion;
+                cleanupDocumentSwipeListeners();
                 resetGesture();
                 if (cancellingMotion) cancelCalendarMotion(cancellingMotion);
-            }, { passive: true });
+            };
+
+            container.addEventListener('touchstart', start, { passive: true });
         }
 
         function finishLockedVoiceRecording(cancelled) {
