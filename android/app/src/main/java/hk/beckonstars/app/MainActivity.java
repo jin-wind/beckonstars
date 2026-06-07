@@ -30,9 +30,17 @@ import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.ArrayList;
 import org.json.JSONObject;
 
@@ -57,6 +65,8 @@ public class MainActivity extends Activity {
     private boolean pendingVoiceRecordingStart = false;
     private String pendingTranscriptionMessageId = "";
     private String pendingTranscriptionAudioDataUrl = "";
+    private String mediaApiBase = "";
+    private String mediaAuthToken = "";
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     @Override
@@ -523,6 +533,31 @@ public class MainActivity extends Activity {
             return;
         }
 
+        if (mediaApiBase.isEmpty()) {
+            // 回退：没有配置 API，仍用 base64
+            postFinishedVoiceRecordingLegacy(finishedFile, durationMs);
+            return;
+        }
+
+        new Thread(() -> {
+            try {
+                String audioUrl = uploadAudioToMediaApi(finishedFile);
+                JSONObject payload = new JSONObject();
+                payload.put("audioUrl", audioUrl);
+                payload.put("audioMime", "audio/mp4");
+                payload.put("durationMs", durationMs);
+                payload.put("transcript", latestTranscript == null ? "" : latestTranscript.trim());
+                postVoiceRecording(payload.toString());
+            } catch (Exception error) {
+                Log.e(TAG, "Audio upload failed", error);
+                postVoiceError("錄音上傳失敗：" + error.getMessage());
+            } finally {
+                finishedFile.delete();
+            }
+        }).start();
+    }
+
+    private void postFinishedVoiceRecordingLegacy(File finishedFile, long durationMs) {
         try {
             String dataUrl = "data:audio/mp4;base64," + Base64.encodeToString(readAllBytes(finishedFile), Base64.NO_WRAP);
             JSONObject payload = new JSONObject();
@@ -536,6 +571,55 @@ public class MainActivity extends Activity {
         } finally {
             finishedFile.delete();
         }
+    }
+
+    private String uploadAudioToMediaApi(File audioFile) throws Exception {
+        URL url = new URL(mediaApiBase + "/api/media/upload");
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.setRequestMethod("POST");
+        conn.setDoOutput(true);
+
+        String boundary = "----BeckonStarsBoundary" + System.currentTimeMillis();
+        conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
+        if (!mediaAuthToken.isEmpty()) {
+            conn.setRequestProperty("Authorization", "Bearer " + mediaAuthToken);
+        }
+
+        OutputStream out = conn.getOutputStream();
+        PrintWriter writer = new PrintWriter(new OutputStreamWriter(out, "UTF-8"), true);
+
+        writer.append("--").append(boundary).append("\r\n");
+        writer.append("Content-Disposition: form-data; name=\"file\"; filename=\"recording.m4a\"\r\n");
+        writer.append("Content-Type: audio/mp4\r\n\r\n");
+        writer.flush();
+
+        FileInputStream fileInput = new FileInputStream(audioFile);
+        byte[] buffer = new byte[4096];
+        int bytesRead;
+        while ((bytesRead = fileInput.read(buffer)) != -1) {
+            out.write(buffer, 0, bytesRead);
+        }
+        out.flush();
+        fileInput.close();
+
+        writer.append("\r\n--").append(boundary).append("--\r\n");
+        writer.close();
+
+        int responseCode = conn.getResponseCode();
+        if (responseCode != 201) {
+            throw new IOException("Upload failed: HTTP " + responseCode);
+        }
+
+        BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+        StringBuilder response = new StringBuilder();
+        String line;
+        while ((line = reader.readLine()) != null) {
+            response.append(line);
+        }
+        reader.close();
+
+        JSONObject json = new JSONObject(response.toString());
+        return json.getString("mediaUrl");
     }
 
     private byte[] readAllBytes(File file) throws Exception {
@@ -628,6 +712,12 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void transcribeReceivedVoice(String messageId, String audioDataUrl) {
             runOnUiThread(() -> startReceivedVoiceTranscriptionInternal(messageId, audioDataUrl));
+        }
+
+        @JavascriptInterface
+        public void setMediaApiConfig(String apiBase, String authToken) {
+            mediaApiBase = apiBase == null ? "" : apiBase;
+            mediaAuthToken = authToken == null ? "" : authToken;
         }
     }
 }

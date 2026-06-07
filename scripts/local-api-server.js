@@ -110,6 +110,8 @@ const host = process.env.API_HOST || '0.0.0.0';
 const port = Number(process.env.API_PORT || 8787);
 const dbPath = process.env.API_DB_PATH || path.join(process.cwd(), 'data', 'server-db.json');
 const maxBodyBytes = Number(process.env.API_MAX_BODY_BYTES || 24_000_000);
+const mediaStoragePath = process.env.MEDIA_STORAGE_PATH || path.join(process.cwd(), 'data', 'media');
+const mediaBaseUrl = process.env.MEDIA_BASE_URL || '/media';
 const llmBaseUrl = (process.env.LLM_OPENAI_BASE_URL || 'https://fufu.iqach.top/v1').replace(/\/+$/, '');
 const llmApiKey = process.env.LLM_SUMMARY_API_KEY || process.env.OPENAI_API_KEY || '';
 const llmModel = process.env.LLM_SUMMARY_MODEL || process.env.OPENAI_SUMMARY_MODEL || 'mimo-v2.5';
@@ -389,6 +391,60 @@ function prepareAudioForLlm(audioDataUrl) {
   if (!audio?.data) return null;
   if (audio.format === 'wav') return audio;
   return convertAudioToWavBase64(audio);
+}
+
+function inferAudioMimeFromPathname(pathname) {
+  const ext = path.extname(pathname || '').toLowerCase();
+  if (ext === '.wav') return 'audio/wav';
+  if (ext === '.mp3') return 'audio/mpeg';
+  if (ext === '.aac') return 'audio/aac';
+  if (ext === '.m4a' || ext === '.mp4') return 'audio/mp4';
+  return 'audio/mp4';
+}
+
+function resolveLocalMediaFilePath(mediaUrl) {
+  const rawUrl = cleanText(mediaUrl);
+  if (!rawUrl) return '';
+
+  const localBase = `http://127.0.0.1:${port}`;
+  const parsedUrl = new URL(rawUrl, localBase);
+  const parsedBase = new URL(mediaBaseUrl, localBase).pathname.replace(/\/+$/, '');
+  const pathname = parsedUrl.pathname;
+
+  if (pathname === parsedBase || !pathname.startsWith(`${parsedBase}/`)) return '';
+  return path.join(mediaStoragePath, path.basename(pathname));
+}
+
+async function readAudioUrlAsDataUrl(audioUrl) {
+  const rawUrl = cleanText(audioUrl);
+  if (!rawUrl) return '';
+  if (rawUrl.startsWith('data:')) return cleanLargeText(rawUrl);
+
+  const localPath = resolveLocalMediaFilePath(rawUrl);
+  if (localPath && fs.existsSync(localPath)) {
+    const buffer = await fs.promises.readFile(localPath);
+    return `data:${inferAudioMimeFromPathname(localPath)};base64,${buffer.toString('base64')}`;
+  }
+
+  const absoluteUrl = new URL(rawUrl, `http://127.0.0.1:${port}`).toString();
+  if (!absoluteUrl.startsWith('http://') && !absoluteUrl.startsWith('https://')) {
+    throw new Error('unsupported-audio-url');
+  }
+
+  const response = await fetch(absoluteUrl);
+  if (!response.ok) {
+    throw new Error(`audio-url-fetch-failed:${response.status}`);
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  const contentType = (response.headers.get('content-type') || '').split(';')[0] || inferAudioMimeFromPathname(absoluteUrl);
+  return `data:${contentType};base64,${Buffer.from(arrayBuffer).toString('base64')}`;
+}
+
+async function getMessageAudioDataUrl(message) {
+  if (message?.audio) return message.audio;
+  if (message?.audioUrl) return readAudioUrlAsDataUrl(message.audioUrl);
+  return '';
 }
 
 function extractAzureTranscript(result) {
@@ -753,6 +809,36 @@ const server = http.createServer(async (req, res) => {
       }
       res.writeHead(404);
       res.end('Video not found');
+      return;
+    }
+
+    const mediaBasePath = new URL(mediaBaseUrl, `http://${req.headers.host || 'localhost'}`).pathname.replace(/\/+$/, '');
+    if (req.method === 'GET' && url.pathname.startsWith(`${mediaBasePath}/`)) {
+      const filename = path.basename(url.pathname);
+      const filePath = path.join(mediaStoragePath, filename);
+      if (fs.existsSync(filePath)) {
+        const ext = path.extname(filePath).toLowerCase();
+        const mimeTypes = {
+          '.jpg': 'image/jpeg',
+          '.jpeg': 'image/jpeg',
+          '.png': 'image/png',
+          '.webp': 'image/webp',
+          '.m4a': 'audio/mp4',
+          '.mp4': 'audio/mp4',
+          '.mp3': 'audio/mpeg',
+          '.wav': 'audio/wav',
+          '.aac': 'audio/aac'
+        };
+        res.writeHead(200, {
+          'Content-Type': mimeTypes[ext] || 'application/octet-stream',
+          'Access-Control-Allow-Origin': '*',
+          'Cache-Control': 'public, max-age=31536000'
+        });
+        fs.createReadStream(filePath).pipe(res);
+        return;
+      }
+      res.writeHead(404);
+      res.end('Media not found');
       return;
     }
 
@@ -1147,8 +1233,9 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      if (!message.transcript && message.audio) {
-        message.transcript = await transcribeAudioWithLlm(message.audio);
+      const audioDataUrl = !message.transcript ? await getMessageAudioDataUrl(message) : '';
+      if (!message.transcript && audioDataUrl) {
+        message.transcript = await transcribeAudioWithLlm(audioDataUrl);
         if (message.transcript && (!message.content || message.content === '語音訊息')) {
           message.content = message.transcript;
         }
@@ -1178,12 +1265,13 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 404, { error: 'message-not-found' });
         return;
       }
-      if (!message.audio) {
+      const audioDataUrl = await getMessageAudioDataUrl(message);
+      if (!audioDataUrl) {
         sendJson(res, 400, { error: 'missing-audio' });
         return;
       }
 
-      const transcript = await transcribeAudioWithLlm(message.audio);
+      const transcript = await transcribeAudioWithLlm(audioDataUrl);
       if (!transcript || transcript === '[聽不清]') {
         sendJson(res, 422, { error: 'empty-transcript', transcript: transcript || '' });
         return;
@@ -1253,7 +1341,10 @@ const server = http.createServer(async (req, res) => {
         type: cleanText(body.type, 'text'),
         content: cleanText(body.content),
         img: cleanLargeText(body.img) || null,
+        imgUrl: cleanText(body.imgUrl) || null,
+        thumbnailUrl: cleanText(body.thumbnailUrl) || null,
         audio: cleanLargeText(body.audio) || null,
+        audioUrl: cleanText(body.audioUrl) || null,
         audioMime: cleanText(body.audioMime),
         audioDurationMs: Number(body.audioDurationMs) || 0,
         transcript: cleanTranscript(body.transcript),
@@ -1262,7 +1353,7 @@ const server = http.createServer(async (req, res) => {
         childId: cleanText(body.childId, 'child_1'),
         createdAt: now.toISOString()
       };
-      if (!message.content && !message.img && !message.audio) {
+      if (!message.content && !message.img && !message.imgUrl && !message.audio && !message.audioUrl) {
         sendJson(res, 400, { error: 'empty-content' });
         return;
       }
@@ -1273,10 +1364,11 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 201, { message });
 
       // 背景自動轉譯語音訊息
-      if (message.type === 'audio' && message.audio && !message.transcript) {
+      if (message.type === 'audio' && (message.audio || message.audioUrl) && !message.transcript) {
         (async () => {
           try {
-            const transcript = await transcribeAudioWithLlm(message.audio);
+            const audioDataUrl = await getMessageAudioDataUrl(message);
+            const transcript = audioDataUrl ? await transcribeAudioWithLlm(audioDataUrl) : '';
             if (transcript) {
               const db = await readDb();
               const family = getFamily(db, familyId);
@@ -1326,9 +1418,11 @@ const server = http.createServer(async (req, res) => {
         type: cleanText(body.type, 'text'),
         content: cleanText(body.content),
         img: cleanLargeText(body.img) || null,
+        imgUrl: cleanText(body.imgUrl) || null,
+        thumbnailUrl: cleanText(body.thumbnailUrl) || null,
         createdAt: now.toISOString()
       };
-      if (!memory.content && !memory.img) {
+      if (!memory.content && !memory.img && !memory.imgUrl) {
         sendJson(res, 400, { error: 'empty-content' });
         return;
       }
