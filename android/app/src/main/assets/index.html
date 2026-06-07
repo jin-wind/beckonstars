@@ -791,7 +791,7 @@
                 })
                 .finally(() => {
                     serverLogsLoading = false;
-                    if (state.showModal === 'architecture') render();
+                    if (state.showModal === 'logs') render();
                 });
         }
 
@@ -984,25 +984,34 @@
         const almanacRequests = {};
         const bibleVerseRequests = {};
 
-        async function fetchAlmanac(dateStr) {
+        async function fetchCachedDateResource(dateStr, cache, requests, loadResource) {
             const key = dateStr || 'today';
-            if (almanacCache[key]) return almanacCache[key];
-            if (almanacRequests[key]) return almanacRequests[key];
-            almanacRequests[key] = (async () => {
+            if (cache[key]) return cache[key];
+            if (requests[key]) return requests[key];
+            requests[key] = (async () => {
+                try {
+                    const data = await loadResource(key);
+                    if (data) cache[key] = data;
+                    return data;
+                } finally {
+                    delete requests[key];
+                }
+            })();
+            return requests[key];
+        }
+
+        async function fetchAlmanac(dateStr) {
+            return fetchCachedDateResource(dateStr, almanacCache, almanacRequests, async () => {
                 try {
                     const dateParam = dateStr ? `?date=${dateStr}` : '';
                     const data = await serverApi(`/api/almanac${dateParam}`);
-                    almanacCache[key] = data;
                     if (!dateStr) state.almanac = data;
                     return data;
                 } catch (e) {
                     console.warn('Almanac fetch failed', e);
                     return null;
-                } finally {
-                    delete almanacRequests[key];
                 }
-            })();
-            return almanacRequests[key];
+            });
         }
 
         function getDailyBibleVerseTarget(dateStr) {
@@ -1045,7 +1054,7 @@
                 verse: record.sec || target.verse,
                 reference: `${target.reference}`,
                 text: String(record.bible_text || '').replace(/\s+/g, ' ').trim(),
-                source: '信望愛站聖經 JSON API',
+                source: '信望愛站聖經',
                 sourceUrl
             };
         }
@@ -1068,30 +1077,19 @@
         }
 
         async function fetchDailyBibleVerse(dateStr) {
-            const key = dateStr || 'today';
-            if (bibleVerseCache[key]) return bibleVerseCache[key];
-            if (bibleVerseRequests[key]) return bibleVerseRequests[key];
-            bibleVerseRequests[key] = (async () => {
+            return fetchCachedDateResource(dateStr, bibleVerseCache, bibleVerseRequests, async () => {
                 try {
-                    const data = await fetchFhlBibleVerse(dateStr);
-                    bibleVerseCache[key] = data;
-                    return data;
+                    return await fetchFhlBibleVerse(dateStr);
                 } catch (e) {
                     console.warn('FHL Bible verse fetch failed, falling back to Bolls Life', e);
                     try {
-                        const data = await fetchBollsLifeBibleVerse();
-                        bibleVerseCache[key] = data;
-                        return data;
+                        return await fetchBollsLifeBibleVerse();
                     } catch (fallbackError) {
                         console.warn('Bible verse fallback fetch failed', fallbackError);
-                        bibleVerseCache[key] = { ok: false, error: 'bible-verse-unavailable', source: '信望愛站聖經 JSON API' };
-                        return bibleVerseCache[key];
+                        return { ok: false, error: 'bible-verse-unavailable', source: '信望愛站聖經' };
                     }
-                } finally {
-                    delete bibleVerseRequests[key];
                 }
-            })();
-            return bibleVerseRequests[key];
+            });
         }
 
         function prefetchDailyCard(dateStr) {
@@ -1859,7 +1857,7 @@
 
         // 頂部導航列 (加入一鍵刪除按鈕)
         function renderHeader() {
-            const titles = { 'calendar': '共用日曆', 'chat': '溫馨對話', 'rewards': '家庭獎勵', 'leaderboard': '活躍度排行榜', 'profile': '我' };
+            const titles = { 'calendar': '日曆', 'chat': '對話', 'rewards': '獎勵', 'leaderboard': '活躍度排行榜', 'profile': '我' };
             const currentTitle = titles[state.currentTab] || '星喚';
             return `
                 <header class="bg-white px-6 pt-12 pb-4 shadow-sm z-10 sticky top-0 flex justify-between items-center rounded-b-2xl">
@@ -1881,7 +1879,7 @@
                                 <i class="fa-solid fa-mobile-screen-button"></i>
                             </button>
                         ` : ''}
-                        <button class="action-btn w-9 h-9 rounded-full bg-gray-900 text-green-300 flex items-center justify-center hover:bg-gray-800 transition-colors" data-action="openModal" data-modal="architecture" title="查看 Log">
+                        <button class="action-btn w-9 h-9 rounded-full bg-gray-900 text-green-300 flex items-center justify-center hover:bg-gray-800 transition-colors" data-action="openModal" data-modal="logs" title="查看 Log">
                             <i class="fa-solid fa-terminal"></i>
                         </button>
                         <button class="action-btn w-9 h-9 rounded-full bg-gray-50 text-gray-400 flex items-center justify-center hover:bg-red-50 hover:text-red-500 transition-colors" data-action="openModal" data-modal="confirmReset" title="清除數據並重新開始">
@@ -2019,7 +2017,7 @@
                                 <span class="text-gray-500 bs-text-xs font-medium">${escapeHtml(bibleVerse.reference || '')}</span>
                             </div>
                             <p class="text-gray-700 font-medium leading-relaxed">${escapeHtml(bibleVerse.text || '')}</p>
-                            <p class="absolute right-3 bottom-2 bs-text-[10px] text-gray-400 tracking-wide uppercase">FROM ${escapeHtml(bibleVerse.source || '信望愛站聖經 JSON API')}</p>
+                            <p class="absolute right-3 bottom-2 bs-text-[10px] text-gray-400 tracking-wide uppercase">FROM ${escapeHtml(bibleVerse.source || '信望愛站聖經')}</p>
                         </div>
                     `;
                 }
@@ -2035,7 +2033,7 @@
                             <span class="text-gray-500 font-medium">${escapeHtml(almanac.jiDisplay)}</span>
                         </div>
                         <p class="bs-text-xs text-gray-400 mt-2">${escapeHtml(almanac.lunar.pengZu)} · ${escapeHtml(almanac.lunar.xiu)}宿${almanac.lunar.xiuLuck ? ' · ' + escapeHtml(almanac.lunar.xiuLuck) : ''}</p>
-                        <p class="absolute right-3 bottom-2 bs-text-[10px] text-gray-400 tracking-wide uppercase">FROM lunar-javascript</p>
+                        <p class="absolute right-3 bottom-2 bs-text-[2px] text-gray-400 tracking-wide uppercase">FROM 6tail.cn</p>
                     </div>
                 `;
             }
@@ -2504,7 +2502,7 @@
                 `;
             }
 
-            if (state.showModal === 'architecture') {
+            if (state.showModal === 'logs') {
                 modalContent = `
                     <div class="bg-white w-[94%] max-w-lg rounded-3xl p-5 shadow-2xl animate-fadeIn relative max-h-[86vh] flex flex-col">
                         <button class="action-btn absolute top-4 right-4 w-8 h-8 bg-gray-100 rounded-full text-gray-500 flex items-center justify-center" data-action="closeModal">
@@ -3065,7 +3063,7 @@
                             state.videoError = null;
                             state.videoGenerating = false;
                         }
-                        if (state.showModal === 'architecture') {
+                        if (state.showModal === 'logs') {
                             refreshServerLogs();
                         }
                         render();

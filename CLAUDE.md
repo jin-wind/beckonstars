@@ -1,43 +1,161 @@
-<!-- superpowers-zh:begin (do not edit between these markers) -->
-# Superpowers-ZH 中文增强版
+# CLAUDE.md
 
-本项目已安装 superpowers-zh 技能框架（20 个 skills）。
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## 核心规则
+## Project overview
 
-1. **收到任务时，先检查是否有匹配的 skill** — 哪怕只有 1% 的可能性也要检查
-2. **设计先于编码** — 收到功能需求时，先用 brainstorming skill 做需求分析
-3. **测试先于实现** — 写代码前先写测试（TDD）
-4. **验证先于完成** — 声称完成前必须运行验证命令
+星喚 Beckon Stars is a family calendar/chat/memory Android app. The APK is a native Android WebView shell that loads a mostly self-contained HTML/JS app from Android assets and talks to a self-hosted Node API server.
 
-## 可用 Skills
+Main moving parts:
 
-Skills 位于 `.claude/skills/` 目录，每个 skill 有独立的 `SKILL.md` 文件。
+- `android/app/src/main/assets/index.html` contains the web UI, app state, rendering, localStorage persistence, and API polling logic. It is currently the main application source.
+- `android/app/src/main/java/hk/beckonstars/app/MainActivity.java` is the Android shell. It loads `file:///android_asset/index.html`, exposes `window.BeckonStarsAndroid`, and bridges notification permission, local notifications, camera/file chooser, voice recording, and native speech recognition back into JavaScript callbacks.
+- `scripts/local-api-server.js` is a dependency-light Node HTTP server. It stores data in `data/server-db.json`, handles auth, family membership, messages, memories, almanac data, AI summaries, speech-to-text, and monthly summary video generation.
+- `android/app/build.gradle` defines the APK build and a `syncWebAssets` `Copy` task wired into `preBuild`. That task copies root-level `index.html`, `manifest.webmanifest`, `sw.js`, and `icons/icon.svg` into `android/app/src/main/assets` if those root files exist. In this checkout the tracked app HTML is under Android assets, so be careful not to introduce root web files that unintentionally overwrite asset edits during Gradle builds.
 
-- **brainstorming**: 在任何创造性工作之前必须使用此技能——创建功能、构建组件、添加功能或修改行为。在实现之前先探索用户意图、需求和设计。
-- **chinese-code-review**: 中文代码审查规范——在保持专业严谨的同时，用符合国内团队文化的方式给出有效反馈
-- **chinese-commit-conventions**: 中文 Git 提交规范 — 适配国内团队的 commit message 规范和 changelog 自动化
-- **chinese-documentation**: 中文技术文档写作规范——排版、术语、结构一步到位，告别机翻味
-- **chinese-git-workflow**: 适配国内 Git 平台和团队习惯的工作流规范——Gitee、Coding、极狐 GitLab、CNB 全覆盖
-- **dispatching-parallel-agents**: 当面对 2 个以上可以独立进行、无共享状态或顺序依赖的任务时使用
-- **executing-plans**: 当你有一份书面实现计划需要在单独的会话中执行，并设有审查检查点时使用
-- **finishing-a-development-branch**: 当实现完成、所有测试通过、需要决定如何集成工作时使用——通过提供合并、PR 或清理等结构化选项来引导开发工作的收尾
-- **mcp-builder**: MCP 服务器构建方法论 — 系统化构建生产级 MCP 工具，让 AI 助手连接外部能力
-- **receiving-code-review**: 收到代码审查反馈后、实施建议之前使用，尤其当反馈不明确或技术上有疑问时——需要技术严谨性和验证，而非敷衍附和或盲目执行
-- **requesting-code-review**: 完成任务、实现重要功能或合并前使用，用于验证工作成果是否符合要求
-- **subagent-driven-development**: 当在当前会话中执行包含独立任务的实现计划时使用
-- **systematic-debugging**: 遇到任何 bug、测试失败或异常行为时使用，在提出修复方案之前执行
-- **test-driven-development**: 在实现任何功能或修复 bug 时使用，在编写实现代码之前
-- **using-git-worktrees**: 当需要开始与当前工作区隔离的功能开发或执行实现计划之前使用——创建具有智能目录选择和安全验证的隔离 git 工作树
-- **using-superpowers**: 在开始任何对话时使用——确立如何查找和使用技能，要求在任何响应（包括澄清性问题）之前调用 Skill 工具
-- **verification-before-completion**: 在宣称工作完成、已修复或测试通过之前使用，在提交或创建 PR 之前——必须运行验证命令并确认输出后才能声称成功；始终用证据支撑断言
-- **workflow-runner**: 在 Claude Code / OpenClaw / Cursor 中直接运行 agency-orchestrator YAML 工作流——无需 API key，使用当前会话的 LLM 作为执行引擎。当用户提供 .yaml 工作流文件或要求多角色协作完成任务时触发。
-- **writing-plans**: 当你有规格说明或需求用于多步骤任务时使用，在动手写代码之前
-- **writing-skills**: 当创建新技能、编辑现有技能或在部署前验证技能是否有效时使用
+## Common commands
 
-## 如何使用
+### Install dependencies
 
-当任务匹配某个 skill 时，使用 `Skill` 工具加载对应 skill 并严格遵循其流程。绝不要用 Read 工具读取 SKILL.md 文件。
+```powershell
+npm install
+```
 
-如果你认为哪怕只有 1% 的可能性某个 skill 适用于你正在做的事情，你必须调用该 skill 检查。
-<!-- superpowers-zh:end -->
+Use Node 18+ for local development: `scripts/local-api-server.js` uses global `fetch`.
+
+### Run the API server
+
+```powershell
+npm run api-server
+```
+
+Defaults:
+
+- Host/port: `0.0.0.0:8787`
+- Database: `data/server-db.json`
+- Health check: `Invoke-RestMethod http://127.0.0.1:8787/api/health`
+
+Useful PowerShell overrides:
+
+```powershell
+$env:API_PORT = "8788"
+$env:API_DB_PATH = "$PWD\data\dev-server-db.json"
+$env:JWT_SECRET = "dev-fixed-secret"
+npm run api-server
+```
+
+### Build the Android APK
+
+From repository root on Windows:
+
+```powershell
+.\android\gradlew.bat -p android assembleDebug
+```
+
+Or from `android/`:
+
+```powershell
+.\gradlew.bat assembleDebug
+```
+
+Output:
+
+```text
+android\app\build\outputs\apk\debug\app-debug.apk
+```
+
+Install and launch on a connected device/emulator:
+
+```powershell
+adb install -r android\app\build\outputs\apk\debug\app-debug.apk
+adb shell am start -n hk.beckonstars.app/.MainActivity
+```
+
+Clean/rebuild if Gradle state is stale:
+
+```powershell
+.\android\gradlew.bat -p android clean assembleDebug
+```
+
+### Tests and focused checks
+
+There is no configured `npm test` script, lint script, or unit test runner in `package.json`.
+
+Available focused scripts/checks:
+
+```powershell
+node scripts\test-azure-stt-v4.js                 # creates silent WAV and checks Azure STT endpoint
+node scripts\test-azure-stt-v4.js path\to.wav    # checks Azure STT with a supplied WAV
+node scripts\fix-db.js data\server-db.json       # validates/repairs a JSON DB file, backing up corrupt input
+```
+
+Azure STT checks require environment variables such as:
+
+```powershell
+$env:AZURE_STT_KEY = "..."
+$env:AZURE_STT_REGION = "eastasia"
+$env:AZURE_STT_LANGUAGE = "zh-HK"
+```
+
+For API changes, a practical smoke check is: start `npm run api-server`, call `/api/health`, then exercise the changed endpoint with `Invoke-RestMethod` or the APK/web UI.
+
+## Server architecture notes
+
+`scripts/local-api-server.js` uses Node's built-in `http` module rather than Express. Routing is a sequence of method/path checks inside one `http.createServer` callback.
+
+Important server behavior:
+
+- Environment config is read at startup. See `.env.example` and `API-SETUP.md` for the supported Azure/OpenRouter variables.
+- `JWT_SECRET` defaults to a new random value on every process start. Set a fixed value for any environment where users should stay logged in across restarts.
+- JSON storage is initialized and written through `ensureDb()`, `readDb()`, and `writeDb()`. `writeDb()` serializes writes through an in-process promise lock and renames a temp file over `API_DB_PATH`.
+- The DB schema is informal. Current top-level keys include `families`, plus auth-related `users` and `usersByEmail` once users register.
+- Family routes are under `/api/families/:familyId/...`; messages and memories are append-only arrays trimmed to recent limits.
+- Audio transcription prefers Azure Speech-to-Text when `AZURE_STT_KEY` is configured, then falls back to the older OpenAI-compatible LLM audio route. Non-WAV input is converted with `ffmpeg`, so voice features and summary videos depend on `ffmpeg` being installed on the server host.
+- Text summaries prefer OpenRouter when `OPENROUTER_API_KEY` is configured, then fall back to `LLM_SUMMARY_ENDPOINT` or the OpenAI-compatible `/chat/completions` configuration.
+- `/videos/...` serves generated summary videos from `data/videos`.
+
+Key endpoints currently implemented:
+
+- `GET /api/health`
+- `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/me`, `PUT /api/auth/profile`, `PUT /api/auth/password`
+- `GET /api/almanac`
+- `POST /api/summarize`
+- `POST /api/families/:familyId/connect`
+- `GET|POST /api/families/:familyId/messages`
+- `POST /api/families/:familyId/messages/:messageId/transcribe|transcript|summarize`
+- `GET|POST /api/families/:familyId/memories`
+- `POST /api/families/:familyId/summary-video`
+
+## Android/WebView architecture notes
+
+`MainActivity.java` is intentionally thin and delegates UI to the HTML app. It is responsible for Android-only capabilities that browser JavaScript cannot reliably do inside a packaged WebView:
+
+- WebView setup with JavaScript, DOM storage, file access, mixed-content compatibility, and the `BeckonStarsAndroid` JS interface.
+- Runtime permissions for notifications and microphone.
+- File chooser and camera capture via `FileProvider` (`android/app/src/main/res/xml/file_paths.xml`).
+- Native voice recording to temporary `.m4a`, base64 data URL handoff to JavaScript, and speech recognition callbacks.
+- Local notifications using the `beckon_stars_default` notification channel.
+
+The manifest allows cleartext traffic because the configured self-hosted API uses HTTP. If moving to HTTPS-only production, review `android:usesCleartextTraffic` and the hard-coded API base.
+
+## Front-end architecture notes
+
+The HTML app uses inline JavaScript rather than a bundler/framework. State is held in the global `state` object and rendering is string-template driven through `render()` and helper render functions.
+
+Important front-end behavior:
+
+- `selfHostedApiBase` in `android/app/src/main/assets/index.html` is the server URL used by the APK/web app. Current value is a hard-coded remote HTTP server.
+- `serverApi()` adds JSON headers and the JWT bearer token from `state.authToken`.
+- Auth state and app state are persisted in localStorage under keys such as `beckon-stars-auth-token`, `beckon-stars-user`, and `beckon-stars-demo-state-v1`.
+- `subscribeFamilyMessages()` and `subscribeFamilyMemories()` poll the server every 3s and 5s respectively; there is no websocket layer.
+- PWA install and push-notification paths are disabled or stubbed in APK contexts; Android notification behavior goes through `BeckonStarsAndroid`.
+- Chat rendering has incremental refresh logic (`refreshVisibleContent()`) to avoid full chat rerenders while polling.
+
+When changing front-end behavior, prefer following the existing single-file pattern unless the task explicitly includes a refactor. Verify changes in the APK path, not just a browser, when touching Android bridge interactions.
+
+## CI/release
+
+GitHub Actions builds debug APKs with JDK 17:
+
+- `.github/workflows/android-build.yml` runs on pushes to `main` affecting Android/icons/workflow files, PRs to `main`, and manual dispatch. It uploads `app-debug`.
+- `.github/workflows/release.yml` runs on `v*` tags or manual dispatch and uploads `app-debug.apk` to a GitHub Release. It currently builds with `assembleDebug`, not a signed release variant.
