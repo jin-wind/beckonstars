@@ -110,6 +110,9 @@ const host = process.env.API_HOST || '0.0.0.0';
 const port = Number(process.env.API_PORT || 8787);
 const dbPath = process.env.API_DB_PATH || path.join(process.cwd(), 'data', 'server-db.json');
 const maxBodyBytes = Number(process.env.API_MAX_BODY_BYTES || 24_000_000);
+const mediaStoragePath = process.env.MEDIA_STORAGE_PATH || path.join(process.cwd(), 'data', 'media');
+const mediaBaseUrl = process.env.MEDIA_BASE_URL || '/media';
+const mediaMaxSizeBytes = Number(process.env.MEDIA_MAX_SIZE_MB || 20) * 1024 * 1024;
 const llmBaseUrl = (process.env.LLM_OPENAI_BASE_URL || 'https://fufu.iqach.top/v1').replace(/\/+$/, '');
 const llmApiKey = process.env.LLM_SUMMARY_API_KEY || process.env.OPENAI_API_KEY || '';
 const llmModel = process.env.LLM_SUMMARY_MODEL || process.env.OPENAI_SUMMARY_MODEL || 'mimo-v2.5';
@@ -131,6 +134,16 @@ const openrouterModels = (process.env.OPENROUTER_FALLBACK_MODELS || openrouterMo
   .map(model => model.trim())
   .filter(Boolean);
 const openrouterReferer = process.env.OPENROUTER_HTTP_REFERER || (process.env.OPENROUTER_SITE_URL || 'https://beckonstars.app');
+
+const ALLOWED_MEDIA_MIME_TYPES = {
+  'image/jpeg': { ext: 'jpg', category: 'image' },
+  'image/png': { ext: 'png', category: 'image' },
+  'image/webp': { ext: 'webp', category: 'image' },
+  'audio/mp4': { ext: 'm4a', category: 'audio' },
+  'audio/mpeg': { ext: 'mp3', category: 'audio' },
+  'audio/wav': { ext: 'wav', category: 'audio' },
+  'audio/aac': { ext: 'aac', category: 'audio' }
+};
 
 const serverLogEntries = [];
 
@@ -234,6 +247,24 @@ function readBody(req) {
   });
 }
 
+function readRawBody(req, limitBytes = maxBodyBytes) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let totalBytes = 0;
+    req.on('data', chunk => {
+      totalBytes += chunk.length;
+      if (totalBytes > limitBytes) {
+        req.destroy();
+        reject(new Error('body-too-large'));
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
+
 function getFamily(db, familyId) {
   return db.families[familyId] || null;
 }
@@ -264,6 +295,124 @@ function cleanLargeText(value, fallback = '') {
 function cleanTranscript(value, fallback = '') {
   if (typeof value !== 'string') return fallback;
   return value.trim().slice(0, 4000);
+}
+
+function ensureMediaStorageDir() {
+  fs.mkdirSync(mediaStoragePath, { recursive: true });
+}
+
+function inferMediaMimeFromFilename(filename) {
+  const ext = path.extname(filename || '').toLowerCase();
+  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
+  if (ext === '.png') return 'image/png';
+  if (ext === '.webp') return 'image/webp';
+  if (ext === '.m4a' || ext === '.mp4') return 'audio/mp4';
+  if (ext === '.mp3') return 'audio/mpeg';
+  if (ext === '.wav') return 'audio/wav';
+  if (ext === '.aac') return 'audio/aac';
+  return '';
+}
+
+function normalizeMediaMime(mime, filename = '') {
+  const cleanedMime = cleanText(mime).toLowerCase();
+  if (ALLOWED_MEDIA_MIME_TYPES[cleanedMime]) return cleanedMime;
+  return inferMediaMimeFromFilename(filename);
+}
+
+function generateMediaFilename(originalFilename, mime) {
+  const mediaInfo = ALLOWED_MEDIA_MIME_TYPES[mime];
+  if (!mediaInfo) throw new Error('invalid-mime-type');
+  const baseName = path.basename(originalFilename || 'upload')
+    .replace(/\.[^.]+$/, '')
+    .replace(/[^a-zA-Z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48) || 'upload';
+  return `${Date.now()}_${crypto.randomBytes(6).toString('hex')}_${baseName}.${mediaInfo.ext}`;
+}
+
+async function saveMediaBuffer(buffer, mime, originalFilename) {
+  if (!Buffer.isBuffer(buffer) || buffer.length === 0) throw new Error('empty-file');
+  if (buffer.length > mediaMaxSizeBytes) throw new Error('file-too-large');
+
+  const normalizedMime = normalizeMediaMime(mime, originalFilename);
+  if (!ALLOWED_MEDIA_MIME_TYPES[normalizedMime]) throw new Error('invalid-mime-type');
+
+  ensureMediaStorageDir();
+  const filename = generateMediaFilename(originalFilename, normalizedMime);
+  const filePath = path.join(mediaStoragePath, filename);
+  await fs.promises.writeFile(filePath, buffer);
+
+  return {
+    mediaUrl: `${mediaBaseUrl.replace(/\/+$/, '')}/${filename}`,
+    mime: normalizedMime,
+    size: buffer.length
+  };
+}
+
+function parseMultipartFile(contentType, bodyBuffer) {
+  const boundaryMatch = String(contentType || '').match(/boundary=(?:"([^"]+)"|([^;]+))/i);
+  const boundary = boundaryMatch?.[1] || boundaryMatch?.[2];
+  if (!boundary) throw new Error('missing-boundary');
+
+  const body = bodyBuffer.toString('latin1');
+  const parts = body.split(`--${boundary}`);
+  for (const rawPart of parts) {
+    let part = rawPart;
+    if (!part || part === '--' || part === '--\r\n') continue;
+    if (part.startsWith('\r\n')) part = part.slice(2);
+
+    const headerEnd = part.indexOf('\r\n\r\n');
+    if (headerEnd === -1) continue;
+
+    const headerText = part.slice(0, headerEnd);
+    let contentText = part.slice(headerEnd + 4);
+    if (contentText.endsWith('\r\n')) contentText = contentText.slice(0, -2);
+    if (contentText.endsWith('--')) contentText = contentText.slice(0, -2);
+
+    const headers = Object.fromEntries(headerText.split(/\r\n/).map(line => {
+      const separatorIndex = line.indexOf(':');
+      if (separatorIndex === -1) return ['', ''];
+      return [
+        line.slice(0, separatorIndex).trim().toLowerCase(),
+        line.slice(separatorIndex + 1).trim()
+      ];
+    }).filter(([key]) => key));
+
+    const disposition = headers['content-disposition'] || '';
+    if (!/\bname="?file"?/i.test(disposition)) continue;
+
+    const filename = disposition.match(/\bfilename="([^"]*)"/i)?.[1] || 'upload';
+    const mime = headers['content-type'] || inferMediaMimeFromFilename(filename);
+    return {
+      filename,
+      mime,
+      buffer: Buffer.from(contentText, 'latin1')
+    };
+  }
+
+  throw new Error('no-file-uploaded');
+}
+
+async function handleMultipartMediaUpload(req) {
+  const rawBody = await readRawBody(req, mediaMaxSizeBytes + 64 * 1024);
+  const file = parseMultipartFile(req.headers['content-type'] || '', rawBody);
+  return saveMediaBuffer(file.buffer, file.mime, file.filename);
+}
+
+async function handleBase64MediaUpload(req) {
+  const body = await readBody(req);
+  let data = cleanLargeText(body.data);
+  let mime = normalizeMediaMime(body.mime, body.filename);
+  const filename = cleanText(body.filename, 'upload');
+
+  const dataUrlMatch = data.match(/^data:([^;,]+)?(?:;[^,]*)?,(.*)$/s);
+  if (dataUrlMatch) {
+    mime = normalizeMediaMime(mime || dataUrlMatch[1], filename);
+    data = dataUrlMatch[2] || '';
+  }
+
+  if (!data || !mime) throw new Error('missing-data-or-mime');
+  return saveMediaBuffer(Buffer.from(data, 'base64'), mime, filename);
 }
 
 function normalizeBibleVerseText(value) {
@@ -389,6 +538,60 @@ function prepareAudioForLlm(audioDataUrl) {
   if (!audio?.data) return null;
   if (audio.format === 'wav') return audio;
   return convertAudioToWavBase64(audio);
+}
+
+function inferAudioMimeFromPathname(pathname) {
+  const ext = path.extname(pathname || '').toLowerCase();
+  if (ext === '.wav') return 'audio/wav';
+  if (ext === '.mp3') return 'audio/mpeg';
+  if (ext === '.aac') return 'audio/aac';
+  if (ext === '.m4a' || ext === '.mp4') return 'audio/mp4';
+  return 'audio/mp4';
+}
+
+function resolveLocalMediaFilePath(mediaUrl) {
+  const rawUrl = cleanText(mediaUrl);
+  if (!rawUrl) return '';
+
+  const localBase = `http://127.0.0.1:${port}`;
+  const parsedUrl = new URL(rawUrl, localBase);
+  const parsedBase = new URL(mediaBaseUrl, localBase).pathname.replace(/\/+$/, '');
+  const pathname = parsedUrl.pathname;
+
+  if (pathname === parsedBase || !pathname.startsWith(`${parsedBase}/`)) return '';
+  return path.join(mediaStoragePath, path.basename(pathname));
+}
+
+async function readAudioUrlAsDataUrl(audioUrl) {
+  const rawUrl = cleanText(audioUrl);
+  if (!rawUrl) return '';
+  if (rawUrl.startsWith('data:')) return cleanLargeText(rawUrl);
+
+  const localPath = resolveLocalMediaFilePath(rawUrl);
+  if (localPath && fs.existsSync(localPath)) {
+    const buffer = await fs.promises.readFile(localPath);
+    return `data:${inferAudioMimeFromPathname(localPath)};base64,${buffer.toString('base64')}`;
+  }
+
+  const absoluteUrl = new URL(rawUrl, `http://127.0.0.1:${port}`).toString();
+  if (!absoluteUrl.startsWith('http://') && !absoluteUrl.startsWith('https://')) {
+    throw new Error('unsupported-audio-url');
+  }
+
+  const response = await fetch(absoluteUrl);
+  if (!response.ok) {
+    throw new Error(`audio-url-fetch-failed:${response.status}`);
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  const contentType = (response.headers.get('content-type') || '').split(';')[0] || inferAudioMimeFromPathname(absoluteUrl);
+  return `data:${contentType};base64,${Buffer.from(arrayBuffer).toString('base64')}`;
+}
+
+async function getMessageAudioDataUrl(message) {
+  if (message?.audio) return message.audio;
+  if (message?.audioUrl) return readAudioUrlAsDataUrl(message.audioUrl);
+  return '';
 }
 
 function extractAzureTranscript(result) {
@@ -756,12 +959,80 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    const mediaBasePath = new URL(mediaBaseUrl, `http://${req.headers.host || 'localhost'}`).pathname.replace(/\/+$/, '');
+    if (req.method === 'GET' && url.pathname.startsWith(`${mediaBasePath}/`)) {
+      const filename = path.basename(url.pathname);
+      const filePath = path.join(mediaStoragePath, filename);
+      if (fs.existsSync(filePath)) {
+        const ext = path.extname(filePath).toLowerCase();
+        const mimeTypes = {
+          '.jpg': 'image/jpeg',
+          '.jpeg': 'image/jpeg',
+          '.png': 'image/png',
+          '.webp': 'image/webp',
+          '.m4a': 'audio/mp4',
+          '.mp4': 'audio/mp4',
+          '.mp3': 'audio/mpeg',
+          '.wav': 'audio/wav',
+          '.aac': 'audio/aac'
+        };
+        res.writeHead(200, {
+          'Content-Type': mimeTypes[ext] || 'application/octet-stream',
+          'Access-Control-Allow-Origin': '*',
+          'Cache-Control': 'public, max-age=31536000'
+        });
+        fs.createReadStream(filePath).pipe(res);
+        return;
+      }
+      res.writeHead(404);
+      res.end('Media not found');
+      return;
+    }
+
     if (req.method === 'OPTIONS') {
       sendNoContent(res);
       return;
     }
 
     const { pathname, parts } = routeParts(req);
+
+    if (req.method === 'POST' && pathname === '/api/media/upload') {
+      const authUser = getAuthUser(req);
+      if (!authUser) {
+        sendJson(res, 401, { error: 'unauthorized', message: '請先登入' });
+        return;
+      }
+
+      try {
+        const contentType = req.headers['content-type'] || '';
+        let result;
+        if (contentType.startsWith('multipart/form-data')) {
+          result = await handleMultipartMediaUpload(req);
+        } else if (contentType.startsWith('application/json')) {
+          result = await handleBase64MediaUpload(req);
+        } else {
+          sendJson(res, 400, { error: 'unsupported-content-type', message: '僅支援 multipart/form-data 或 application/json' });
+          return;
+        }
+
+        console.log(`[media] upload ok [${authUser.email || authUser.userId || 'user'}] ${result.mime} ${Math.round(result.size / 1024)}KB`);
+        sendJson(res, 201, result);
+      } catch (error) {
+        console.warn('[media] upload failed:', error.message);
+        const messages = {
+          'body-too-large': '文件大小超過限制',
+          'file-too-large': '文件大小超過限制',
+          'empty-file': '文件內容為空',
+          'invalid-mime-type': '不支援的文件類型',
+          'missing-boundary': '上傳格式錯誤',
+          'no-file-uploaded': '未上傳文件',
+          'missing-data-or-mime': '缺少 data 或 mime 欄位'
+        };
+        const status = error.message === 'body-too-large' || error.message === 'file-too-large' ? 413 : 400;
+        sendJson(res, status, { error: error.message, message: messages[error.message] || '上傳失敗' });
+      }
+      return;
+    }
 
     if (req.method === 'GET' && pathname === '/api/health') {
       sendJson(res, 200, {
@@ -1147,8 +1418,9 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      if (!message.transcript && message.audio) {
-        message.transcript = await transcribeAudioWithLlm(message.audio);
+      const audioDataUrl = !message.transcript ? await getMessageAudioDataUrl(message) : '';
+      if (!message.transcript && audioDataUrl) {
+        message.transcript = await transcribeAudioWithLlm(audioDataUrl);
         if (message.transcript && (!message.content || message.content === '語音訊息')) {
           message.content = message.transcript;
         }
@@ -1178,12 +1450,13 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 404, { error: 'message-not-found' });
         return;
       }
-      if (!message.audio) {
+      const audioDataUrl = await getMessageAudioDataUrl(message);
+      if (!audioDataUrl) {
         sendJson(res, 400, { error: 'missing-audio' });
         return;
       }
 
-      const transcript = await transcribeAudioWithLlm(message.audio);
+      const transcript = await transcribeAudioWithLlm(audioDataUrl);
       if (!transcript || transcript === '[聽不清]') {
         sendJson(res, 422, { error: 'empty-transcript', transcript: transcript || '' });
         return;
@@ -1253,7 +1526,10 @@ const server = http.createServer(async (req, res) => {
         type: cleanText(body.type, 'text'),
         content: cleanText(body.content),
         img: cleanLargeText(body.img) || null,
+        imgUrl: cleanText(body.imgUrl) || null,
+        thumbnailUrl: cleanText(body.thumbnailUrl) || null,
         audio: cleanLargeText(body.audio) || null,
+        audioUrl: cleanText(body.audioUrl) || null,
         audioMime: cleanText(body.audioMime),
         audioDurationMs: Number(body.audioDurationMs) || 0,
         transcript: cleanTranscript(body.transcript),
@@ -1262,7 +1538,7 @@ const server = http.createServer(async (req, res) => {
         childId: cleanText(body.childId, 'child_1'),
         createdAt: now.toISOString()
       };
-      if (!message.content && !message.img && !message.audio) {
+      if (!message.content && !message.img && !message.imgUrl && !message.audio && !message.audioUrl) {
         sendJson(res, 400, { error: 'empty-content' });
         return;
       }
@@ -1273,10 +1549,11 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 201, { message });
 
       // 背景自動轉譯語音訊息
-      if (message.type === 'audio' && message.audio && !message.transcript) {
+      if (message.type === 'audio' && (message.audio || message.audioUrl) && !message.transcript) {
         (async () => {
           try {
-            const transcript = await transcribeAudioWithLlm(message.audio);
+            const audioDataUrl = await getMessageAudioDataUrl(message);
+            const transcript = audioDataUrl ? await transcribeAudioWithLlm(audioDataUrl) : '';
             if (transcript) {
               const db = await readDb();
               const family = getFamily(db, familyId);
@@ -1326,9 +1603,11 @@ const server = http.createServer(async (req, res) => {
         type: cleanText(body.type, 'text'),
         content: cleanText(body.content),
         img: cleanLargeText(body.img) || null,
+        imgUrl: cleanText(body.imgUrl) || null,
+        thumbnailUrl: cleanText(body.thumbnailUrl) || null,
         createdAt: now.toISOString()
       };
-      if (!memory.content && !memory.img) {
+      if (!memory.content && !memory.img && !memory.imgUrl) {
         sendJson(res, 400, { error: 'empty-content' });
         return;
       }

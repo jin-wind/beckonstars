@@ -178,6 +178,8 @@
             pendingMemoryType: 'text',
             pendingMemoryContent: '',
             pendingMemoryImage: '',
+            pendingMemoryImageUrl: '',
+            pendingMemoryThumbnailUrl: '',
             voiceRecording: createIdleVoiceRecordingState(),
             transcribingMessageId: null,
             backendMode: 'server',
@@ -475,7 +477,7 @@
             const buttonClass = isMe ? 'bg-white text-brand' : 'bg-brand text-white';
             const timeClass = isMe ? 'text-white/85' : 'text-gray-500';
 
-            if (!message.audio) {
+            if (!message.audio && !message.audioUrl) {
                 return `
                     <div class="flex items-center gap-3 min-w-48">
                         <div class="w-9 h-9 rounded-full ${isMe ? 'bg-white/20' : 'bg-orange-100'} flex items-center justify-center">
@@ -629,7 +631,7 @@
         async function toggleVoiceMessage(messageId) {
             const id = String(messageId || '');
             const message = state.messages.find(item => String(item.id) === id);
-            if (!message?.audio) {
+            if (!message?.audio && !message?.audioUrl) {
                 showMessage('錄音檔未同步，暫時不能播放。');
                 return;
             }
@@ -645,7 +647,7 @@
                 voicePlayback.messageId = id;
                 voicePlayback.duration = getVoiceDurationSeconds(message);
                 voicePlayback.currentTime = 0;
-                audio.src = message.audio;
+                audio.src = resolveMediaUrl(message.audioUrl || message.audio);
                 try {
                     audio.currentTime = 0;
                 } catch (error) {}
@@ -664,7 +666,7 @@
         function seekVoiceMessage(messageId, ratio) {
             const id = String(messageId || '');
             const message = state.messages.find(item => String(item.id) === id);
-            if (!message?.audio) return;
+            if (!message?.audio && !message?.audioUrl) return;
 
             const audio = getVoiceAudio();
             if (voicePlayback.messageId !== id) {
@@ -672,7 +674,7 @@
                 voicePlayback.messageId = id;
                 voicePlayback.duration = getVoiceDurationSeconds(message);
                 voicePlayback.currentTime = 0;
-                audio.src = message.audio;
+                audio.src = resolveMediaUrl(message.audioUrl || message.audio);
             }
 
             const duration = voicePlayback.duration || getVoiceDurationSeconds(message);
@@ -731,6 +733,8 @@
                 data.modalMessage = '';
                 data.selectedDate = null;
                 data.pendingMemoryImage = '';
+                data.pendingMemoryImageUrl = '';
+                data.pendingMemoryThumbnailUrl = '';
                 data.pushStatus = '';
                 data.voiceRecording = createIdleVoiceRecordingState();
                 // 保留最近的數據，避免 localStorage 過大
@@ -777,6 +781,34 @@
                 throw error;
             }
             return response.status === 204 ? null : response.json();
+        }
+
+        async function uploadMediaFile(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+            const headers = {};
+            if (state.authToken) {
+                headers['Authorization'] = `Bearer ${state.authToken}`;
+            }
+            const response = await fetch(`${selfHostedApiBase}/api/media/upload`, {
+                method: 'POST',
+                headers,
+                body: formData
+            });
+            if (!response.ok) {
+                const error = new Error(`media-upload-${response.status}`);
+                error.status = response.status;
+                throw error;
+            }
+            return response.json();
+        }
+
+        function resolveMediaUrl(url) {
+            if (!url) return '';
+            if (url.startsWith('data:')) return url;
+            if (url.startsWith('http://') || url.startsWith('https://')) return url;
+            if (url.startsWith('/')) return selfHostedApiBase + url;
+            return url;
         }
 
         function refreshServerLogs() {
@@ -844,6 +876,10 @@
 
             localStorage.setItem('beckon-stars-auth-token', result.token);
             localStorage.setItem('beckon-stars-user', JSON.stringify(result.user));
+
+            if (isAndroidApk() && window.BeckonStarsAndroid?.setMediaApiConfig) {
+                window.BeckonStarsAndroid.setMediaApiConfig(selfHostedApiBase, state.authToken);
+            }
 
             console.log('[auth] Logged in as:', result.user.name, result.user.email);
 
@@ -949,6 +985,11 @@
                     state.authUid = state.currentUser.userId;
                     state.userName = state.currentUser.name;
                     state.userAvatar = state.currentUser.picture || '👤';
+
+                    if (isAndroidApk() && window.BeckonStarsAndroid?.setMediaApiConfig) {
+                        window.BeckonStarsAndroid.setMediaApiConfig(selfHostedApiBase, state.authToken);
+                    }
+
                     return true;
                 } catch (e) {
                     console.warn('[auth] Failed to restore auth state:', e);
@@ -1378,7 +1419,10 @@
                 childId: data.childId || 'child_1',
                 uid: data.uid || data.senderId || '',
                 img: data.img || null,
+                imgUrl: data.imgUrl || null,
+                thumbnailUrl: data.thumbnailUrl || null,
                 audio: data.audio || null,
+                audioUrl: data.audioUrl || null,
                 audioMime: data.audioMime || '',
                 audioDurationMs: data.audioDurationMs || 0,
                 transcript: data.transcript || '',
@@ -1426,7 +1470,9 @@
                 childName: data.childName || '家庭成員',
                 type: data.type || 'text',
                 content: data.content || '',
-                img: data.img || null
+                img: data.img || null,
+                imgUrl: data.imgUrl || null,
+                thumbnailUrl: data.thumbnailUrl || null
             };
         }
 
@@ -1438,8 +1484,8 @@
                 msg.senderName,
                 msg.type,
                 msg.content,
-                msg.img ? 'img' : '',
-                msg.audio ? 'audio' : '',
+                msg.imgUrl || msg.thumbnailUrl || msg.img ? 'img' : '',
+                msg.audioUrl || msg.audio ? 'audio' : '',
                 msg.audioDurationMs || 0,
                 msg.transcript || '',
                 msg.aiSummary || '',
@@ -1552,7 +1598,7 @@
                         ${!isMe ? `<span class="bs-text-xs text-gray-500 mb-1 ml-1">${displayName}</span>` : ''}
                         <div class="p-3 rounded-2xl shadow-sm ${isMe ? 'bg-brand text-white rounded-tr-none' : 'bg-white text-gray-800 rounded-tl-none border border-gray-100'}">
                             ${msg.type === 'text' ? `<p class="bs-text-lg">${msg.content}</p>` : ''}
-                            ${msg.type === 'photo' && msg.img ? `<img src="${msg.img}" class="max-w-56 max-h-56 rounded-xl object-cover">${msg.content ? `<p class="bs-text-base mt-2">${msg.content}</p>` : ''}` : ''}
+                            ${msg.type === 'photo' && (msg.imgUrl || msg.img) ? `<img src="${resolveMediaUrl(msg.thumbnailUrl || msg.imgUrl || msg.img)}" class="max-w-56 max-h-56 rounded-xl object-cover">${msg.content ? `<p class="bs-text-base mt-2">${msg.content}</p>` : ''}` : ''}
                             ${msg.type === 'audio' ? `<div class="space-y-2 w-60 max-w-[68vw]">${renderVoicePlayer(msg, isMe)}<div class="${isMe ? 'bg-white/10' : 'bg-gray-50'} rounded-xl p-2"><p class="bs-text-xs opacity-70 mb-1">語音轉譯</p>${msg.transcript ? `<p class="bs-text-base">${msg.transcript}</p>` : `<p class="bs-text-sm opacity-80">未取得轉譯文字，可播放錄音確認內容。</p>`}</div></div>` : ''}
                         </div>
                         ${msg.type === 'audio' && msg.transcript && !msg.aiSummary && state.backendMode === 'server' ? `
@@ -1560,7 +1606,7 @@
                                 <i class="fa-solid fa-wand-magic-sparkles mr-1"></i>總結錄音
                             </button>
                         ` : ''}
-                        ${msg.type === 'audio' && msg.audio && !msg.transcript && state.backendMode === 'server' ? `
+                        ${msg.type === 'audio' && (msg.audio || msg.audioUrl) && !msg.transcript && state.backendMode === 'server' ? `
                             <button class="action-btn mt-2 bg-amber-50 border border-amber-100 text-amber-700 rounded-xl px-3 py-2 bs-text-sm font-bold disabled:opacity-60" data-action="transcribeVoice" data-message-id="${escapeAttribute(messageId)}" ${state.transcribingMessageId === messageId ? 'disabled' : ''}>
                                 <i class="fa-solid ${state.transcribingMessageId === messageId ? 'fa-spinner fa-spin' : 'fa-closed-captioning'} mr-1"></i>${state.transcribingMessageId === messageId ? 'AI 轉譯中' : 'AI 轉譯錄音'}
                             </button>
@@ -2035,7 +2081,7 @@
                             <span class="text-gray-500 font-medium">${escapeHtml(almanac.jiDisplay)}</span>
                         </div>
                         <p class="bs-text-xs text-gray-400 mt-2">${escapeHtml(almanac.lunar.pengZu)} · ${escapeHtml(almanac.lunar.xiu)}宿${almanac.lunar.xiuLuck ? ' · ' + escapeHtml(almanac.lunar.xiuLuck) : ''}</p>
-                        <p class="absolute right-3 bottom-2 bs-text-[10px] text-gray-400 tracking-wide uppercase">FROM lunar-javascript</p>
+                        <p class="absolute right-3 bottom-2 leading-none text-gray-300 opacity-60" style="font-size: 8px;">來源：lunar-javascript</p>
                     </div>
                 `;
             }
@@ -2053,7 +2099,7 @@
                         <div class="flex gap-2 overflow-x-auto no-scrollbar">
                             ${dayMemories.map(m => `
                                 <div class="w-12 h-12 rounded-lg bg-white border border-orange-200 flex-shrink-0 flex items-center justify-center overflow-hidden">
-                                    ${m.img ? `<img src="${m.img}" class="w-full h-full object-cover">` : `<i class="fa-solid ${m.type === 'audio' ? 'fa-microphone text-blue-400' : 'fa-font text-gray-400'} bs-text-xl"></i>`}
+                                    ${(m.imgUrl || m.img) ? `<img src="${resolveMediaUrl(m.thumbnailUrl || m.imgUrl || m.img)}" class="w-full h-full object-cover">` : `<i class="fa-solid ${m.type === 'audio' ? 'fa-microphone text-blue-400' : 'fa-font text-gray-400'} bs-text-xl"></i>`}
                                 </div>
                             `).join('')}
                         </div>
@@ -2307,8 +2353,18 @@
                         const file = event.target.files?.[0];
                         if (!file) return;
                         event.target.value = '';
-                        const img = await readFileAsDataUrl(file);
-                        await sendChatMessage({ type: 'photo', content: '', img });
+                        try {
+                            const result = await uploadMediaFile(file);
+                            await sendChatMessage({
+                                type: 'photo',
+                                content: '',
+                                imgUrl: result.mediaUrl,
+                                thumbnailUrl: result.thumbnailUrl || result.mediaUrl
+                            });
+                        } catch (error) {
+                            console.error('Image upload failed', error);
+                            showMessage('圖片上傳失敗，請重試。');
+                        }
                     });
                 }
             } else {
@@ -2623,7 +2679,7 @@
                                         </div>
                                         <span class="bs-text-sm font-bold text-gray-700">${m.childName}</span>
                                     </div>
-                                    ${m.img ? `<img src="${m.img}" class="w-full h-32 object-cover rounded-xl mb-2">` : ''}
+                                    ${(m.imgUrl || m.img) ? `<img src="${resolveMediaUrl(m.thumbnailUrl || m.imgUrl || m.img)}" class="w-full h-32 object-cover rounded-xl mb-2">` : ''}
                                     <p class="text-gray-800">${m.content}</p>
                                 </div>
                             `).join('')}
@@ -2633,7 +2689,7 @@
             }
 
             if (state.showModal === 'videoPlayer') {
-                const hasPhotos = state.memories.some(m => m.img && m.month === today.getMonth() + 1 && m.year === today.getFullYear());
+                const hasPhotos = state.memories.some(m => (m.imgUrl || m.img) && m.month === today.getMonth() + 1 && m.year === today.getFullYear());
                 if (state.videoGenerating) {
                     modalContent = `
                         <div class="bg-gradient-to-b from-brand-dark to-black w-full max-w-md h-96 rounded-3xl flex flex-col items-center justify-center relative animate-fadeIn">
@@ -3060,6 +3116,8 @@
                         state.showModal = newBtn.getAttribute('data-modal');
                         state.pendingMemoryType = 'text';
                         state.pendingMemoryImage = '';
+                        state.pendingMemoryImageUrl = '';
+                        state.pendingMemoryThumbnailUrl = '';
                         if (state.showModal === 'videoPlayer') {
                             state.videoUrl = null;
                             state.videoError = null;
@@ -3129,7 +3187,11 @@
                         const memoryContentInput = document.getElementById('memoryContentInput');
                         if (memoryContentInput) state.pendingMemoryContent = memoryContentInput.value;
                         state.pendingMemoryType = newBtn.getAttribute('data-type');
-                        if (state.pendingMemoryType !== 'photo') state.pendingMemoryImage = '';
+                        if (state.pendingMemoryType !== 'photo') {
+                            state.pendingMemoryImage = '';
+                            state.pendingMemoryImageUrl = '';
+                            state.pendingMemoryThumbnailUrl = '';
+                        }
                         render();
                     }
                     else if (action === 'chooseMemoryImage') {
@@ -3163,7 +3225,9 @@
                             childName: state.userName || (state.role === 'child' ? '我' : '媽媽'),
                             type: state.pendingMemoryType,
                             content,
-                            img: state.pendingMemoryType === 'photo' ? (state.pendingMemoryImage || null) : null
+                            img: state.pendingMemoryType === 'photo' ? (state.pendingMemoryImage || null) : null,
+                            imgUrl: state.pendingMemoryType === 'photo' ? (state.pendingMemoryImageUrl || null) : null,
+                            thumbnailUrl: state.pendingMemoryType === 'photo' ? (state.pendingMemoryThumbnailUrl || null) : null
                         };
 
                         if (state.backendMode === 'server' && state.familyId) {
@@ -3178,6 +3242,8 @@
                                 state.pendingMemoryType = 'text';
                                 state.pendingMemoryContent = '';
                                 state.pendingMemoryImage = '';
+                                state.pendingMemoryImageUrl = '';
+                                state.pendingMemoryThumbnailUrl = '';
                                 render();
                                 setTimeout(() => showMessage('已儲存今日回憶到自架服務器，並獲得 10 積分。'), 100);
                             } catch (error) {
@@ -3195,6 +3261,8 @@
                         state.pendingMemoryType = 'text';
                         state.pendingMemoryContent = '';
                         state.pendingMemoryImage = '';
+                        state.pendingMemoryImageUrl = '';
+                        state.pendingMemoryThumbnailUrl = '';
                         render();
                         setTimeout(() => showMessage('已儲存今日回憶，並獲得 10 積分。'), 100);
                     }
@@ -3311,10 +3379,18 @@
                 memoryImageInput.addEventListener('change', async event => {
                     const file = event.target.files?.[0];
                     if (!file) return;
-                    state.pendingMemoryImage = await readFileAsDataUrl(file);
-                    const memoryContentInput = document.getElementById('memoryContentInput');
-                    if (memoryContentInput) state.pendingMemoryContent = memoryContentInput.value;
-                    render();
+                    try {
+                        const result = await uploadMediaFile(file);
+                        state.pendingMemoryImage = await readFileAsDataUrl(file); // 保留預覽
+                        state.pendingMemoryImageUrl = result.mediaUrl;
+                        state.pendingMemoryThumbnailUrl = result.thumbnailUrl || result.mediaUrl;
+                        const memoryContentInput = document.getElementById('memoryContentInput');
+                        if (memoryContentInput) state.pendingMemoryContent = memoryContentInput.value;
+                        render();
+                    } catch (error) {
+                        console.error('Memory image upload failed', error);
+                        showMessage('相片上傳失敗，請重試。');
+                    }
                 });
             }
 
@@ -3323,10 +3399,18 @@
                 memoryCameraInput.addEventListener('change', async event => {
                     const file = event.target.files?.[0];
                     if (!file) return;
-                    state.pendingMemoryImage = await readFileAsDataUrl(file);
-                    const memoryContentInput = document.getElementById('memoryContentInput');
-                    if (memoryContentInput) state.pendingMemoryContent = memoryContentInput.value;
-                    render();
+                    try {
+                        const result = await uploadMediaFile(file);
+                        state.pendingMemoryImage = await readFileAsDataUrl(file); // 保留預覽
+                        state.pendingMemoryImageUrl = result.mediaUrl;
+                        state.pendingMemoryThumbnailUrl = result.thumbnailUrl || result.mediaUrl;
+                        const memoryContentInput = document.getElementById('memoryContentInput');
+                        if (memoryContentInput) state.pendingMemoryContent = memoryContentInput.value;
+                        render();
+                    } catch (error) {
+                        console.error('Memory camera upload failed', error);
+                        showMessage('相片上傳失敗，請重試。');
+                    }
                 });
             }
 
@@ -3336,8 +3420,18 @@
                     const file = event.target.files?.[0];
                     if (!file) return;
                     event.target.value = '';
-                    const img = await readFileAsDataUrl(file);
-                    await sendChatMessage({ type: 'photo', content: '', img });
+                    try {
+                        const result = await uploadMediaFile(file);
+                        await sendChatMessage({
+                            type: 'photo',
+                            content: '',
+                            imgUrl: result.mediaUrl,
+                            thumbnailUrl: result.thumbnailUrl || result.mediaUrl
+                        });
+                    } catch (error) {
+                        console.error('Image upload failed', error);
+                        showMessage('圖片上傳失敗，請重試。');
+                    }
                 });
             }
 
@@ -3938,7 +4032,7 @@
 
             const audio = recording.audio || '';
             const transcript = String(recording.transcript || '').trim();
-            if (!audio) {
+            if (!audio && !recording.audioUrl) {
                 showMessage('錄音失敗，請再試一次。');
                 return;
             }
@@ -3947,7 +4041,8 @@
                 type: 'audio',
                 content: transcript || '語音訊息',
                 transcript,
-                audio,
+                audio: recording.audio || null,  // 保留 base64 回退
+                audioUrl: recording.audioUrl || null,  // 新字段
                 audioMime: recording.audioMime || 'audio/mp4',
                 audioDurationMs: recording.durationMs || 0,
                 aiSummary: null
@@ -4019,7 +4114,7 @@
         async function transcribeVoiceMessage(messageId) {
             if (!messageId || state.backendMode !== 'server' || !state.familyId) return;
             const message = state.messages.find(item => String(item.id) === String(messageId));
-            if (!message?.audio) {
+            if (!message?.audio && !message?.audioUrl) {
                 showMessage('呢條語音沒有可轉譯的錄音。');
                 return;
             }
@@ -4076,8 +4171,9 @@
             const chatInput = document.getElementById('chatInput');
             const isTextMessage = !override;
             const content = override ? (override.content || '') : (chatInput?.value || chatDraft).trim();
-            const hasImage = override?.img;
-            if (!content && !hasImage) return;
+            const hasImage = override?.imgUrl || override?.img;
+            const hasAudio = override?.audioUrl || override?.audio;
+            if (!content && !hasImage && !hasAudio) return;
             if (isTextMessage) {
                 chatDraft = '';
                 shouldRestoreChatInputFocus = false;
@@ -4092,7 +4188,10 @@
                 type: override?.type || 'text',
                 content,
                 img: override?.img || null,
+                imgUrl: override?.imgUrl || null,
+                thumbnailUrl: override?.thumbnailUrl || null,
                 audio: override?.audio || null,
+                audioUrl: override?.audioUrl || null,
                 audioMime: override?.audioMime || '',
                 audioDurationMs: override?.audioDurationMs || 0,
                 transcript: override?.transcript || '',
@@ -4178,6 +4277,10 @@
 
             // 嘗試恢復登入狀態
             const hasAuth = restoreAuthState();
+
+            if (isAndroidApk() && window.BeckonStarsAndroid?.setMediaApiConfig) {
+                window.BeckonStarsAndroid.setMediaApiConfig(selfHostedApiBase, state.authToken || '');
+            }
 
             render(); // 先渲染，讓使用者看到畫面
 
