@@ -7,6 +7,8 @@ const { execFileSync } = require('child_process');
 const { Lunar, Solar } = require('lunar-javascript');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const formidable = require('formidable');
+const sharp = require('sharp');
 
 function loadEnvFile(filePath = path.join(process.cwd(), '.env')) {
   if (!fs.existsSync(filePath)) return;
@@ -91,21 +93,6 @@ function toTraditional(arr) {
   return arr.map(item => SIMP_TO_TRAD[item] || item);
 }
 
-const BIBLE_BOOK_NAMES = [
-  '', '創世記', '出埃及記', '利未記', '民數記', '申命記', '約書亞記', '士師記', '路得記', '撒母耳記上', '撒母耳記下',
-  '列王紀上', '列王紀下', '歷代志上', '歷代志下', '以斯拉記', '尼希米記', '以斯帖記', '約伯記', '詩篇', '箴言',
-  '傳道書', '雅歌', '以賽亞書', '耶利米書', '耶利米哀歌', '以西結書', '但以理書', '何西阿書', '約珥書', '阿摩司書',
-  '俄巴底亞書', '約拿書', '彌迦書', '那鴻書', '哈巴谷書', '西番雅書', '哈該書', '撒迦利亞書', '瑪拉基書', '馬太福音',
-  '馬可福音', '路加福音', '約翰福音', '使徒行傳', '羅馬書', '哥林多前書', '哥林多後書', '加拉太書', '以弗所書', '腓立比書',
-  '歌羅西書', '帖撒羅尼迦前書', '帖撒羅尼迦後書', '提摩太前書', '提摩太後書', '提多書', '腓利門書', '希伯來書', '雅各書',
-  '彼得前書', '彼得後書', '約翰一書', '約翰二書', '約翰三書', '猶大書', '啟示錄'
-];
-
-function formatBibleReference(book, chapter, verse, fallback = '') {
-  const bookName = BIBLE_BOOK_NAMES[Number(book)] || fallback || `CUV ${book}`;
-  return `${bookName} ${chapter}:${verse}`;
-}
-
 const host = process.env.API_HOST || '0.0.0.0';
 const port = Number(process.env.API_PORT || 8787);
 const dbPath = process.env.API_DB_PATH || path.join(process.cwd(), 'data', 'server-db.json');
@@ -131,6 +118,22 @@ const openrouterModels = (process.env.OPENROUTER_FALLBACK_MODELS || openrouterMo
   .map(model => model.trim())
   .filter(Boolean);
 const openrouterReferer = process.env.OPENROUTER_HTTP_REFERER || (process.env.OPENROUTER_SITE_URL || 'https://beckonstars.app');
+
+// 媒體存儲配置
+const mediaStoragePath = process.env.MEDIA_STORAGE_PATH || path.join(process.cwd(), 'data', 'media');
+const mediaBaseUrl = process.env.MEDIA_BASE_URL || '/media';
+const mediaMaxSizeMB = Number(process.env.MEDIA_MAX_SIZE_MB || 20);
+const mediaMaxSizeBytes = mediaMaxSizeMB * 1024 * 1024;
+
+// 允許的 MIME 類型
+const ALLOWED_MIME_TYPES = {
+  'image/jpeg': { ext: 'jpg', category: 'image', maxSize: 10 * 1024 * 1024 },
+  'image/png': { ext: 'png', category: 'image', maxSize: 10 * 1024 * 1024 },
+  'image/webp': { ext: 'webp', category: 'image', maxSize: 10 * 1024 * 1024 },
+  'audio/mp4': { ext: 'm4a', category: 'audio', maxSize: 20 * 1024 * 1024 },
+  'audio/mpeg': { ext: 'mp3', category: 'audio', maxSize: 20 * 1024 * 1024 },
+  'audio/wav': { ext: 'wav', category: 'audio', maxSize: 20 * 1024 * 1024 }
+};
 
 const serverLogEntries = [];
 
@@ -264,63 +267,6 @@ function cleanLargeText(value, fallback = '') {
 function cleanTranscript(value, fallback = '') {
   if (typeof value !== 'string') return fallback;
   return value.trim().slice(0, 4000);
-}
-
-function normalizeBibleVerseText(value) {
-  return cleanText(value, '').replace(/\s+/g, ' ').trim();
-}
-
-function seededIndex(seed, length) {
-  if (!length) return 0;
-  const hash = crypto.createHash('sha256').update(String(seed)).digest();
-  return hash.readUInt32BE(0) % length;
-}
-
-const fallbackBibleVerses = [
-  { book: 43, chapter: 3, verse: 16, reference: '約翰福音 3:16' },
-  { book: 19, chapter: 23, verse: 1, reference: '詩篇 23:1' },
-  { book: 45, chapter: 12, verse: 12, reference: '羅馬書 12:12' },
-  { book: 50, chapter: 4, verse: 6, reference: '腓立比書 4:6' },
-  { book: 23, chapter: 41, verse: 10, reference: '以賽亞書 41:10' },
-  { book: 20, chapter: 3, verse: 5, reference: '箴言 3:5' },
-  { book: 40, chapter: 5, verse: 9, reference: '馬太福音 5:9' }
-];
-
-async function fetchBibleVerse(dateSeed = '') {
-  const source = 'Bolls Life Bible API';
-  const sourceUrl = 'https://bolls.life/get-random-verse/CUV/';
-  const primaryResponse = await fetch(sourceUrl);
-  if (primaryResponse.ok) {
-    const verse = await primaryResponse.json();
-    return {
-      ok: true,
-      translation: verse.translation || 'CUV',
-      book: verse.book,
-      chapter: verse.chapter,
-      verse: verse.verse,
-      reference: formatBibleReference(verse.book, verse.chapter, verse.verse),
-      text: normalizeBibleVerseText(verse.text),
-      source,
-      sourceUrl
-    };
-  }
-
-  const fallback = fallbackBibleVerses[seededIndex(dateSeed || new Date().toISOString().slice(0, 10), fallbackBibleVerses.length)];
-  const fallbackUrl = `https://bolls.life/get-verse/CUV/${fallback.book}/${fallback.chapter}/${fallback.verse}/`;
-  const fallbackResponse = await fetch(fallbackUrl);
-  if (!fallbackResponse.ok) throw new Error(`bible-api-${primaryResponse.status}-${fallbackResponse.status}`);
-  const verse = await fallbackResponse.json();
-  return {
-    ok: true,
-    translation: 'CUV',
-    book: fallback.book,
-    chapter: fallback.chapter,
-    verse: fallback.verse,
-    reference: fallback.reference,
-    text: normalizeBibleVerseText(verse.text),
-    source,
-    sourceUrl: fallbackUrl
-  };
 }
 
 function fallbackSummary(text, summaryType = 'voice') {
@@ -713,6 +659,187 @@ async function generateSummaryVideo(memories, year, month, familyId) {
   }
 }
 
+// 媒體處理函數
+function ensureMediaDir() {
+  fs.mkdirSync(mediaStoragePath, { recursive: true });
+}
+
+function sanitizeFilename(filename) {
+  return filename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 100);
+}
+
+function generateUniqueFilename(originalFilename, mimeType) {
+  const timestamp = Date.now();
+  const randomId = crypto.randomBytes(6).toString('hex');
+  const mimeInfo = ALLOWED_MIME_TYPES[mimeType];
+  const ext = mimeInfo?.ext || path.extname(originalFilename).slice(1) || 'bin';
+  return `${timestamp}_${randomId}.${ext}`;
+}
+
+async function createThumbnail(inputPath, outputPath) {
+  try {
+    await sharp(inputPath)
+      .resize(400, null, {
+        fit: 'inside',
+        withoutEnlargement: true
+      })
+      .jpeg({ quality: 85 })
+      .toFile(outputPath);
+    return true;
+  } catch (error) {
+    console.warn('[media] thumbnail generation failed:', error.message);
+    return false;
+  }
+}
+
+async function getImageDimensions(filePath) {
+  try {
+    const metadata = await sharp(filePath).metadata();
+    return { width: metadata.width, height: metadata.height };
+  } catch (error) {
+    console.warn('[media] failed to get image dimensions:', error.message);
+    return null;
+  }
+}
+
+async function handleMultipartUpload(req) {
+  ensureMediaDir();
+
+  const form = formidable({
+    maxFileSize: mediaMaxSizeBytes,
+    maxFiles: 1,
+    allowEmptyFiles: false,
+    filter: ({ mimetype }) => {
+      return ALLOWED_MIME_TYPES.hasOwnProperty(mimetype || '');
+    }
+  });
+
+  return new Promise((resolve, reject) => {
+    form.parse(req, async (err, fields, files) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+
+      const fileArray = files.file;
+      if (!fileArray || fileArray.length === 0) {
+        reject(new Error('no-file-uploaded'));
+        return;
+      }
+
+      const uploadedFile = fileArray[0];
+      const mimeType = uploadedFile.mimetype;
+      const mimeInfo = ALLOWED_MIME_TYPES[mimeType];
+
+      if (!mimeInfo) {
+        reject(new Error('invalid-mime-type'));
+        return;
+      }
+
+      if (uploadedFile.size > mimeInfo.maxSize) {
+        reject(new Error('file-too-large'));
+        return;
+      }
+
+      try {
+        const filename = generateUniqueFilename(uploadedFile.originalFilename || 'upload', mimeType);
+        const filePath = path.join(mediaStoragePath, filename);
+
+        // 移動文件到最終位置
+        await fs.promises.rename(uploadedFile.filepath, filePath);
+
+        const result = {
+          mediaUrl: `${mediaBaseUrl}/${filename}`,
+          mime: mimeType,
+          size: uploadedFile.size
+        };
+
+        // 處理圖片：生成縮圖和獲取尺寸
+        if (mimeInfo.category === 'image') {
+          const dimensions = await getImageDimensions(filePath);
+          if (dimensions) {
+            result.width = dimensions.width;
+            result.height = dimensions.height;
+          }
+
+          const thumbnailFilename = filename.replace(/\.([^.]+)$/, '_thumb.jpg');
+          const thumbnailPath = path.join(mediaStoragePath, thumbnailFilename);
+          const thumbnailCreated = await createThumbnail(filePath, thumbnailPath);
+
+          if (thumbnailCreated) {
+            result.thumbnailUrl = `${mediaBaseUrl}/${thumbnailFilename}`;
+          }
+        }
+
+        resolve(result);
+      } catch (error) {
+        reject(error);
+      }
+    });
+  });
+}
+
+async function handleBase64Upload(body) {
+  ensureMediaDir();
+
+  const { data, mime, filename } = body;
+
+  if (!data || !mime) {
+    throw new Error('missing-data-or-mime');
+  }
+
+  const mimeInfo = ALLOWED_MIME_TYPES[mime];
+  if (!mimeInfo) {
+    throw new Error('invalid-mime-type');
+  }
+
+  // 解析 base64 數據
+  let base64Data = data;
+  if (data.startsWith('data:')) {
+    const match = data.match(/^data:[^;,]+(?:;[^,]*)?,(.*)$/s);
+    if (!match) {
+      throw new Error('invalid-base64-format');
+    }
+    base64Data = match[1];
+  }
+
+  const buffer = Buffer.from(base64Data, 'base64');
+
+  if (buffer.length > mimeInfo.maxSize) {
+    throw new Error('file-too-large');
+  }
+
+  const generatedFilename = generateUniqueFilename(filename || 'upload', mime);
+  const filePath = path.join(mediaStoragePath, generatedFilename);
+
+  await fs.promises.writeFile(filePath, buffer);
+
+  const result = {
+    mediaUrl: `${mediaBaseUrl}/${generatedFilename}`,
+    mime: mime,
+    size: buffer.length
+  };
+
+  // 處理圖片：生成縮圖和獲取尺寸
+  if (mimeInfo.category === 'image') {
+    const dimensions = await getImageDimensions(filePath);
+    if (dimensions) {
+      result.width = dimensions.width;
+      result.height = dimensions.height;
+    }
+
+    const thumbnailFilename = generatedFilename.replace(/\.([^.]+)$/, '_thumb.jpg');
+    const thumbnailPath = path.join(mediaStoragePath, thumbnailFilename);
+    const thumbnailCreated = await createThumbnail(filePath, thumbnailPath);
+
+    if (thumbnailCreated) {
+      result.thumbnailUrl = `${mediaBaseUrl}/${thumbnailFilename}`;
+    }
+  }
+
+  return result;
+}
+
 function routeParts(req) {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   return {
@@ -756,6 +883,42 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // 靜態文件：媒體文件 (圖片、音訊)
+    if (req.method === 'GET' && url.pathname.startsWith('/media/')) {
+      const filename = path.basename(url.pathname);
+
+      // 安全檢查：防止路徑遍歷
+      if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+        res.writeHead(400);
+        res.end('Invalid filename');
+        return;
+      }
+
+      const filePath = path.join(mediaStoragePath, filename);
+      if (fs.existsSync(filePath)) {
+        const ext = path.extname(filePath).toLowerCase();
+        const mimeTypes = {
+          '.jpg': 'image/jpeg',
+          '.jpeg': 'image/jpeg',
+          '.png': 'image/png',
+          '.webp': 'image/webp',
+          '.m4a': 'audio/mp4',
+          '.mp3': 'audio/mpeg',
+          '.wav': 'audio/wav'
+        };
+        res.writeHead(200, {
+          'Content-Type': mimeTypes[ext] || 'application/octet-stream',
+          'Access-Control-Allow-Origin': '*',
+          'Cache-Control': 'public, max-age=31536000'
+        });
+        fs.createReadStream(filePath).pipe(res);
+        return;
+      }
+      res.writeHead(404);
+      res.end('Media not found');
+      return;
+    }
+
     if (req.method === 'OPTIONS') {
       sendNoContent(res);
       return;
@@ -780,6 +943,52 @@ const server = http.createServer(async (req, res) => {
         time: new Date().toISOString(),
         logs: serverLogEntries.slice(-limit)
       });
+      return;
+    }
+
+    // 媒體上傳
+    if (req.method === 'POST' && pathname === '/api/media/upload') {
+      // 驗證用戶身份
+      const authUser = getAuthUser(req);
+      if (!authUser) {
+        sendJson(res, 401, { error: 'unauthorized', message: '請先登入' });
+        return;
+      }
+
+      try {
+        const contentType = req.headers['content-type'] || '';
+
+        let result;
+        if (contentType.startsWith('multipart/form-data')) {
+          // 處理 multipart 上傳
+          result = await handleMultipartUpload(req);
+        } else if (contentType.startsWith('application/json')) {
+          // 處理 base64 上傳
+          const body = await readBody(req);
+          result = await handleBase64Upload(body);
+        } else {
+          sendJson(res, 400, { error: 'unsupported-content-type', message: '僅支援 multipart/form-data 或 application/json' });
+          return;
+        }
+
+        console.log(`[media] ✅ 上傳成功 [${authUser.email}] ${result.mime} ${Math.round(result.size / 1024)}KB`);
+        sendJson(res, 201, result);
+      } catch (error) {
+        console.error('[media] 上傳失敗:', error.message);
+
+        const errorMessages = {
+          'no-file-uploaded': '未上傳文件',
+          'invalid-mime-type': '不支援的文件類型',
+          'file-too-large': '文件大小超過限制',
+          'missing-data-or-mime': '缺少 data 或 mime 欄位',
+          'invalid-base64-format': '無效的 base64 格式'
+        };
+
+        const message = errorMessages[error.message] || '上傳失敗';
+        const status = error.message === 'file-too-large' ? 413 : 400;
+
+        sendJson(res, status, { error: error.message, message });
+      }
       return;
     }
 
@@ -1423,5 +1632,6 @@ server.listen(port, host, async () => {
   console.log(`🎤 Azure STT: ${azureSttKey ? `https://${azureSttRecognitionHost} (${azureSttLanguage})` : '未配置'}`);
   console.log(`🎤 LLM 轉譯: ${llmTranscribeModel}`);
   console.log(`💾 資料庫: ${dbPath}`);
+  console.log(`📁 媒體存儲: ${mediaStoragePath} (最大 ${mediaMaxSizeMB}MB)`);
   console.log(`${'='.repeat(50)}\n`);
 });
