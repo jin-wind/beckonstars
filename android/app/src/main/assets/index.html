@@ -157,6 +157,7 @@
             // 用戶認證
             authToken: null,         // JWT Token
             currentUser: null,       // 用戶資訊 { userId, email, name, picture, families }
+            googleSignInLoading: false,
 
             currentTab: 'calendar',  // 'calendar', 'chat', 'rewards'
             calendarMode: 'tear-off',// 'tear-off', 'monthly'
@@ -713,6 +714,7 @@
                     pushStatus: '未開啟推送',
                     pushTokenCount: saved.pushTokenCount || 0,
                     pushTokenPreview: saved.pushTokenPreview || '',
+                    googleSignInLoading: false,
                     voiceRecording: createIdleVoiceRecordingState()
                 });
             } catch (error) {
@@ -732,6 +734,7 @@
                 data.selectedDate = null;
                 data.pendingMemoryImage = '';
                 data.pushStatus = '';
+                data.googleSignInLoading = false;
                 data.voiceRecording = createIdleVoiceRecordingState();
                 // 保留最近的數據，避免 localStorage 過大
                 data.messages = (state.messages || []).slice(-50).map(m => ({
@@ -771,12 +774,15 @@
                 ...options,
                 headers
             });
+            const payload = response.status === 204 ? null : await response.json().catch(() => null);
             if (!response.ok) {
                 const error = new Error(`server-${response.status}`);
                 error.status = response.status;
+                error.code = payload?.error || '';
+                error.serverMessage = payload?.message || '';
                 throw error;
             }
-            return response.status === 204 ? null : response.json();
+            return payload;
         }
 
         function refreshServerLogs() {
@@ -835,6 +841,67 @@
 
         // --- 電郵/密碼認證 ---
 
+        async function handleGoogleCredentialResponse(response) {
+            const credential = response?.credential || '';
+            if (!credential) return;
+
+            try {
+                state.googleSignInLoading = true;
+                state.errorMsg = '';
+                render();
+                const result = await serverApi('/api/auth/google', {
+                    method: 'POST',
+                    body: JSON.stringify({ credential })
+                });
+                state.googleSignInLoading = false;
+                handleAuthSuccess(result);
+            } catch (error) {
+                console.error('[auth] Google login failed:', error);
+                state.googleSignInLoading = false;
+                if (error.status === 503) {
+                    state.errorMsg = 'Google 登入尚未設定';
+                } else if (error.status === 409) {
+                    state.errorMsg = error.serverMessage || '此電郵已綁定另一個 Google 帳號';
+                } else if (error.status === 401 || error.status === 400) {
+                    state.errorMsg = error.serverMessage || 'Google 登入驗證失敗，請重新登入';
+                } else {
+                    state.errorMsg = error.serverMessage || 'Google 登入失敗，請稍後再試';
+                }
+                render();
+            }
+        }
+
+        function startAndroidGoogleLogin() {
+            if (state.googleSignInLoading) return;
+            if (!isAndroidApk() || !window.BeckonStarsAndroid?.startGoogleSignIn) {
+                state.errorMsg = 'Google 登入需要在 Android APK 內使用';
+                render();
+                return;
+            }
+
+            state.googleSignInLoading = true;
+            state.errorMsg = '';
+            render();
+            try {
+                window.BeckonStarsAndroid.startGoogleSignIn();
+            } catch (error) {
+                console.error('[auth] Android Google login failed to start:', error);
+                state.googleSignInLoading = false;
+                state.errorMsg = '無法啟動 Google 登入，請稍後再試';
+                render();
+            }
+        }
+
+        window.handleAndroidGoogleCredential = credential => {
+            handleGoogleCredentialResponse({ credential });
+        };
+
+        window.handleAndroidGoogleError = message => {
+            state.googleSignInLoading = false;
+            state.errorMsg = message || 'Google 登入失敗，請稍後再試';
+            render();
+        };
+
         function handleAuthSuccess(result) {
             state.authToken = result.token;
             state.currentUser = result.user;
@@ -887,12 +954,14 @@
                 handleAuthSuccess(result);
             } catch (error) {
                 console.error('[auth] Login failed:', error);
-                if (error.status === 401) {
+                if (error.code === 'password-login-unavailable') {
+                    state.errorMsg = '此帳號使用 Google 登入';
+                } else if (error.status === 401) {
                     state.errorMsg = '電郵或密碼不正確';
                 } else if (error.status === 0) {
                     state.errorMsg = '無法連接到伺服器，請檢查網絡連接';
                 } else {
-                    state.errorMsg = '登入失敗，請稍後再試';
+                    state.errorMsg = error.serverMessage || '登入失敗，請稍後再試';
                 }
                 render();
             }
@@ -961,6 +1030,9 @@
             state.authToken = null;
             state.currentUser = null;
             state.authUid = null;
+            try {
+                window.BeckonStarsAndroid?.clearGoogleCredentialState?.();
+            } catch (ignored) {}
             localStorage.removeItem('beckon-stars-auth-token');
             localStorage.removeItem('beckon-stars-user');
         }
@@ -1173,6 +1245,30 @@
             }
         }
 
+        async function uploadMediaFile(file) {
+            if (!file || state.backendMode !== 'server') return null;
+            try {
+                const dataUrl = await readFileAsDataUrl(file);
+                const result = await serverApi('/api/media/upload', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        data: dataUrl,
+                        mime: file.type,
+                        filename: file.name
+                    })
+                });
+                return {
+                    mediaUrl: result.mediaUrl,
+                    thumbnailUrl: result.thumbnailUrl || result.mediaUrl,
+                    width: result.width,
+                    height: result.height
+                };
+            } catch (error) {
+                console.warn('Media upload failed', error);
+                throw error;
+            }
+        }
+
         async function registerPwa() {
             if (isAndroidApk()) return;
             if (!('serviceWorker' in navigator)) return;
@@ -1376,6 +1472,8 @@
                 childId: data.childId || 'child_1',
                 uid: data.uid || data.senderId || '',
                 img: data.img || null,
+                imgUrl: data.imgUrl || null,
+                thumbnailUrl: data.thumbnailUrl || null,
                 audio: data.audio || null,
                 audioMime: data.audioMime || '',
                 audioDurationMs: data.audioDurationMs || 0,
@@ -1424,7 +1522,9 @@
                 childName: data.childName || '家庭成員',
                 type: data.type || 'text',
                 content: data.content || '',
-                img: data.img || null
+                img: data.img || null,
+                imgUrl: data.imgUrl || null,
+                thumbnailUrl: data.thumbnailUrl || null
             };
         }
 
@@ -1675,6 +1775,19 @@
                         <div class="flex mb-6 bg-gray-100 rounded-xl p-1">
                             <button class="action-btn flex-1 py-2 rounded-lg bs-text-sm font-medium transition-colors ${isLogin ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}" data-action="switchAuthMode" data-mode="login">登入</button>
                             <button class="action-btn flex-1 py-2 rounded-lg bs-text-sm font-medium transition-colors ${!isLogin ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}" data-action="switchAuthMode" data-mode="register">註冊</button>
+                        </div>
+
+                        <div class="mb-4">
+                            <button class="action-btn w-full min-h-[44px] bg-white text-gray-700 bs-text-base font-bold py-3 px-6 rounded-xl border border-gray-200 shadow-sm hover:bg-gray-50 transition-colors flex items-center justify-center gap-3" data-action="androidGoogleLogin" ${state.googleSignInLoading ? 'disabled' : ''}>
+                                <i class="fa-brands fa-google text-red-500"></i>
+                                <span>${state.googleSignInLoading ? 'Google 登入中...' : '使用 Google 登入'}</span>
+                            </button>
+                        </div>
+
+                        <div class="flex items-center gap-3 mb-4">
+                            <div class="h-px bg-gray-200 flex-1"></div>
+                            <span class="bs-text-xs text-gray-400">或使用電郵</span>
+                            <div class="h-px bg-gray-200 flex-1"></div>
                         </div>
 
                         ${!isLogin ? `
@@ -2305,8 +2418,19 @@
                         const file = event.target.files?.[0];
                         if (!file) return;
                         event.target.value = '';
-                        const img = await readFileAsDataUrl(file);
-                        await sendChatMessage({ type: 'photo', content: '', img });
+                        if (state.backendMode === 'server') {
+                            try {
+                                const uploaded = await uploadMediaFile(file);
+                                await sendChatMessage({ type: 'photo', content: '', imgUrl: uploaded.mediaUrl, thumbnailUrl: uploaded.thumbnailUrl });
+                            } catch (err) {
+                                console.warn('Image upload failed, using base64', err);
+                                const img = await readFileAsDataUrl(file);
+                                await sendChatMessage({ type: 'photo', content: '', img });
+                            }
+                        } else {
+                            const img = await readFileAsDataUrl(file);
+                            await sendChatMessage({ type: 'photo', content: '', img });
+                        }
                     });
                 }
             } else {
@@ -2851,6 +2975,9 @@
                     else if (action === 'register') {
                         handleRegister();
                     }
+                    else if (action === 'androidGoogleLogin') {
+                        startAndroidGoogleLogin();
+                    }
                     else if (action === 'setRole') {
                         state.role = newBtn.getAttribute('data-role');
                         localStorage.setItem('beckon-stars-role', state.role);
@@ -3033,7 +3160,7 @@
                             if (error.status === 401) {
                                 state.errorMsg = '舊密碼不正確';
                             } else {
-                                state.errorMsg = '修改失敗，請稍後再試';
+                                state.errorMsg = error.serverMessage || '修改失敗，請稍後再試';
                             }
                             render();
                         }
@@ -3152,6 +3279,19 @@
                             return;
                         }
 
+                        let imgUrl = null;
+                        if (state.pendingMemoryType === 'photo' && state.pendingMemoryImage && state.backendMode === 'server') {
+                            try {
+                                const blob = await fetch(state.pendingMemoryImage).then(r => r.blob());
+                                const file = new File([blob], 'memory.jpg', { type: blob.type });
+                                const uploaded = await uploadMediaFile(file);
+                                imgUrl = uploaded?.mediaUrl || state.pendingMemoryImage;
+                            } catch (err) {
+                                console.warn('Media upload failed, using base64', err);
+                                imgUrl = state.pendingMemoryImage;
+                            }
+                        }
+
                         const memoryData = {
                             uid: state.authUid || 'local',
                             date: today.getDate(),
@@ -3161,7 +3301,7 @@
                             childName: state.userName || (state.role === 'child' ? '我' : '媽媽'),
                             type: state.pendingMemoryType,
                             content,
-                            img: state.pendingMemoryType === 'photo' ? (state.pendingMemoryImage || null) : null
+                            img: imgUrl || (state.pendingMemoryType === 'photo' ? state.pendingMemoryImage : null)
                         };
 
                         if (state.backendMode === 'server' && state.familyId) {
@@ -4074,7 +4214,7 @@
             const chatInput = document.getElementById('chatInput');
             const isTextMessage = !override;
             const content = override ? (override.content || '') : (chatInput?.value || chatDraft).trim();
-            const hasImage = override?.img;
+            const hasImage = override?.img || override?.imgUrl;
             if (!content && !hasImage) return;
             if (isTextMessage) {
                 chatDraft = '';
@@ -4090,6 +4230,8 @@
                 type: override?.type || 'text',
                 content,
                 img: override?.img || null,
+                imgUrl: override?.imgUrl || null,
+                thumbnailUrl: override?.thumbnailUrl || null,
                 audio: override?.audio || null,
                 audioMime: override?.audioMime || '',
                 audioDurationMs: override?.audioDurationMs || 0,

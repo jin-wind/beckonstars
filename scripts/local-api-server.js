@@ -37,6 +37,13 @@ loadEnvFile();
 const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
 const JWT_EXPIRES_IN = '30d';
 const BCRYPT_ROUNDS = 10;
+const GOOGLE_CLIENT_ID = (process.env.GOOGLE_CLIENT_ID || '').trim();
+const GOOGLE_JWKS_URL = 'https://www.googleapis.com/oauth2/v3/certs';
+const GOOGLE_TOKEN_ISSUERS = new Set(['https://accounts.google.com', 'accounts.google.com']);
+let googleJwkCache = {
+  expiresAt: 0,
+  keys: new Map()
+};
 
 // 生成 JWT Token
 function generateToken(userId, email) {
@@ -58,6 +65,178 @@ function getAuthUser(req) {
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
   if (!token) return null;
   return verifyToken(token);
+}
+
+function decodeBase64Url(value) {
+  const padded = value.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(value.length / 4) * 4, '=');
+  return Buffer.from(padded, 'base64');
+}
+
+function parseJwtPart(value) {
+  return JSON.parse(decodeBase64Url(value).toString('utf8'));
+}
+
+function parseCacheMaxAge(cacheControl) {
+  const match = String(cacheControl || '').match(/max-age=(\d+)/i);
+  return match ? Number(match[1]) : 3600;
+}
+
+async function loadGoogleJwks(forceRefresh = false) {
+  const now = Date.now();
+  if (!forceRefresh && googleJwkCache.keys.size > 0 && googleJwkCache.expiresAt > now) {
+    return googleJwkCache.keys;
+  }
+
+  let response;
+  try {
+    response = await fetch(GOOGLE_JWKS_URL);
+  } catch (error) {
+    throw new Error('google-jwks-unavailable');
+  }
+  if (!response.ok) {
+    throw new Error('google-jwks-unavailable');
+  }
+
+  const payload = await response.json();
+  const keys = new Map();
+  for (const jwk of payload.keys || []) {
+    if (jwk.kid) keys.set(jwk.kid, jwk);
+  }
+
+  googleJwkCache = {
+    keys,
+    expiresAt: now + parseCacheMaxAge(response.headers.get('cache-control')) * 1000
+  };
+  return keys;
+}
+
+async function verifyGoogleIdToken(credential) {
+  if (!GOOGLE_CLIENT_ID) {
+    const error = new Error('google-client-not-configured');
+    error.status = 503;
+    throw error;
+  }
+
+  if (typeof credential !== 'string' || credential.split('.').length !== 3) {
+    const error = new Error('invalid-google-credential');
+    error.status = 400;
+    throw error;
+  }
+
+  const [encodedHeader, encodedPayload, encodedSignature] = credential.split('.');
+  let header;
+  let payload;
+  try {
+    header = parseJwtPart(encodedHeader);
+    payload = parseJwtPart(encodedPayload);
+  } catch (error) {
+    const invalid = new Error('invalid-google-credential');
+    invalid.status = 400;
+    throw invalid;
+  }
+
+  if (header.alg !== 'RS256' || !header.kid) {
+    const error = new Error('unsupported-google-token');
+    error.status = 401;
+    throw error;
+  }
+
+  let jwk = (await loadGoogleJwks()).get(header.kid);
+  if (!jwk) {
+    jwk = (await loadGoogleJwks(true)).get(header.kid);
+  }
+  if (!jwk) {
+    const error = new Error('google-key-not-found');
+    error.status = 401;
+    throw error;
+  }
+
+  const verifier = crypto.createVerify('RSA-SHA256');
+  verifier.update(`${encodedHeader}.${encodedPayload}`);
+  verifier.end();
+  const publicKey = crypto.createPublicKey({ key: jwk, format: 'jwk' });
+  const isValidSignature = verifier.verify(publicKey, decodeBase64Url(encodedSignature));
+  if (!isValidSignature) {
+    const error = new Error('invalid-google-signature');
+    error.status = 401;
+    throw error;
+  }
+
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  if (!GOOGLE_TOKEN_ISSUERS.has(payload.iss)) {
+    const error = new Error('invalid-google-issuer');
+    error.status = 401;
+    throw error;
+  }
+  if (payload.aud !== GOOGLE_CLIENT_ID) {
+    const error = new Error('invalid-google-audience');
+    error.status = 401;
+    throw error;
+  }
+  if (!payload.exp || Number(payload.exp) <= nowSeconds) {
+    const error = new Error('expired-google-token');
+    error.status = 401;
+    throw error;
+  }
+  if (payload.iat && Number(payload.iat) > nowSeconds + 300) {
+    const error = new Error('invalid-google-issued-at');
+    error.status = 401;
+    throw error;
+  }
+  if (!payload.sub || !payload.email || !(payload.email_verified === true || payload.email_verified === 'true')) {
+    const error = new Error('unverified-google-account');
+    error.status = 401;
+    throw error;
+  }
+
+  return {
+    sub: String(payload.sub),
+    email: String(payload.email).trim().toLowerCase(),
+    name: cleanText(payload.name || payload.given_name || String(payload.email).split('@')[0], 'Google 用戶'),
+    picture: cleanText(payload.picture || '')
+  };
+}
+
+function normalizeAuthDb(db) {
+  if (!db.users) db.users = {};
+  if (!db.usersByEmail) db.usersByEmail = {};
+  if (!db.usersByGoogleSub) db.usersByGoogleSub = {};
+
+  for (const user of Object.values(db.users)) {
+    if (user?.email && !db.usersByEmail[user.email]) {
+      db.usersByEmail[user.email] = user.userId;
+    }
+    if (user?.googleSub && !db.usersByGoogleSub[user.googleSub]) {
+      db.usersByGoogleSub[user.googleSub] = user.userId;
+    }
+  }
+}
+
+function publicUser(user) {
+  return {
+    userId: user.userId,
+    email: user.email,
+    name: user.name,
+    picture: user.picture || '',
+    families: user.families || []
+  };
+}
+
+function googleAuthErrorMessage(code) {
+  const messages = {
+    'google-client-not-configured': 'Google 登入尚未設定，請在伺服器設定 GOOGLE_CLIENT_ID',
+    'invalid-google-credential': 'Google 登入資料無效，請重新登入',
+    'unsupported-google-token': 'Google 登入資料格式不支援',
+    'google-jwks-unavailable': '暫時無法驗證 Google 登入，請稍後再試',
+    'google-key-not-found': '暫時無法驗證 Google 登入，請稍後再試',
+    'invalid-google-signature': 'Google 登入驗證失敗，請重新登入',
+    'invalid-google-issuer': 'Google 登入來源無效',
+    'invalid-google-audience': 'Google 登入設定不匹配，請檢查 GOOGLE_CLIENT_ID',
+    'expired-google-token': 'Google 登入已過期，請重新登入',
+    'invalid-google-issued-at': 'Google 登入時間無效，請重新登入',
+    'unverified-google-account': '請先完成 Google 電郵驗證'
+  };
+  return messages[code] || 'Google 登入失敗，請稍後再試';
 }
 
 // 簡體轉繁體映射（黃曆宜忌常用詞）
@@ -139,21 +318,23 @@ const serverLogEntries = [];
 
 function formatServerLogValue(value) {
   if (value instanceof Error) return value.stack || value.message;
-  if (typeof value === 'string') return value;
+  if (typeof value === 'string') return value.slice(0, 500);
   try {
-    return JSON.stringify(value);
+    const json = JSON.stringify(value);
+    return json.length > 500 ? json.slice(0, 497) + '...' : json;
   } catch (error) {
-    return String(value);
+    return String(value).slice(0, 500);
   }
 }
 
 function appendServerLog(level, args) {
+  const message = args.map(formatServerLogValue).join(' ');
   serverLogEntries.push({
     time: new Date().toISOString(),
     level,
-    message: args.map(formatServerLogValue).join(' ')
+    message: message.slice(0, 1000)
   });
-  if (serverLogEntries.length > 200) serverLogEntries.shift();
+  if (serverLogEntries.length > 100) serverLogEntries.shift();
 }
 
 ['log', 'warn', 'error'].forEach(level => {
@@ -851,7 +1032,8 @@ function routeParts(req) {
 function logRequest(req, status, startTime) {
   const duration = Date.now() - startTime;
   const ts = new Date().toISOString().slice(11, 19);
-  console.log(`[${ts}] ${req.method} ${req.url} → ${status} (${duration}ms)`);
+  const url = req.url.length > 100 ? req.url.slice(0, 97) + '...' : req.url;
+  console.log(`[${ts}] ${req.method} ${url} → ${status} (${duration}ms)`);
 }
 
 const server = http.createServer(async (req, res) => {
@@ -931,7 +1113,8 @@ const server = http.createServer(async (req, res) => {
         ok: true,
         name: 'beckon-stars-local-api',
         time: new Date().toISOString(),
-        auth: true
+        auth: true,
+        googleAuth: Boolean(GOOGLE_CLIENT_ID)
       });
       return;
     }
@@ -1013,8 +1196,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       const db = await readDb();
-      if (!db.users) db.users = {};
-      if (!db.usersByEmail) db.usersByEmail = {};
+      normalizeAuthDb(db);
 
       if (db.usersByEmail[email]) {
         sendJson(res, 409, { error: 'email-exists', message: '此電郵已註冊，請直接登入' });
@@ -1046,6 +1228,81 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // Google 登入 / 自動註冊
+    if (req.method === 'POST' && pathname === '/api/auth/google') {
+      const body = await readBody(req);
+      let googleUser;
+      try {
+        googleUser = await verifyGoogleIdToken(body.credential || body.idToken || '');
+      } catch (error) {
+        const status = error.status || 401;
+        sendJson(res, status, {
+          error: error.message || 'google-auth-failed',
+          message: googleAuthErrorMessage(error.message)
+        });
+        return;
+      }
+
+      const db = await readDb();
+      normalizeAuthDb(db);
+
+      let userId = db.usersByGoogleSub[googleUser.sub] || db.usersByEmail[googleUser.email];
+      let user = userId ? db.users[userId] : null;
+      const now = new Date().toISOString();
+      let created = false;
+
+      if (user?.googleSub && user.googleSub !== googleUser.sub) {
+        sendJson(res, 409, {
+          error: 'google-account-conflict',
+          message: '此電郵已綁定另一個 Google 帳號'
+        });
+        return;
+      }
+
+      if (!user) {
+        userId = crypto.randomUUID();
+        user = {
+          userId,
+          email: googleUser.email,
+          passwordHash: null,
+          googleSub: googleUser.sub,
+          authProviders: {
+            google: { sub: googleUser.sub, linkedAt: now }
+          },
+          name: googleUser.name,
+          picture: googleUser.picture,
+          createdAt: now,
+          updatedAt: now,
+          lastLoginAt: now,
+          families: []
+        };
+        db.users[userId] = user;
+        created = true;
+      } else {
+        user.googleSub = googleUser.sub;
+        user.authProviders = user.authProviders || {};
+        user.authProviders.google = user.authProviders.google || { sub: googleUser.sub, linkedAt: now };
+        user.authProviders.google.sub = googleUser.sub;
+        if (!user.name) user.name = googleUser.name;
+        if (!user.picture && googleUser.picture) user.picture = googleUser.picture;
+        user.updatedAt = now;
+        user.lastLoginAt = now;
+      }
+
+      db.usersByEmail[user.email] = user.userId;
+      db.usersByGoogleSub[googleUser.sub] = user.userId;
+      await writeDb(db);
+      console.log(`[auth] ${created ? '🆕 Google 新用戶' : '🔑 Google 登入'}: ${user.name} (${user.email})`);
+
+      const token = generateToken(user.userId, user.email);
+      sendJson(res, created ? 201 : 200, {
+        ok: true,
+        token,
+        user: publicUser(user)
+      });
+      return;
+    }
+
     // 用戶登入
     if (req.method === 'POST' && pathname === '/api/auth/login') {
       const body = await readBody(req);
@@ -1058,11 +1315,17 @@ const server = http.createServer(async (req, res) => {
       }
 
       const db = await readDb();
+      normalizeAuthDb(db);
       const userId = db.usersByEmail?.[email];
       const user = userId ? db.users?.[userId] : null;
 
       if (!user) {
         sendJson(res, 401, { error: 'invalid-credentials', message: '電郵或密碼不正確' });
+        return;
+      }
+
+      if (!user.passwordHash) {
+        sendJson(res, 401, { error: 'password-login-unavailable', message: '此帳號使用 Google 登入' });
         return;
       }
 
@@ -1080,13 +1343,7 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 200, {
         ok: true,
         token,
-        user: {
-          userId: user.userId,
-          email: user.email,
-          name: user.name,
-          picture: user.picture || '',
-          families: user.families || []
-        }
+        user: publicUser(user)
       });
       return;
     }
@@ -1192,6 +1449,11 @@ const server = http.createServer(async (req, res) => {
       const user = db.users?.[authUser.userId];
       if (!user) {
         sendJson(res, 404, { error: 'user-not-found' });
+        return;
+      }
+
+      if (!user.passwordHash) {
+        sendJson(res, 400, { error: 'password-login-unavailable', message: '此帳號目前使用 Google 登入' });
         return;
       }
 

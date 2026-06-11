@@ -117,7 +117,7 @@ Important server behavior:
 Key endpoints currently implemented:
 
 - `GET /api/health`
-- `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/me`, `PUT /api/auth/profile`, `PUT /api/auth/password`
+- `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/google`, `GET /api/auth/me`, `PUT /api/auth/profile`, `PUT /api/auth/password`
 - `GET /api/almanac`
 - `POST /api/summarize`
 - `POST /api/families/:familyId/connect`
@@ -147,6 +147,7 @@ Important front-end behavior:
 - `selfHostedApiBase` in `android/app/src/main/assets/index.html` is the server URL used by the APK/web app. Current value is a hard-coded remote HTTP server.
 - `serverApi()` adds JSON headers and the JWT bearer token from `state.authToken`.
 - Auth state and app state are persisted in localStorage under keys such as `beckon-stars-auth-token`, `beckon-stars-user`, and `beckon-stars-demo-state-v1`.
+- Google login is APK-native only: Android Credential Manager returns a Google ID token to the HTML app through `BeckonStarsAndroid`, then the backend verifies it at `POST /api/auth/google` before issuing the app JWT.
 - `subscribeFamilyMessages()` and `subscribeFamilyMemories()` poll the server every 3s and 5s respectively; there is no websocket layer.
 - PWA install and push-notification paths are disabled or stubbed in APK contexts; Android notification behavior goes through `BeckonStarsAndroid`.
 - Chat rendering has incremental refresh logic (`refreshVisibleContent()`) to avoid full chat rerenders while polling.
