@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -File .claude/hooks/auto-commit.ps1",
+            "shell": "powershell"
+          }
+        ]
+      }
+    ]
+  }
+}
