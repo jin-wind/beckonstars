@@ -14,6 +14,7 @@ import android.media.MediaRecorder;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.CancellationSignal;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.MediaStore;
@@ -21,6 +22,17 @@ import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
 import androidx.core.content.FileProvider;
+import androidx.credentials.ClearCredentialStateRequest;
+import androidx.credentials.Credential;
+import androidx.credentials.CredentialManager;
+import androidx.credentials.CredentialManagerCallback;
+import androidx.credentials.CustomCredential;
+import androidx.credentials.GetCredentialRequest;
+import androidx.credentials.GetCredentialResponse;
+import androidx.credentials.exceptions.ClearCredentialException;
+import androidx.credentials.exceptions.GetCredentialException;
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption;
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential;
 import android.util.Base64;
 import android.util.Log;
 import android.view.View;
@@ -42,6 +54,8 @@ import java.io.PrintWriter;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import org.json.JSONObject;
 
 public class MainActivity extends Activity {
@@ -68,11 +82,15 @@ public class MainActivity extends Activity {
     private String mediaApiBase = "";
     private String mediaAuthToken = "";
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private CredentialManager credentialManager;
+    private ExecutorService credentialExecutor;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         createNotificationChannel();
+        credentialManager = CredentialManager.create(this);
+        credentialExecutor = Executors.newSingleThreadExecutor();
 
         webView = new WebView(this);
         setContentView(webView);
@@ -232,6 +250,10 @@ public class MainActivity extends Activity {
             speechRecognizer.destroy();
             speechRecognizer = null;
         }
+        if (credentialExecutor != null) {
+            credentialExecutor.shutdownNow();
+            credentialExecutor = null;
+        }
         super.onDestroy();
     }
 
@@ -273,6 +295,93 @@ public class MainActivity extends Activity {
 
         NotificationManager manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (manager != null) manager.notify((int) System.currentTimeMillis(), builder.build());
+    }
+
+    private boolean hasConfiguredGoogleClientId() {
+        String clientId = getString(R.string.google_web_client_id).trim();
+        return !clientId.isEmpty()
+            && clientId.endsWith(".apps.googleusercontent.com")
+            && !clientId.startsWith("your-");
+    }
+
+    private void startGoogleSignInInternal() {
+        if (credentialManager == null) {
+            postGoogleError("Google 登入暫時不可用，請稍後再試。");
+            return;
+        }
+        if (!hasConfiguredGoogleClientId()) {
+            postGoogleError("Google 登入尚未設定 Web Client ID。");
+            return;
+        }
+
+        String serverClientId = getString(R.string.google_web_client_id).trim();
+        GetGoogleIdOption googleIdOption = new GetGoogleIdOption.Builder()
+            .setFilterByAuthorizedAccounts(false)
+            .setServerClientId(serverClientId)
+            .setAutoSelectEnabled(true)
+            .build();
+        GetCredentialRequest request = new GetCredentialRequest.Builder()
+            .addCredentialOption(googleIdOption)
+            .build();
+
+        credentialManager.getCredentialAsync(
+            this,
+            request,
+            new CancellationSignal(),
+            credentialExecutor,
+            new CredentialManagerCallback<GetCredentialResponse, GetCredentialException>() {
+                @Override
+                public void onResult(GetCredentialResponse result) {
+                    handleGoogleCredentialResult(result);
+                }
+
+                @Override
+                public void onError(GetCredentialException error) {
+                    Log.w(TAG, "Google credential failed", error);
+                    postGoogleError("Google 登入取消或失敗，請再試一次。");
+                }
+            }
+        );
+    }
+
+    private void handleGoogleCredentialResult(GetCredentialResponse result) {
+        Credential credential = result.getCredential();
+        if (credential instanceof CustomCredential) {
+            CustomCredential customCredential = (CustomCredential) credential;
+            if (GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL.equals(customCredential.getType())) {
+                try {
+                    GoogleIdTokenCredential googleCredential = GoogleIdTokenCredential.createFrom(customCredential.getData());
+                    String idToken = googleCredential.getIdToken();
+                    if (idToken != null && !idToken.trim().isEmpty()) {
+                        postGoogleCredential(idToken);
+                        return;
+                    }
+                } catch (Exception error) {
+                    Log.w(TAG, "Unable to parse Google ID token", error);
+                }
+            }
+        }
+        postGoogleError("未能取得 Google 登入資料，請再試一次。");
+    }
+
+    private void clearGoogleCredentialStateInternal() {
+        if (credentialManager == null) return;
+        credentialManager.clearCredentialStateAsync(
+            new ClearCredentialStateRequest(),
+            new CancellationSignal(),
+            credentialExecutor,
+            new CredentialManagerCallback<Void, ClearCredentialException>() {
+                @Override
+                public void onResult(Void result) {
+                    Log.i(TAG, "Google credential state cleared");
+                }
+
+                @Override
+                public void onError(ClearCredentialException error) {
+                    Log.w(TAG, "Unable to clear Google credential state", error);
+                }
+            }
+        );
     }
 
     private void startSpeechRecognitionInternal() {
@@ -634,6 +743,22 @@ public class MainActivity extends Activity {
         return output.toByteArray();
     }
 
+    private void postGoogleCredential(String idToken) {
+        if (webView == null) return;
+        webView.post(() -> webView.evaluateJavascript(
+            "window.handleAndroidGoogleCredential && window.handleAndroidGoogleCredential(" + JSONObject.quote(idToken) + ")",
+            null
+        ));
+    }
+
+    private void postGoogleError(String message) {
+        if (webView == null) return;
+        webView.post(() -> webView.evaluateJavascript(
+            "window.handleAndroidGoogleError && window.handleAndroidGoogleError(" + JSONObject.quote(message) + ")",
+            null
+        ));
+    }
+
     private void postVoiceRecording(String payloadJson) {
         if (webView == null) return;
         webView.post(() -> webView.evaluateJavascript(
@@ -686,6 +811,16 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void showLocalNotification(String title, String body) {
             runOnUiThread(() -> showNotification(title, body));
+        }
+
+        @JavascriptInterface
+        public void startGoogleSignIn() {
+            runOnUiThread(() -> startGoogleSignInInternal());
+        }
+
+        @JavascriptInterface
+        public void clearGoogleCredentialState() {
+            runOnUiThread(() -> clearGoogleCredentialStateInternal());
         }
 
         @JavascriptInterface

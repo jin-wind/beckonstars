@@ -108,10 +108,13 @@ git push origin v1.0.0
 編輯 `scripts/local-api-server.js`，支持的端點：
 
 - `POST /api/families/:familyId/connect` - 連接家庭
+- `POST /api/auth/google` - Google 登入 / 自動註冊
 - `GET /api/families/:familyId/messages` - 獲取訊息
 - `POST /api/families/:familyId/messages` - 發送訊息
 - `GET /api/families/:familyId/memories` - 獲取回憶
 - `POST /api/families/:familyId/memories` - 保存回憶
+
+Google 登入只支援 Android APK 原生流程：APK 透過 Android Credential Manager 取得 Google ID token，再交給 `POST /api/auth/google` 換取本 app 的 JWT。伺服器 `.env` 的 `GOOGLE_CLIENT_ID` 必須和 APK `google_web_client_id` 使用同一個 Web OAuth Client ID。
 
 ### 遠端伺服器部署
 

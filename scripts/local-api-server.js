@@ -7,6 +7,8 @@ const { execFileSync } = require('child_process');
 const { Lunar, Solar } = require('lunar-javascript');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const formidable = require('formidable');
+const sharp = require('sharp');
 
 function loadEnvFile(filePath = path.join(process.cwd(), '.env')) {
   if (!fs.existsSync(filePath)) return;
@@ -35,6 +37,13 @@ loadEnvFile();
 const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
 const JWT_EXPIRES_IN = '30d';
 const BCRYPT_ROUNDS = 10;
+const GOOGLE_CLIENT_ID = (process.env.GOOGLE_CLIENT_ID || '').trim();
+const GOOGLE_JWKS_URL = 'https://www.googleapis.com/oauth2/v3/certs';
+const GOOGLE_TOKEN_ISSUERS = new Set(['https://accounts.google.com', 'accounts.google.com']);
+let googleJwkCache = {
+  expiresAt: 0,
+  keys: new Map()
+};
 
 // 生成 JWT Token
 function generateToken(userId, email) {
@@ -56,6 +65,178 @@ function getAuthUser(req) {
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
   if (!token) return null;
   return verifyToken(token);
+}
+
+function decodeBase64Url(value) {
+  const padded = value.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(value.length / 4) * 4, '=');
+  return Buffer.from(padded, 'base64');
+}
+
+function parseJwtPart(value) {
+  return JSON.parse(decodeBase64Url(value).toString('utf8'));
+}
+
+function parseCacheMaxAge(cacheControl) {
+  const match = String(cacheControl || '').match(/max-age=(\d+)/i);
+  return match ? Number(match[1]) : 3600;
+}
+
+async function loadGoogleJwks(forceRefresh = false) {
+  const now = Date.now();
+  if (!forceRefresh && googleJwkCache.keys.size > 0 && googleJwkCache.expiresAt > now) {
+    return googleJwkCache.keys;
+  }
+
+  let response;
+  try {
+    response = await fetch(GOOGLE_JWKS_URL);
+  } catch (error) {
+    throw new Error('google-jwks-unavailable');
+  }
+  if (!response.ok) {
+    throw new Error('google-jwks-unavailable');
+  }
+
+  const payload = await response.json();
+  const keys = new Map();
+  for (const jwk of payload.keys || []) {
+    if (jwk.kid) keys.set(jwk.kid, jwk);
+  }
+
+  googleJwkCache = {
+    keys,
+    expiresAt: now + parseCacheMaxAge(response.headers.get('cache-control')) * 1000
+  };
+  return keys;
+}
+
+async function verifyGoogleIdToken(credential) {
+  if (!GOOGLE_CLIENT_ID) {
+    const error = new Error('google-client-not-configured');
+    error.status = 503;
+    throw error;
+  }
+
+  if (typeof credential !== 'string' || credential.split('.').length !== 3) {
+    const error = new Error('invalid-google-credential');
+    error.status = 400;
+    throw error;
+  }
+
+  const [encodedHeader, encodedPayload, encodedSignature] = credential.split('.');
+  let header;
+  let payload;
+  try {
+    header = parseJwtPart(encodedHeader);
+    payload = parseJwtPart(encodedPayload);
+  } catch (error) {
+    const invalid = new Error('invalid-google-credential');
+    invalid.status = 400;
+    throw invalid;
+  }
+
+  if (header.alg !== 'RS256' || !header.kid) {
+    const error = new Error('unsupported-google-token');
+    error.status = 401;
+    throw error;
+  }
+
+  let jwk = (await loadGoogleJwks()).get(header.kid);
+  if (!jwk) {
+    jwk = (await loadGoogleJwks(true)).get(header.kid);
+  }
+  if (!jwk) {
+    const error = new Error('google-key-not-found');
+    error.status = 401;
+    throw error;
+  }
+
+  const verifier = crypto.createVerify('RSA-SHA256');
+  verifier.update(`${encodedHeader}.${encodedPayload}`);
+  verifier.end();
+  const publicKey = crypto.createPublicKey({ key: jwk, format: 'jwk' });
+  const isValidSignature = verifier.verify(publicKey, decodeBase64Url(encodedSignature));
+  if (!isValidSignature) {
+    const error = new Error('invalid-google-signature');
+    error.status = 401;
+    throw error;
+  }
+
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  if (!GOOGLE_TOKEN_ISSUERS.has(payload.iss)) {
+    const error = new Error('invalid-google-issuer');
+    error.status = 401;
+    throw error;
+  }
+  if (payload.aud !== GOOGLE_CLIENT_ID) {
+    const error = new Error('invalid-google-audience');
+    error.status = 401;
+    throw error;
+  }
+  if (!payload.exp || Number(payload.exp) <= nowSeconds) {
+    const error = new Error('expired-google-token');
+    error.status = 401;
+    throw error;
+  }
+  if (payload.iat && Number(payload.iat) > nowSeconds + 300) {
+    const error = new Error('invalid-google-issued-at');
+    error.status = 401;
+    throw error;
+  }
+  if (!payload.sub || !payload.email || !(payload.email_verified === true || payload.email_verified === 'true')) {
+    const error = new Error('unverified-google-account');
+    error.status = 401;
+    throw error;
+  }
+
+  return {
+    sub: String(payload.sub),
+    email: String(payload.email).trim().toLowerCase(),
+    name: cleanText(payload.name || payload.given_name || String(payload.email).split('@')[0], 'Google 用戶'),
+    picture: cleanText(payload.picture || '')
+  };
+}
+
+function normalizeAuthDb(db) {
+  if (!db.users) db.users = {};
+  if (!db.usersByEmail) db.usersByEmail = {};
+  if (!db.usersByGoogleSub) db.usersByGoogleSub = {};
+
+  for (const user of Object.values(db.users)) {
+    if (user?.email && !db.usersByEmail[user.email]) {
+      db.usersByEmail[user.email] = user.userId;
+    }
+    if (user?.googleSub && !db.usersByGoogleSub[user.googleSub]) {
+      db.usersByGoogleSub[user.googleSub] = user.userId;
+    }
+  }
+}
+
+function publicUser(user) {
+  return {
+    userId: user.userId,
+    email: user.email,
+    name: user.name,
+    picture: user.picture || '',
+    families: user.families || []
+  };
+}
+
+function googleAuthErrorMessage(code) {
+  const messages = {
+    'google-client-not-configured': 'Google 登入尚未設定，請在伺服器設定 GOOGLE_CLIENT_ID',
+    'invalid-google-credential': 'Google 登入資料無效，請重新登入',
+    'unsupported-google-token': 'Google 登入資料格式不支援',
+    'google-jwks-unavailable': '暫時無法驗證 Google 登入，請稍後再試',
+    'google-key-not-found': '暫時無法驗證 Google 登入，請稍後再試',
+    'invalid-google-signature': 'Google 登入驗證失敗，請重新登入',
+    'invalid-google-issuer': 'Google 登入來源無效',
+    'invalid-google-audience': 'Google 登入設定不匹配，請檢查 GOOGLE_CLIENT_ID',
+    'expired-google-token': 'Google 登入已過期，請重新登入',
+    'invalid-google-issued-at': 'Google 登入時間無效，請重新登入',
+    'unverified-google-account': '請先完成 Google 電郵驗證'
+  };
+  return messages[code] || 'Google 登入失敗，請稍後再試';
 }
 
 // 簡體轉繁體映射（黃曆宜忌常用詞）
@@ -91,28 +272,10 @@ function toTraditional(arr) {
   return arr.map(item => SIMP_TO_TRAD[item] || item);
 }
 
-const BIBLE_BOOK_NAMES = [
-  '', '創世記', '出埃及記', '利未記', '民數記', '申命記', '約書亞記', '士師記', '路得記', '撒母耳記上', '撒母耳記下',
-  '列王紀上', '列王紀下', '歷代志上', '歷代志下', '以斯拉記', '尼希米記', '以斯帖記', '約伯記', '詩篇', '箴言',
-  '傳道書', '雅歌', '以賽亞書', '耶利米書', '耶利米哀歌', '以西結書', '但以理書', '何西阿書', '約珥書', '阿摩司書',
-  '俄巴底亞書', '約拿書', '彌迦書', '那鴻書', '哈巴谷書', '西番雅書', '哈該書', '撒迦利亞書', '瑪拉基書', '馬太福音',
-  '馬可福音', '路加福音', '約翰福音', '使徒行傳', '羅馬書', '哥林多前書', '哥林多後書', '加拉太書', '以弗所書', '腓立比書',
-  '歌羅西書', '帖撒羅尼迦前書', '帖撒羅尼迦後書', '提摩太前書', '提摩太後書', '提多書', '腓利門書', '希伯來書', '雅各書',
-  '彼得前書', '彼得後書', '約翰一書', '約翰二書', '約翰三書', '猶大書', '啟示錄'
-];
-
-function formatBibleReference(book, chapter, verse, fallback = '') {
-  const bookName = BIBLE_BOOK_NAMES[Number(book)] || fallback || `CUV ${book}`;
-  return `${bookName} ${chapter}:${verse}`;
-}
-
 const host = process.env.API_HOST || '0.0.0.0';
 const port = Number(process.env.API_PORT || 8787);
 const dbPath = process.env.API_DB_PATH || path.join(process.cwd(), 'data', 'server-db.json');
 const maxBodyBytes = Number(process.env.API_MAX_BODY_BYTES || 24_000_000);
-const mediaStoragePath = process.env.MEDIA_STORAGE_PATH || path.join(process.cwd(), 'data', 'media');
-const mediaBaseUrl = process.env.MEDIA_BASE_URL || '/media';
-const mediaMaxSizeBytes = Number(process.env.MEDIA_MAX_SIZE_MB || 20) * 1024 * 1024;
 const llmBaseUrl = (process.env.LLM_OPENAI_BASE_URL || 'https://fufu.iqach.top/v1').replace(/\/+$/, '');
 const llmApiKey = process.env.LLM_SUMMARY_API_KEY || process.env.OPENAI_API_KEY || '';
 const llmModel = process.env.LLM_SUMMARY_MODEL || process.env.OPENAI_SUMMARY_MODEL || 'mimo-v2.5';
@@ -135,35 +298,43 @@ const openrouterModels = (process.env.OPENROUTER_FALLBACK_MODELS || openrouterMo
   .filter(Boolean);
 const openrouterReferer = process.env.OPENROUTER_HTTP_REFERER || (process.env.OPENROUTER_SITE_URL || 'https://beckonstars.app');
 
-const ALLOWED_MEDIA_MIME_TYPES = {
-  'image/jpeg': { ext: 'jpg', category: 'image' },
-  'image/png': { ext: 'png', category: 'image' },
-  'image/webp': { ext: 'webp', category: 'image' },
-  'audio/mp4': { ext: 'm4a', category: 'audio' },
-  'audio/mpeg': { ext: 'mp3', category: 'audio' },
-  'audio/wav': { ext: 'wav', category: 'audio' },
-  'audio/aac': { ext: 'aac', category: 'audio' }
+// 媒體存儲配置
+const mediaStoragePath = process.env.MEDIA_STORAGE_PATH || path.join(process.cwd(), 'data', 'media');
+const mediaBaseUrl = process.env.MEDIA_BASE_URL || '/media';
+const mediaMaxSizeMB = Number(process.env.MEDIA_MAX_SIZE_MB || 20);
+const mediaMaxSizeBytes = mediaMaxSizeMB * 1024 * 1024;
+
+// 允許的 MIME 類型
+const ALLOWED_MIME_TYPES = {
+  'image/jpeg': { ext: 'jpg', category: 'image', maxSize: 10 * 1024 * 1024 },
+  'image/png': { ext: 'png', category: 'image', maxSize: 10 * 1024 * 1024 },
+  'image/webp': { ext: 'webp', category: 'image', maxSize: 10 * 1024 * 1024 },
+  'audio/mp4': { ext: 'm4a', category: 'audio', maxSize: 20 * 1024 * 1024 },
+  'audio/mpeg': { ext: 'mp3', category: 'audio', maxSize: 20 * 1024 * 1024 },
+  'audio/wav': { ext: 'wav', category: 'audio', maxSize: 20 * 1024 * 1024 }
 };
 
 const serverLogEntries = [];
 
 function formatServerLogValue(value) {
   if (value instanceof Error) return value.stack || value.message;
-  if (typeof value === 'string') return value;
+  if (typeof value === 'string') return value.slice(0, 500);
   try {
-    return JSON.stringify(value);
+    const json = JSON.stringify(value);
+    return json.length > 500 ? json.slice(0, 497) + '...' : json;
   } catch (error) {
-    return String(value);
+    return String(value).slice(0, 500);
   }
 }
 
 function appendServerLog(level, args) {
+  const message = args.map(formatServerLogValue).join(' ');
   serverLogEntries.push({
     time: new Date().toISOString(),
     level,
-    message: args.map(formatServerLogValue).join(' ')
+    message: message.slice(0, 1000)
   });
-  if (serverLogEntries.length > 200) serverLogEntries.shift();
+  if (serverLogEntries.length > 100) serverLogEntries.shift();
 }
 
 ['log', 'warn', 'error'].forEach(level => {
@@ -247,24 +418,6 @@ function readBody(req) {
   });
 }
 
-function readRawBody(req, limitBytes = maxBodyBytes) {
-  return new Promise((resolve, reject) => {
-    const chunks = [];
-    let totalBytes = 0;
-    req.on('data', chunk => {
-      totalBytes += chunk.length;
-      if (totalBytes > limitBytes) {
-        req.destroy();
-        reject(new Error('body-too-large'));
-        return;
-      }
-      chunks.push(chunk);
-    });
-    req.on('end', () => resolve(Buffer.concat(chunks)));
-    req.on('error', reject);
-  });
-}
-
 function getFamily(db, familyId) {
   return db.families[familyId] || null;
 }
@@ -295,181 +448,6 @@ function cleanLargeText(value, fallback = '') {
 function cleanTranscript(value, fallback = '') {
   if (typeof value !== 'string') return fallback;
   return value.trim().slice(0, 4000);
-}
-
-function ensureMediaStorageDir() {
-  fs.mkdirSync(mediaStoragePath, { recursive: true });
-}
-
-function inferMediaMimeFromFilename(filename) {
-  const ext = path.extname(filename || '').toLowerCase();
-  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
-  if (ext === '.png') return 'image/png';
-  if (ext === '.webp') return 'image/webp';
-  if (ext === '.m4a' || ext === '.mp4') return 'audio/mp4';
-  if (ext === '.mp3') return 'audio/mpeg';
-  if (ext === '.wav') return 'audio/wav';
-  if (ext === '.aac') return 'audio/aac';
-  return '';
-}
-
-function normalizeMediaMime(mime, filename = '') {
-  const cleanedMime = cleanText(mime).toLowerCase();
-  if (ALLOWED_MEDIA_MIME_TYPES[cleanedMime]) return cleanedMime;
-  return inferMediaMimeFromFilename(filename);
-}
-
-function generateMediaFilename(originalFilename, mime) {
-  const mediaInfo = ALLOWED_MEDIA_MIME_TYPES[mime];
-  if (!mediaInfo) throw new Error('invalid-mime-type');
-  const baseName = path.basename(originalFilename || 'upload')
-    .replace(/\.[^.]+$/, '')
-    .replace(/[^a-zA-Z0-9_-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 48) || 'upload';
-  return `${Date.now()}_${crypto.randomBytes(6).toString('hex')}_${baseName}.${mediaInfo.ext}`;
-}
-
-async function saveMediaBuffer(buffer, mime, originalFilename) {
-  if (!Buffer.isBuffer(buffer) || buffer.length === 0) throw new Error('empty-file');
-  if (buffer.length > mediaMaxSizeBytes) throw new Error('file-too-large');
-
-  const normalizedMime = normalizeMediaMime(mime, originalFilename);
-  if (!ALLOWED_MEDIA_MIME_TYPES[normalizedMime]) throw new Error('invalid-mime-type');
-
-  ensureMediaStorageDir();
-  const filename = generateMediaFilename(originalFilename, normalizedMime);
-  const filePath = path.join(mediaStoragePath, filename);
-  await fs.promises.writeFile(filePath, buffer);
-
-  return {
-    mediaUrl: `${mediaBaseUrl.replace(/\/+$/, '')}/${filename}`,
-    mime: normalizedMime,
-    size: buffer.length
-  };
-}
-
-function parseMultipartFile(contentType, bodyBuffer) {
-  const boundaryMatch = String(contentType || '').match(/boundary=(?:"([^"]+)"|([^;]+))/i);
-  const boundary = boundaryMatch?.[1] || boundaryMatch?.[2];
-  if (!boundary) throw new Error('missing-boundary');
-
-  const body = bodyBuffer.toString('latin1');
-  const parts = body.split(`--${boundary}`);
-  for (const rawPart of parts) {
-    let part = rawPart;
-    if (!part || part === '--' || part === '--\r\n') continue;
-    if (part.startsWith('\r\n')) part = part.slice(2);
-
-    const headerEnd = part.indexOf('\r\n\r\n');
-    if (headerEnd === -1) continue;
-
-    const headerText = part.slice(0, headerEnd);
-    let contentText = part.slice(headerEnd + 4);
-    if (contentText.endsWith('\r\n')) contentText = contentText.slice(0, -2);
-    if (contentText.endsWith('--')) contentText = contentText.slice(0, -2);
-
-    const headers = Object.fromEntries(headerText.split(/\r\n/).map(line => {
-      const separatorIndex = line.indexOf(':');
-      if (separatorIndex === -1) return ['', ''];
-      return [
-        line.slice(0, separatorIndex).trim().toLowerCase(),
-        line.slice(separatorIndex + 1).trim()
-      ];
-    }).filter(([key]) => key));
-
-    const disposition = headers['content-disposition'] || '';
-    if (!/\bname="?file"?/i.test(disposition)) continue;
-
-    const filename = disposition.match(/\bfilename="([^"]*)"/i)?.[1] || 'upload';
-    const mime = headers['content-type'] || inferMediaMimeFromFilename(filename);
-    return {
-      filename,
-      mime,
-      buffer: Buffer.from(contentText, 'latin1')
-    };
-  }
-
-  throw new Error('no-file-uploaded');
-}
-
-async function handleMultipartMediaUpload(req) {
-  const rawBody = await readRawBody(req, mediaMaxSizeBytes + 64 * 1024);
-  const file = parseMultipartFile(req.headers['content-type'] || '', rawBody);
-  return saveMediaBuffer(file.buffer, file.mime, file.filename);
-}
-
-async function handleBase64MediaUpload(req) {
-  const body = await readBody(req);
-  let data = cleanLargeText(body.data);
-  let mime = normalizeMediaMime(body.mime, body.filename);
-  const filename = cleanText(body.filename, 'upload');
-
-  const dataUrlMatch = data.match(/^data:([^;,]+)?(?:;[^,]*)?,(.*)$/s);
-  if (dataUrlMatch) {
-    mime = normalizeMediaMime(mime || dataUrlMatch[1], filename);
-    data = dataUrlMatch[2] || '';
-  }
-
-  if (!data || !mime) throw new Error('missing-data-or-mime');
-  return saveMediaBuffer(Buffer.from(data, 'base64'), mime, filename);
-}
-
-function normalizeBibleVerseText(value) {
-  return cleanText(value, '').replace(/\s+/g, ' ').trim();
-}
-
-function seededIndex(seed, length) {
-  if (!length) return 0;
-  const hash = crypto.createHash('sha256').update(String(seed)).digest();
-  return hash.readUInt32BE(0) % length;
-}
-
-const fallbackBibleVerses = [
-  { book: 43, chapter: 3, verse: 16, reference: '約翰福音 3:16' },
-  { book: 19, chapter: 23, verse: 1, reference: '詩篇 23:1' },
-  { book: 45, chapter: 12, verse: 12, reference: '羅馬書 12:12' },
-  { book: 50, chapter: 4, verse: 6, reference: '腓立比書 4:6' },
-  { book: 23, chapter: 41, verse: 10, reference: '以賽亞書 41:10' },
-  { book: 20, chapter: 3, verse: 5, reference: '箴言 3:5' },
-  { book: 40, chapter: 5, verse: 9, reference: '馬太福音 5:9' }
-];
-
-async function fetchBibleVerse(dateSeed = '') {
-  const source = 'Bolls Life Bible API';
-  const sourceUrl = 'https://bolls.life/get-random-verse/CUV/';
-  const primaryResponse = await fetch(sourceUrl);
-  if (primaryResponse.ok) {
-    const verse = await primaryResponse.json();
-    return {
-      ok: true,
-      translation: verse.translation || 'CUV',
-      book: verse.book,
-      chapter: verse.chapter,
-      verse: verse.verse,
-      reference: formatBibleReference(verse.book, verse.chapter, verse.verse),
-      text: normalizeBibleVerseText(verse.text),
-      source,
-      sourceUrl
-    };
-  }
-
-  const fallback = fallbackBibleVerses[seededIndex(dateSeed || new Date().toISOString().slice(0, 10), fallbackBibleVerses.length)];
-  const fallbackUrl = `https://bolls.life/get-verse/CUV/${fallback.book}/${fallback.chapter}/${fallback.verse}/`;
-  const fallbackResponse = await fetch(fallbackUrl);
-  if (!fallbackResponse.ok) throw new Error(`bible-api-${primaryResponse.status}-${fallbackResponse.status}`);
-  const verse = await fallbackResponse.json();
-  return {
-    ok: true,
-    translation: 'CUV',
-    book: fallback.book,
-    chapter: fallback.chapter,
-    verse: fallback.verse,
-    reference: fallback.reference,
-    text: normalizeBibleVerseText(verse.text),
-    source,
-    sourceUrl: fallbackUrl
-  };
 }
 
 function fallbackSummary(text, summaryType = 'voice') {
@@ -538,60 +516,6 @@ function prepareAudioForLlm(audioDataUrl) {
   if (!audio?.data) return null;
   if (audio.format === 'wav') return audio;
   return convertAudioToWavBase64(audio);
-}
-
-function inferAudioMimeFromPathname(pathname) {
-  const ext = path.extname(pathname || '').toLowerCase();
-  if (ext === '.wav') return 'audio/wav';
-  if (ext === '.mp3') return 'audio/mpeg';
-  if (ext === '.aac') return 'audio/aac';
-  if (ext === '.m4a' || ext === '.mp4') return 'audio/mp4';
-  return 'audio/mp4';
-}
-
-function resolveLocalMediaFilePath(mediaUrl) {
-  const rawUrl = cleanText(mediaUrl);
-  if (!rawUrl) return '';
-
-  const localBase = `http://127.0.0.1:${port}`;
-  const parsedUrl = new URL(rawUrl, localBase);
-  const parsedBase = new URL(mediaBaseUrl, localBase).pathname.replace(/\/+$/, '');
-  const pathname = parsedUrl.pathname;
-
-  if (pathname === parsedBase || !pathname.startsWith(`${parsedBase}/`)) return '';
-  return path.join(mediaStoragePath, path.basename(pathname));
-}
-
-async function readAudioUrlAsDataUrl(audioUrl) {
-  const rawUrl = cleanText(audioUrl);
-  if (!rawUrl) return '';
-  if (rawUrl.startsWith('data:')) return cleanLargeText(rawUrl);
-
-  const localPath = resolveLocalMediaFilePath(rawUrl);
-  if (localPath && fs.existsSync(localPath)) {
-    const buffer = await fs.promises.readFile(localPath);
-    return `data:${inferAudioMimeFromPathname(localPath)};base64,${buffer.toString('base64')}`;
-  }
-
-  const absoluteUrl = new URL(rawUrl, `http://127.0.0.1:${port}`).toString();
-  if (!absoluteUrl.startsWith('http://') && !absoluteUrl.startsWith('https://')) {
-    throw new Error('unsupported-audio-url');
-  }
-
-  const response = await fetch(absoluteUrl);
-  if (!response.ok) {
-    throw new Error(`audio-url-fetch-failed:${response.status}`);
-  }
-
-  const arrayBuffer = await response.arrayBuffer();
-  const contentType = (response.headers.get('content-type') || '').split(';')[0] || inferAudioMimeFromPathname(absoluteUrl);
-  return `data:${contentType};base64,${Buffer.from(arrayBuffer).toString('base64')}`;
-}
-
-async function getMessageAudioDataUrl(message) {
-  if (message?.audio) return message.audio;
-  if (message?.audioUrl) return readAudioUrlAsDataUrl(message.audioUrl);
-  return '';
 }
 
 function extractAzureTranscript(result) {
@@ -916,6 +840,187 @@ async function generateSummaryVideo(memories, year, month, familyId) {
   }
 }
 
+// 媒體處理函數
+function ensureMediaDir() {
+  fs.mkdirSync(mediaStoragePath, { recursive: true });
+}
+
+function sanitizeFilename(filename) {
+  return filename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 100);
+}
+
+function generateUniqueFilename(originalFilename, mimeType) {
+  const timestamp = Date.now();
+  const randomId = crypto.randomBytes(6).toString('hex');
+  const mimeInfo = ALLOWED_MIME_TYPES[mimeType];
+  const ext = mimeInfo?.ext || path.extname(originalFilename).slice(1) || 'bin';
+  return `${timestamp}_${randomId}.${ext}`;
+}
+
+async function createThumbnail(inputPath, outputPath) {
+  try {
+    await sharp(inputPath)
+      .resize(400, null, {
+        fit: 'inside',
+        withoutEnlargement: true
+      })
+      .jpeg({ quality: 85 })
+      .toFile(outputPath);
+    return true;
+  } catch (error) {
+    console.warn('[media] thumbnail generation failed:', error.message);
+    return false;
+  }
+}
+
+async function getImageDimensions(filePath) {
+  try {
+    const metadata = await sharp(filePath).metadata();
+    return { width: metadata.width, height: metadata.height };
+  } catch (error) {
+    console.warn('[media] failed to get image dimensions:', error.message);
+    return null;
+  }
+}
+
+async function handleMultipartUpload(req) {
+  ensureMediaDir();
+
+  const form = formidable({
+    maxFileSize: mediaMaxSizeBytes,
+    maxFiles: 1,
+    allowEmptyFiles: false,
+    filter: ({ mimetype }) => {
+      return ALLOWED_MIME_TYPES.hasOwnProperty(mimetype || '');
+    }
+  });
+
+  return new Promise((resolve, reject) => {
+    form.parse(req, async (err, fields, files) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+
+      const fileArray = files.file;
+      if (!fileArray || fileArray.length === 0) {
+        reject(new Error('no-file-uploaded'));
+        return;
+      }
+
+      const uploadedFile = fileArray[0];
+      const mimeType = uploadedFile.mimetype;
+      const mimeInfo = ALLOWED_MIME_TYPES[mimeType];
+
+      if (!mimeInfo) {
+        reject(new Error('invalid-mime-type'));
+        return;
+      }
+
+      if (uploadedFile.size > mimeInfo.maxSize) {
+        reject(new Error('file-too-large'));
+        return;
+      }
+
+      try {
+        const filename = generateUniqueFilename(uploadedFile.originalFilename || 'upload', mimeType);
+        const filePath = path.join(mediaStoragePath, filename);
+
+        // 移動文件到最終位置
+        await fs.promises.rename(uploadedFile.filepath, filePath);
+
+        const result = {
+          mediaUrl: `${mediaBaseUrl}/${filename}`,
+          mime: mimeType,
+          size: uploadedFile.size
+        };
+
+        // 處理圖片：生成縮圖和獲取尺寸
+        if (mimeInfo.category === 'image') {
+          const dimensions = await getImageDimensions(filePath);
+          if (dimensions) {
+            result.width = dimensions.width;
+            result.height = dimensions.height;
+          }
+
+          const thumbnailFilename = filename.replace(/\.([^.]+)$/, '_thumb.jpg');
+          const thumbnailPath = path.join(mediaStoragePath, thumbnailFilename);
+          const thumbnailCreated = await createThumbnail(filePath, thumbnailPath);
+
+          if (thumbnailCreated) {
+            result.thumbnailUrl = `${mediaBaseUrl}/${thumbnailFilename}`;
+          }
+        }
+
+        resolve(result);
+      } catch (error) {
+        reject(error);
+      }
+    });
+  });
+}
+
+async function handleBase64Upload(body) {
+  ensureMediaDir();
+
+  const { data, mime, filename } = body;
+
+  if (!data || !mime) {
+    throw new Error('missing-data-or-mime');
+  }
+
+  const mimeInfo = ALLOWED_MIME_TYPES[mime];
+  if (!mimeInfo) {
+    throw new Error('invalid-mime-type');
+  }
+
+  // 解析 base64 數據
+  let base64Data = data;
+  if (data.startsWith('data:')) {
+    const match = data.match(/^data:[^;,]+(?:;[^,]*)?,(.*)$/s);
+    if (!match) {
+      throw new Error('invalid-base64-format');
+    }
+    base64Data = match[1];
+  }
+
+  const buffer = Buffer.from(base64Data, 'base64');
+
+  if (buffer.length > mimeInfo.maxSize) {
+    throw new Error('file-too-large');
+  }
+
+  const generatedFilename = generateUniqueFilename(filename || 'upload', mime);
+  const filePath = path.join(mediaStoragePath, generatedFilename);
+
+  await fs.promises.writeFile(filePath, buffer);
+
+  const result = {
+    mediaUrl: `${mediaBaseUrl}/${generatedFilename}`,
+    mime: mime,
+    size: buffer.length
+  };
+
+  // 處理圖片：生成縮圖和獲取尺寸
+  if (mimeInfo.category === 'image') {
+    const dimensions = await getImageDimensions(filePath);
+    if (dimensions) {
+      result.width = dimensions.width;
+      result.height = dimensions.height;
+    }
+
+    const thumbnailFilename = generatedFilename.replace(/\.([^.]+)$/, '_thumb.jpg');
+    const thumbnailPath = path.join(mediaStoragePath, thumbnailFilename);
+    const thumbnailCreated = await createThumbnail(filePath, thumbnailPath);
+
+    if (thumbnailCreated) {
+      result.thumbnailUrl = `${mediaBaseUrl}/${thumbnailFilename}`;
+    }
+  }
+
+  return result;
+}
+
 function routeParts(req) {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   return {
@@ -927,7 +1032,8 @@ function routeParts(req) {
 function logRequest(req, status, startTime) {
   const duration = Date.now() - startTime;
   const ts = new Date().toISOString().slice(11, 19);
-  console.log(`[${ts}] ${req.method} ${req.url} → ${status} (${duration}ms)`);
+  const url = req.url.length > 100 ? req.url.slice(0, 97) + '...' : req.url;
+  console.log(`[${ts}] ${req.method} ${url} → ${status} (${duration}ms)`);
 }
 
 const server = http.createServer(async (req, res) => {
@@ -959,9 +1065,17 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    const mediaBasePath = new URL(mediaBaseUrl, `http://${req.headers.host || 'localhost'}`).pathname.replace(/\/+$/, '');
-    if (req.method === 'GET' && url.pathname.startsWith(`${mediaBasePath}/`)) {
+    // 靜態文件：媒體文件 (圖片、音訊)
+    if (req.method === 'GET' && url.pathname.startsWith('/media/')) {
       const filename = path.basename(url.pathname);
+
+      // 安全檢查：防止路徑遍歷
+      if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+        res.writeHead(400);
+        res.end('Invalid filename');
+        return;
+      }
+
       const filePath = path.join(mediaStoragePath, filename);
       if (fs.existsSync(filePath)) {
         const ext = path.extname(filePath).toLowerCase();
@@ -971,10 +1085,8 @@ const server = http.createServer(async (req, res) => {
           '.png': 'image/png',
           '.webp': 'image/webp',
           '.m4a': 'audio/mp4',
-          '.mp4': 'audio/mp4',
           '.mp3': 'audio/mpeg',
-          '.wav': 'audio/wav',
-          '.aac': 'audio/aac'
+          '.wav': 'audio/wav'
         };
         res.writeHead(200, {
           'Content-Type': mimeTypes[ext] || 'application/octet-stream',
@@ -996,50 +1108,13 @@ const server = http.createServer(async (req, res) => {
 
     const { pathname, parts } = routeParts(req);
 
-    if (req.method === 'POST' && pathname === '/api/media/upload') {
-      const authUser = getAuthUser(req);
-      if (!authUser) {
-        sendJson(res, 401, { error: 'unauthorized', message: '請先登入' });
-        return;
-      }
-
-      try {
-        const contentType = req.headers['content-type'] || '';
-        let result;
-        if (contentType.startsWith('multipart/form-data')) {
-          result = await handleMultipartMediaUpload(req);
-        } else if (contentType.startsWith('application/json')) {
-          result = await handleBase64MediaUpload(req);
-        } else {
-          sendJson(res, 400, { error: 'unsupported-content-type', message: '僅支援 multipart/form-data 或 application/json' });
-          return;
-        }
-
-        console.log(`[media] upload ok [${authUser.email || authUser.userId || 'user'}] ${result.mime} ${Math.round(result.size / 1024)}KB`);
-        sendJson(res, 201, result);
-      } catch (error) {
-        console.warn('[media] upload failed:', error.message);
-        const messages = {
-          'body-too-large': '文件大小超過限制',
-          'file-too-large': '文件大小超過限制',
-          'empty-file': '文件內容為空',
-          'invalid-mime-type': '不支援的文件類型',
-          'missing-boundary': '上傳格式錯誤',
-          'no-file-uploaded': '未上傳文件',
-          'missing-data-or-mime': '缺少 data 或 mime 欄位'
-        };
-        const status = error.message === 'body-too-large' || error.message === 'file-too-large' ? 413 : 400;
-        sendJson(res, status, { error: error.message, message: messages[error.message] || '上傳失敗' });
-      }
-      return;
-    }
-
     if (req.method === 'GET' && pathname === '/api/health') {
       sendJson(res, 200, {
         ok: true,
         name: 'beckon-stars-local-api',
         time: new Date().toISOString(),
-        auth: true
+        auth: true,
+        googleAuth: Boolean(GOOGLE_CLIENT_ID)
       });
       return;
     }
@@ -1051,6 +1126,52 @@ const server = http.createServer(async (req, res) => {
         time: new Date().toISOString(),
         logs: serverLogEntries.slice(-limit)
       });
+      return;
+    }
+
+    // 媒體上傳
+    if (req.method === 'POST' && pathname === '/api/media/upload') {
+      // 驗證用戶身份
+      const authUser = getAuthUser(req);
+      if (!authUser) {
+        sendJson(res, 401, { error: 'unauthorized', message: '請先登入' });
+        return;
+      }
+
+      try {
+        const contentType = req.headers['content-type'] || '';
+
+        let result;
+        if (contentType.startsWith('multipart/form-data')) {
+          // 處理 multipart 上傳
+          result = await handleMultipartUpload(req);
+        } else if (contentType.startsWith('application/json')) {
+          // 處理 base64 上傳
+          const body = await readBody(req);
+          result = await handleBase64Upload(body);
+        } else {
+          sendJson(res, 400, { error: 'unsupported-content-type', message: '僅支援 multipart/form-data 或 application/json' });
+          return;
+        }
+
+        console.log(`[media] ✅ 上傳成功 [${authUser.email}] ${result.mime} ${Math.round(result.size / 1024)}KB`);
+        sendJson(res, 201, result);
+      } catch (error) {
+        console.error('[media] 上傳失敗:', error.message);
+
+        const errorMessages = {
+          'no-file-uploaded': '未上傳文件',
+          'invalid-mime-type': '不支援的文件類型',
+          'file-too-large': '文件大小超過限制',
+          'missing-data-or-mime': '缺少 data 或 mime 欄位',
+          'invalid-base64-format': '無效的 base64 格式'
+        };
+
+        const message = errorMessages[error.message] || '上傳失敗';
+        const status = error.message === 'file-too-large' ? 413 : 400;
+
+        sendJson(res, status, { error: error.message, message });
+      }
       return;
     }
 
@@ -1075,8 +1196,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       const db = await readDb();
-      if (!db.users) db.users = {};
-      if (!db.usersByEmail) db.usersByEmail = {};
+      normalizeAuthDb(db);
 
       if (db.usersByEmail[email]) {
         sendJson(res, 409, { error: 'email-exists', message: '此電郵已註冊，請直接登入' });
@@ -1108,6 +1228,81 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // Google 登入 / 自動註冊
+    if (req.method === 'POST' && pathname === '/api/auth/google') {
+      const body = await readBody(req);
+      let googleUser;
+      try {
+        googleUser = await verifyGoogleIdToken(body.credential || body.idToken || '');
+      } catch (error) {
+        const status = error.status || 401;
+        sendJson(res, status, {
+          error: error.message || 'google-auth-failed',
+          message: googleAuthErrorMessage(error.message)
+        });
+        return;
+      }
+
+      const db = await readDb();
+      normalizeAuthDb(db);
+
+      let userId = db.usersByGoogleSub[googleUser.sub] || db.usersByEmail[googleUser.email];
+      let user = userId ? db.users[userId] : null;
+      const now = new Date().toISOString();
+      let created = false;
+
+      if (user?.googleSub && user.googleSub !== googleUser.sub) {
+        sendJson(res, 409, {
+          error: 'google-account-conflict',
+          message: '此電郵已綁定另一個 Google 帳號'
+        });
+        return;
+      }
+
+      if (!user) {
+        userId = crypto.randomUUID();
+        user = {
+          userId,
+          email: googleUser.email,
+          passwordHash: null,
+          googleSub: googleUser.sub,
+          authProviders: {
+            google: { sub: googleUser.sub, linkedAt: now }
+          },
+          name: googleUser.name,
+          picture: googleUser.picture,
+          createdAt: now,
+          updatedAt: now,
+          lastLoginAt: now,
+          families: []
+        };
+        db.users[userId] = user;
+        created = true;
+      } else {
+        user.googleSub = googleUser.sub;
+        user.authProviders = user.authProviders || {};
+        user.authProviders.google = user.authProviders.google || { sub: googleUser.sub, linkedAt: now };
+        user.authProviders.google.sub = googleUser.sub;
+        if (!user.name) user.name = googleUser.name;
+        if (!user.picture && googleUser.picture) user.picture = googleUser.picture;
+        user.updatedAt = now;
+        user.lastLoginAt = now;
+      }
+
+      db.usersByEmail[user.email] = user.userId;
+      db.usersByGoogleSub[googleUser.sub] = user.userId;
+      await writeDb(db);
+      console.log(`[auth] ${created ? '🆕 Google 新用戶' : '🔑 Google 登入'}: ${user.name} (${user.email})`);
+
+      const token = generateToken(user.userId, user.email);
+      sendJson(res, created ? 201 : 200, {
+        ok: true,
+        token,
+        user: publicUser(user)
+      });
+      return;
+    }
+
     // 用戶登入
     if (req.method === 'POST' && pathname === '/api/auth/login') {
       const body = await readBody(req);
@@ -1120,11 +1315,17 @@ const server = http.createServer(async (req, res) => {
       }
 
       const db = await readDb();
+      normalizeAuthDb(db);
       const userId = db.usersByEmail?.[email];
       const user = userId ? db.users?.[userId] : null;
 
       if (!user) {
         sendJson(res, 401, { error: 'invalid-credentials', message: '電郵或密碼不正確' });
+        return;
+      }
+
+      if (!user.passwordHash) {
+        sendJson(res, 401, { error: 'password-login-unavailable', message: '此帳號使用 Google 登入' });
         return;
       }
 
@@ -1142,13 +1343,7 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 200, {
         ok: true,
         token,
-        user: {
-          userId: user.userId,
-          email: user.email,
-          name: user.name,
-          picture: user.picture || '',
-          families: user.families || []
-        }
+        user: publicUser(user)
       });
       return;
     }
@@ -1254,6 +1449,11 @@ const server = http.createServer(async (req, res) => {
       const user = db.users?.[authUser.userId];
       if (!user) {
         sendJson(res, 404, { error: 'user-not-found' });
+        return;
+      }
+
+      if (!user.passwordHash) {
+        sendJson(res, 400, { error: 'password-login-unavailable', message: '此帳號目前使用 Google 登入' });
         return;
       }
 
@@ -1418,9 +1618,8 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      const audioDataUrl = !message.transcript ? await getMessageAudioDataUrl(message) : '';
-      if (!message.transcript && audioDataUrl) {
-        message.transcript = await transcribeAudioWithLlm(audioDataUrl);
+      if (!message.transcript && message.audio) {
+        message.transcript = await transcribeAudioWithLlm(message.audio);
         if (message.transcript && (!message.content || message.content === '語音訊息')) {
           message.content = message.transcript;
         }
@@ -1450,13 +1649,12 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 404, { error: 'message-not-found' });
         return;
       }
-      const audioDataUrl = await getMessageAudioDataUrl(message);
-      if (!audioDataUrl) {
+      if (!message.audio) {
         sendJson(res, 400, { error: 'missing-audio' });
         return;
       }
 
-      const transcript = await transcribeAudioWithLlm(audioDataUrl);
+      const transcript = await transcribeAudioWithLlm(message.audio);
       if (!transcript || transcript === '[聽不清]') {
         sendJson(res, 422, { error: 'empty-transcript', transcript: transcript || '' });
         return;
@@ -1526,10 +1724,7 @@ const server = http.createServer(async (req, res) => {
         type: cleanText(body.type, 'text'),
         content: cleanText(body.content),
         img: cleanLargeText(body.img) || null,
-        imgUrl: cleanText(body.imgUrl) || null,
-        thumbnailUrl: cleanText(body.thumbnailUrl) || null,
         audio: cleanLargeText(body.audio) || null,
-        audioUrl: cleanText(body.audioUrl) || null,
         audioMime: cleanText(body.audioMime),
         audioDurationMs: Number(body.audioDurationMs) || 0,
         transcript: cleanTranscript(body.transcript),
@@ -1538,7 +1733,7 @@ const server = http.createServer(async (req, res) => {
         childId: cleanText(body.childId, 'child_1'),
         createdAt: now.toISOString()
       };
-      if (!message.content && !message.img && !message.imgUrl && !message.audio && !message.audioUrl) {
+      if (!message.content && !message.img && !message.audio) {
         sendJson(res, 400, { error: 'empty-content' });
         return;
       }
@@ -1549,11 +1744,10 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 201, { message });
 
       // 背景自動轉譯語音訊息
-      if (message.type === 'audio' && (message.audio || message.audioUrl) && !message.transcript) {
+      if (message.type === 'audio' && message.audio && !message.transcript) {
         (async () => {
           try {
-            const audioDataUrl = await getMessageAudioDataUrl(message);
-            const transcript = audioDataUrl ? await transcribeAudioWithLlm(audioDataUrl) : '';
+            const transcript = await transcribeAudioWithLlm(message.audio);
             if (transcript) {
               const db = await readDb();
               const family = getFamily(db, familyId);
@@ -1603,11 +1797,9 @@ const server = http.createServer(async (req, res) => {
         type: cleanText(body.type, 'text'),
         content: cleanText(body.content),
         img: cleanLargeText(body.img) || null,
-        imgUrl: cleanText(body.imgUrl) || null,
-        thumbnailUrl: cleanText(body.thumbnailUrl) || null,
         createdAt: now.toISOString()
       };
-      if (!memory.content && !memory.img && !memory.imgUrl) {
+      if (!memory.content && !memory.img) {
         sendJson(res, 400, { error: 'empty-content' });
         return;
       }
@@ -1702,5 +1894,6 @@ server.listen(port, host, async () => {
   console.log(`🎤 Azure STT: ${azureSttKey ? `https://${azureSttRecognitionHost} (${azureSttLanguage})` : '未配置'}`);
   console.log(`🎤 LLM 轉譯: ${llmTranscribeModel}`);
   console.log(`💾 資料庫: ${dbPath}`);
+  console.log(`📁 媒體存儲: ${mediaStoragePath} (最大 ${mediaMaxSizeMB}MB)`);
   console.log(`${'='.repeat(50)}\n`);
 });

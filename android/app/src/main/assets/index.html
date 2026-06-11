@@ -157,6 +157,7 @@
             // 用戶認證
             authToken: null,         // JWT Token
             currentUser: null,       // 用戶資訊 { userId, email, name, picture, families }
+            googleSignInLoading: false,
 
             currentTab: 'calendar',  // 'calendar', 'chat', 'rewards'
             calendarMode: 'tear-off',// 'tear-off', 'monthly'
@@ -178,8 +179,6 @@
             pendingMemoryType: 'text',
             pendingMemoryContent: '',
             pendingMemoryImage: '',
-            pendingMemoryImageUrl: '',
-            pendingMemoryThumbnailUrl: '',
             voiceRecording: createIdleVoiceRecordingState(),
             transcribingMessageId: null,
             backendMode: 'server',
@@ -477,7 +476,7 @@
             const buttonClass = isMe ? 'bg-white text-brand' : 'bg-brand text-white';
             const timeClass = isMe ? 'text-white/85' : 'text-gray-500';
 
-            if (!message.audio && !message.audioUrl) {
+            if (!message.audio) {
                 return `
                     <div class="flex items-center gap-3 min-w-48">
                         <div class="w-9 h-9 rounded-full ${isMe ? 'bg-white/20' : 'bg-orange-100'} flex items-center justify-center">
@@ -631,7 +630,7 @@
         async function toggleVoiceMessage(messageId) {
             const id = String(messageId || '');
             const message = state.messages.find(item => String(item.id) === id);
-            if (!message?.audio && !message?.audioUrl) {
+            if (!message?.audio) {
                 showMessage('錄音檔未同步，暫時不能播放。');
                 return;
             }
@@ -647,7 +646,7 @@
                 voicePlayback.messageId = id;
                 voicePlayback.duration = getVoiceDurationSeconds(message);
                 voicePlayback.currentTime = 0;
-                audio.src = resolveMediaUrl(message.audioUrl || message.audio);
+                audio.src = message.audio;
                 try {
                     audio.currentTime = 0;
                 } catch (error) {}
@@ -666,7 +665,7 @@
         function seekVoiceMessage(messageId, ratio) {
             const id = String(messageId || '');
             const message = state.messages.find(item => String(item.id) === id);
-            if (!message?.audio && !message?.audioUrl) return;
+            if (!message?.audio) return;
 
             const audio = getVoiceAudio();
             if (voicePlayback.messageId !== id) {
@@ -674,7 +673,7 @@
                 voicePlayback.messageId = id;
                 voicePlayback.duration = getVoiceDurationSeconds(message);
                 voicePlayback.currentTime = 0;
-                audio.src = resolveMediaUrl(message.audioUrl || message.audio);
+                audio.src = message.audio;
             }
 
             const duration = voicePlayback.duration || getVoiceDurationSeconds(message);
@@ -715,6 +714,7 @@
                     pushStatus: '未開啟推送',
                     pushTokenCount: saved.pushTokenCount || 0,
                     pushTokenPreview: saved.pushTokenPreview || '',
+                    googleSignInLoading: false,
                     voiceRecording: createIdleVoiceRecordingState()
                 });
             } catch (error) {
@@ -733,9 +733,8 @@
                 data.modalMessage = '';
                 data.selectedDate = null;
                 data.pendingMemoryImage = '';
-                data.pendingMemoryImageUrl = '';
-                data.pendingMemoryThumbnailUrl = '';
                 data.pushStatus = '';
+                data.googleSignInLoading = false;
                 data.voiceRecording = createIdleVoiceRecordingState();
                 // 保留最近的數據，避免 localStorage 過大
                 data.messages = (state.messages || []).slice(-50).map(m => ({
@@ -775,40 +774,15 @@
                 ...options,
                 headers
             });
+            const payload = response.status === 204 ? null : await response.json().catch(() => null);
             if (!response.ok) {
                 const error = new Error(`server-${response.status}`);
                 error.status = response.status;
+                error.code = payload?.error || '';
+                error.serverMessage = payload?.message || '';
                 throw error;
             }
-            return response.status === 204 ? null : response.json();
-        }
-
-        async function uploadMediaFile(file) {
-            const formData = new FormData();
-            formData.append('file', file);
-            const headers = {};
-            if (state.authToken) {
-                headers['Authorization'] = `Bearer ${state.authToken}`;
-            }
-            const response = await fetch(`${selfHostedApiBase}/api/media/upload`, {
-                method: 'POST',
-                headers,
-                body: formData
-            });
-            if (!response.ok) {
-                const error = new Error(`media-upload-${response.status}`);
-                error.status = response.status;
-                throw error;
-            }
-            return response.json();
-        }
-
-        function resolveMediaUrl(url) {
-            if (!url) return '';
-            if (url.startsWith('data:')) return url;
-            if (url.startsWith('http://') || url.startsWith('https://')) return url;
-            if (url.startsWith('/')) return selfHostedApiBase + url;
-            return url;
+            return payload;
         }
 
         function refreshServerLogs() {
@@ -823,7 +797,7 @@
                 })
                 .finally(() => {
                     serverLogsLoading = false;
-                    if (state.showModal === 'architecture') render();
+                    if (state.showModal === 'logs') render();
                 });
         }
 
@@ -867,6 +841,67 @@
 
         // --- 電郵/密碼認證 ---
 
+        async function handleGoogleCredentialResponse(response) {
+            const credential = response?.credential || '';
+            if (!credential) return;
+
+            try {
+                state.googleSignInLoading = true;
+                state.errorMsg = '';
+                render();
+                const result = await serverApi('/api/auth/google', {
+                    method: 'POST',
+                    body: JSON.stringify({ credential })
+                });
+                state.googleSignInLoading = false;
+                handleAuthSuccess(result);
+            } catch (error) {
+                console.error('[auth] Google login failed:', error);
+                state.googleSignInLoading = false;
+                if (error.status === 503) {
+                    state.errorMsg = 'Google 登入尚未設定';
+                } else if (error.status === 409) {
+                    state.errorMsg = error.serverMessage || '此電郵已綁定另一個 Google 帳號';
+                } else if (error.status === 401 || error.status === 400) {
+                    state.errorMsg = error.serverMessage || 'Google 登入驗證失敗，請重新登入';
+                } else {
+                    state.errorMsg = error.serverMessage || 'Google 登入失敗，請稍後再試';
+                }
+                render();
+            }
+        }
+
+        function startAndroidGoogleLogin() {
+            if (state.googleSignInLoading) return;
+            if (!isAndroidApk() || !window.BeckonStarsAndroid?.startGoogleSignIn) {
+                state.errorMsg = 'Google 登入需要在 Android APK 內使用';
+                render();
+                return;
+            }
+
+            state.googleSignInLoading = true;
+            state.errorMsg = '';
+            render();
+            try {
+                window.BeckonStarsAndroid.startGoogleSignIn();
+            } catch (error) {
+                console.error('[auth] Android Google login failed to start:', error);
+                state.googleSignInLoading = false;
+                state.errorMsg = '無法啟動 Google 登入，請稍後再試';
+                render();
+            }
+        }
+
+        window.handleAndroidGoogleCredential = credential => {
+            handleGoogleCredentialResponse({ credential });
+        };
+
+        window.handleAndroidGoogleError = message => {
+            state.googleSignInLoading = false;
+            state.errorMsg = message || 'Google 登入失敗，請稍後再試';
+            render();
+        };
+
         function handleAuthSuccess(result) {
             state.authToken = result.token;
             state.currentUser = result.user;
@@ -876,10 +911,6 @@
 
             localStorage.setItem('beckon-stars-auth-token', result.token);
             localStorage.setItem('beckon-stars-user', JSON.stringify(result.user));
-
-            if (isAndroidApk() && window.BeckonStarsAndroid?.setMediaApiConfig) {
-                window.BeckonStarsAndroid.setMediaApiConfig(selfHostedApiBase, state.authToken);
-            }
 
             console.log('[auth] Logged in as:', result.user.name, result.user.email);
 
@@ -923,12 +954,14 @@
                 handleAuthSuccess(result);
             } catch (error) {
                 console.error('[auth] Login failed:', error);
-                if (error.status === 401) {
+                if (error.code === 'password-login-unavailable') {
+                    state.errorMsg = '此帳號使用 Google 登入';
+                } else if (error.status === 401) {
                     state.errorMsg = '電郵或密碼不正確';
                 } else if (error.status === 0) {
                     state.errorMsg = '無法連接到伺服器，請檢查網絡連接';
                 } else {
-                    state.errorMsg = '登入失敗，請稍後再試';
+                    state.errorMsg = error.serverMessage || '登入失敗，請稍後再試';
                 }
                 render();
             }
@@ -985,11 +1018,6 @@
                     state.authUid = state.currentUser.userId;
                     state.userName = state.currentUser.name;
                     state.userAvatar = state.currentUser.picture || '👤';
-
-                    if (isAndroidApk() && window.BeckonStarsAndroid?.setMediaApiConfig) {
-                        window.BeckonStarsAndroid.setMediaApiConfig(selfHostedApiBase, state.authToken);
-                    }
-
                     return true;
                 } catch (e) {
                     console.warn('[auth] Failed to restore auth state:', e);
@@ -1002,6 +1030,9 @@
             state.authToken = null;
             state.currentUser = null;
             state.authUid = null;
+            try {
+                window.BeckonStarsAndroid?.clearGoogleCredentialState?.();
+            } catch (ignored) {}
             localStorage.removeItem('beckon-stars-auth-token');
             localStorage.removeItem('beckon-stars-user');
         }
@@ -1025,25 +1056,34 @@
         const almanacRequests = {};
         const bibleVerseRequests = {};
 
-        async function fetchAlmanac(dateStr) {
+        async function fetchCachedDateResource(dateStr, cache, requests, loadResource) {
             const key = dateStr || 'today';
-            if (almanacCache[key]) return almanacCache[key];
-            if (almanacRequests[key]) return almanacRequests[key];
-            almanacRequests[key] = (async () => {
+            if (cache[key]) return cache[key];
+            if (requests[key]) return requests[key];
+            requests[key] = (async () => {
+                try {
+                    const data = await loadResource(key);
+                    if (data) cache[key] = data;
+                    return data;
+                } finally {
+                    delete requests[key];
+                }
+            })();
+            return requests[key];
+        }
+
+        async function fetchAlmanac(dateStr) {
+            return fetchCachedDateResource(dateStr, almanacCache, almanacRequests, async () => {
                 try {
                     const dateParam = dateStr ? `?date=${dateStr}` : '';
                     const data = await serverApi(`/api/almanac${dateParam}`);
-                    almanacCache[key] = data;
                     if (!dateStr) state.almanac = data;
                     return data;
                 } catch (e) {
                     console.warn('Almanac fetch failed', e);
                     return null;
-                } finally {
-                    delete almanacRequests[key];
                 }
-            })();
-            return almanacRequests[key];
+            });
         }
 
         function getDailyBibleVerseTarget(dateStr) {
@@ -1086,7 +1126,7 @@
                 verse: record.sec || target.verse,
                 reference: `${target.reference}`,
                 text: String(record.bible_text || '').replace(/\s+/g, ' ').trim(),
-                source: '信望愛站聖經 JSON API',
+                source: '信望愛站聖經',
                 sourceUrl
             };
         }
@@ -1109,30 +1149,19 @@
         }
 
         async function fetchDailyBibleVerse(dateStr) {
-            const key = dateStr || 'today';
-            if (bibleVerseCache[key]) return bibleVerseCache[key];
-            if (bibleVerseRequests[key]) return bibleVerseRequests[key];
-            bibleVerseRequests[key] = (async () => {
+            return fetchCachedDateResource(dateStr, bibleVerseCache, bibleVerseRequests, async () => {
                 try {
-                    const data = await fetchFhlBibleVerse(dateStr);
-                    bibleVerseCache[key] = data;
-                    return data;
+                    return await fetchFhlBibleVerse(dateStr);
                 } catch (e) {
                     console.warn('FHL Bible verse fetch failed, falling back to Bolls Life', e);
                     try {
-                        const data = await fetchBollsLifeBibleVerse();
-                        bibleVerseCache[key] = data;
-                        return data;
+                        return await fetchBollsLifeBibleVerse();
                     } catch (fallbackError) {
                         console.warn('Bible verse fallback fetch failed', fallbackError);
-                        bibleVerseCache[key] = { ok: false, error: 'bible-verse-unavailable', source: '信望愛站聖經 JSON API' };
-                        return bibleVerseCache[key];
+                        return { ok: false, error: 'bible-verse-unavailable', source: '信望愛站聖經' };
                     }
-                } finally {
-                    delete bibleVerseRequests[key];
                 }
-            })();
-            return bibleVerseRequests[key];
+            });
         }
 
         function prefetchDailyCard(dateStr) {
@@ -1213,6 +1242,30 @@
             } catch (error) {
                 console.warn('Voice summary failed', error);
                 return text.length > 80 ? `語音摘要：${text.slice(0, 77)}...` : `語音摘要：${text}`;
+            }
+        }
+
+        async function uploadMediaFile(file) {
+            if (!file || state.backendMode !== 'server') return null;
+            try {
+                const dataUrl = await readFileAsDataUrl(file);
+                const result = await serverApi('/api/media/upload', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        data: dataUrl,
+                        mime: file.type,
+                        filename: file.name
+                    })
+                });
+                return {
+                    mediaUrl: result.mediaUrl,
+                    thumbnailUrl: result.thumbnailUrl || result.mediaUrl,
+                    width: result.width,
+                    height: result.height
+                };
+            } catch (error) {
+                console.warn('Media upload failed', error);
+                throw error;
             }
         }
 
@@ -1422,7 +1475,6 @@
                 imgUrl: data.imgUrl || null,
                 thumbnailUrl: data.thumbnailUrl || null,
                 audio: data.audio || null,
-                audioUrl: data.audioUrl || null,
                 audioMime: data.audioMime || '',
                 audioDurationMs: data.audioDurationMs || 0,
                 transcript: data.transcript || '',
@@ -1484,8 +1536,8 @@
                 msg.senderName,
                 msg.type,
                 msg.content,
-                msg.imgUrl || msg.thumbnailUrl || msg.img ? 'img' : '',
-                msg.audioUrl || msg.audio ? 'audio' : '',
+                msg.img ? 'img' : '',
+                msg.audio ? 'audio' : '',
                 msg.audioDurationMs || 0,
                 msg.transcript || '',
                 msg.aiSummary || '',
@@ -1598,7 +1650,7 @@
                         ${!isMe ? `<span class="bs-text-xs text-gray-500 mb-1 ml-1">${displayName}</span>` : ''}
                         <div class="p-3 rounded-2xl shadow-sm ${isMe ? 'bg-brand text-white rounded-tr-none' : 'bg-white text-gray-800 rounded-tl-none border border-gray-100'}">
                             ${msg.type === 'text' ? `<p class="bs-text-lg">${msg.content}</p>` : ''}
-                            ${msg.type === 'photo' && (msg.imgUrl || msg.img) ? `<img src="${resolveMediaUrl(msg.thumbnailUrl || msg.imgUrl || msg.img)}" class="max-w-56 max-h-56 rounded-xl object-cover">${msg.content ? `<p class="bs-text-base mt-2">${msg.content}</p>` : ''}` : ''}
+                            ${msg.type === 'photo' && msg.img ? `<img src="${msg.img}" class="max-w-56 max-h-56 rounded-xl object-cover">${msg.content ? `<p class="bs-text-base mt-2">${msg.content}</p>` : ''}` : ''}
                             ${msg.type === 'audio' ? `<div class="space-y-2 w-60 max-w-[68vw]">${renderVoicePlayer(msg, isMe)}<div class="${isMe ? 'bg-white/10' : 'bg-gray-50'} rounded-xl p-2"><p class="bs-text-xs opacity-70 mb-1">語音轉譯</p>${msg.transcript ? `<p class="bs-text-base">${msg.transcript}</p>` : `<p class="bs-text-sm opacity-80">未取得轉譯文字，可播放錄音確認內容。</p>`}</div></div>` : ''}
                         </div>
                         ${msg.type === 'audio' && msg.transcript && !msg.aiSummary && state.backendMode === 'server' ? `
@@ -1606,7 +1658,7 @@
                                 <i class="fa-solid fa-wand-magic-sparkles mr-1"></i>總結錄音
                             </button>
                         ` : ''}
-                        ${msg.type === 'audio' && (msg.audio || msg.audioUrl) && !msg.transcript && state.backendMode === 'server' ? `
+                        ${msg.type === 'audio' && msg.audio && !msg.transcript && state.backendMode === 'server' ? `
                             <button class="action-btn mt-2 bg-amber-50 border border-amber-100 text-amber-700 rounded-xl px-3 py-2 bs-text-sm font-bold disabled:opacity-60" data-action="transcribeVoice" data-message-id="${escapeAttribute(messageId)}" ${state.transcribingMessageId === messageId ? 'disabled' : ''}>
                                 <i class="fa-solid ${state.transcribingMessageId === messageId ? 'fa-spinner fa-spin' : 'fa-closed-captioning'} mr-1"></i>${state.transcribingMessageId === messageId ? 'AI 轉譯中' : 'AI 轉譯錄音'}
                             </button>
@@ -1723,6 +1775,19 @@
                         <div class="flex mb-6 bg-gray-100 rounded-xl p-1">
                             <button class="action-btn flex-1 py-2 rounded-lg bs-text-sm font-medium transition-colors ${isLogin ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}" data-action="switchAuthMode" data-mode="login">登入</button>
                             <button class="action-btn flex-1 py-2 rounded-lg bs-text-sm font-medium transition-colors ${!isLogin ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}" data-action="switchAuthMode" data-mode="register">註冊</button>
+                        </div>
+
+                        <div class="mb-4">
+                            <button class="action-btn w-full min-h-[44px] bg-white text-gray-700 bs-text-base font-bold py-3 px-6 rounded-xl border border-gray-200 shadow-sm hover:bg-gray-50 transition-colors flex items-center justify-center gap-3" data-action="androidGoogleLogin" ${state.googleSignInLoading ? 'disabled' : ''}>
+                                <i class="fa-brands fa-google text-red-500"></i>
+                                <span>${state.googleSignInLoading ? 'Google 登入中...' : '使用 Google 登入'}</span>
+                            </button>
+                        </div>
+
+                        <div class="flex items-center gap-3 mb-4">
+                            <div class="h-px bg-gray-200 flex-1"></div>
+                            <span class="bs-text-xs text-gray-400">或使用電郵</span>
+                            <div class="h-px bg-gray-200 flex-1"></div>
                         </div>
 
                         ${!isLogin ? `
@@ -1905,7 +1970,7 @@
 
         // 頂部導航列 (加入一鍵刪除按鈕)
         function renderHeader() {
-            const titles = { 'calendar': '共用日曆', 'chat': '溫馨對話', 'rewards': '家庭獎勵', 'leaderboard': '活躍度排行榜', 'profile': '我' };
+            const titles = { 'calendar': '日曆', 'chat': '對話', 'rewards': '獎勵', 'leaderboard': '活躍度排行榜', 'profile': '我' };
             const currentTitle = titles[state.currentTab] || '星喚';
             return `
                 <header class="bg-white px-6 pt-12 pb-4 shadow-sm z-10 sticky top-0 flex justify-between items-center rounded-b-2xl">
@@ -1927,7 +1992,7 @@
                                 <i class="fa-solid fa-mobile-screen-button"></i>
                             </button>
                         ` : ''}
-                        <button class="action-btn w-9 h-9 rounded-full bg-gray-900 text-green-300 flex items-center justify-center hover:bg-gray-800 transition-colors" data-action="openModal" data-modal="architecture" title="查看 Log">
+                        <button class="action-btn w-9 h-9 rounded-full bg-gray-900 text-green-300 flex items-center justify-center hover:bg-gray-800 transition-colors" data-action="openModal" data-modal="logs" title="查看 Log">
                             <i class="fa-solid fa-terminal"></i>
                         </button>
                         <button class="action-btn w-9 h-9 rounded-full bg-gray-50 text-gray-400 flex items-center justify-center hover:bg-red-50 hover:text-red-500 transition-colors" data-action="openModal" data-modal="confirmReset" title="清除數據並重新開始">
@@ -2065,7 +2130,7 @@
                                 <span class="text-gray-500 bs-text-xs font-medium">${escapeHtml(bibleVerse.reference || '')}</span>
                             </div>
                             <p class="text-gray-700 font-medium leading-relaxed">${escapeHtml(bibleVerse.text || '')}</p>
-                            <p class="absolute right-3 bottom-2 bs-text-[10px] text-gray-400 tracking-wide uppercase">FROM ${escapeHtml(bibleVerse.source || '信望愛站聖經 JSON API')}</p>
+                            <p class="absolute right-3 bottom-2 bs-text-[10px] text-gray-400 tracking-wide uppercase">FROM ${escapeHtml(bibleVerse.source || '信望愛站聖經')}</p>
                         </div>
                     `;
                 }
@@ -2081,7 +2146,7 @@
                             <span class="text-gray-500 font-medium">${escapeHtml(almanac.jiDisplay)}</span>
                         </div>
                         <p class="bs-text-xs text-gray-400 mt-2">${escapeHtml(almanac.lunar.pengZu)} · ${escapeHtml(almanac.lunar.xiu)}宿${almanac.lunar.xiuLuck ? ' · ' + escapeHtml(almanac.lunar.xiuLuck) : ''}</p>
-                        <p class="absolute right-3 bottom-2 leading-none text-gray-300 opacity-60" style="font-size: 8px;">來源：lunar-javascript</p>
+                        <p class="absolute right-3 bottom-2 bs-text-[2px] text-gray-400 tracking-wide uppercase">FROM 6tail.cn</p>
                     </div>
                 `;
             }
@@ -2099,7 +2164,7 @@
                         <div class="flex gap-2 overflow-x-auto no-scrollbar">
                             ${dayMemories.map(m => `
                                 <div class="w-12 h-12 rounded-lg bg-white border border-orange-200 flex-shrink-0 flex items-center justify-center overflow-hidden">
-                                    ${(m.imgUrl || m.img) ? `<img src="${resolveMediaUrl(m.thumbnailUrl || m.imgUrl || m.img)}" class="w-full h-full object-cover">` : `<i class="fa-solid ${m.type === 'audio' ? 'fa-microphone text-blue-400' : 'fa-font text-gray-400'} bs-text-xl"></i>`}
+                                    ${m.img ? `<img src="${m.img}" class="w-full h-full object-cover">` : `<i class="fa-solid ${m.type === 'audio' ? 'fa-microphone text-blue-400' : 'fa-font text-gray-400'} bs-text-xl"></i>`}
                                 </div>
                             `).join('')}
                         </div>
@@ -2353,17 +2418,18 @@
                         const file = event.target.files?.[0];
                         if (!file) return;
                         event.target.value = '';
-                        try {
-                            const result = await uploadMediaFile(file);
-                            await sendChatMessage({
-                                type: 'photo',
-                                content: '',
-                                imgUrl: result.mediaUrl,
-                                thumbnailUrl: result.thumbnailUrl || result.mediaUrl
-                            });
-                        } catch (error) {
-                            console.error('Image upload failed', error);
-                            showMessage('圖片上傳失敗，請重試。');
+                        if (state.backendMode === 'server') {
+                            try {
+                                const uploaded = await uploadMediaFile(file);
+                                await sendChatMessage({ type: 'photo', content: '', imgUrl: uploaded.mediaUrl, thumbnailUrl: uploaded.thumbnailUrl });
+                            } catch (err) {
+                                console.warn('Image upload failed, using base64', err);
+                                const img = await readFileAsDataUrl(file);
+                                await sendChatMessage({ type: 'photo', content: '', img });
+                            }
+                        } else {
+                            const img = await readFileAsDataUrl(file);
+                            await sendChatMessage({ type: 'photo', content: '', img });
                         }
                     });
                 }
@@ -2560,7 +2626,7 @@
                 `;
             }
 
-            if (state.showModal === 'architecture') {
+            if (state.showModal === 'logs') {
                 modalContent = `
                     <div class="bg-white w-[94%] max-w-lg rounded-3xl p-5 shadow-2xl animate-fadeIn relative max-h-[86vh] flex flex-col">
                         <button class="action-btn absolute top-4 right-4 w-8 h-8 bg-gray-100 rounded-full text-gray-500 flex items-center justify-center" data-action="closeModal">
@@ -2679,7 +2745,7 @@
                                         </div>
                                         <span class="bs-text-sm font-bold text-gray-700">${m.childName}</span>
                                     </div>
-                                    ${(m.imgUrl || m.img) ? `<img src="${resolveMediaUrl(m.thumbnailUrl || m.imgUrl || m.img)}" class="w-full h-32 object-cover rounded-xl mb-2">` : ''}
+                                    ${m.img ? `<img src="${m.img}" class="w-full h-32 object-cover rounded-xl mb-2">` : ''}
                                     <p class="text-gray-800">${m.content}</p>
                                 </div>
                             `).join('')}
@@ -2689,7 +2755,7 @@
             }
 
             if (state.showModal === 'videoPlayer') {
-                const hasPhotos = state.memories.some(m => (m.imgUrl || m.img) && m.month === today.getMonth() + 1 && m.year === today.getFullYear());
+                const hasPhotos = state.memories.some(m => m.img && m.month === today.getMonth() + 1 && m.year === today.getFullYear());
                 if (state.videoGenerating) {
                     modalContent = `
                         <div class="bg-gradient-to-b from-brand-dark to-black w-full max-w-md h-96 rounded-3xl flex flex-col items-center justify-center relative animate-fadeIn">
@@ -2909,6 +2975,9 @@
                     else if (action === 'register') {
                         handleRegister();
                     }
+                    else if (action === 'androidGoogleLogin') {
+                        startAndroidGoogleLogin();
+                    }
                     else if (action === 'setRole') {
                         state.role = newBtn.getAttribute('data-role');
                         localStorage.setItem('beckon-stars-role', state.role);
@@ -3091,7 +3160,7 @@
                             if (error.status === 401) {
                                 state.errorMsg = '舊密碼不正確';
                             } else {
-                                state.errorMsg = '修改失敗，請稍後再試';
+                                state.errorMsg = error.serverMessage || '修改失敗，請稍後再試';
                             }
                             render();
                         }
@@ -3116,14 +3185,12 @@
                         state.showModal = newBtn.getAttribute('data-modal');
                         state.pendingMemoryType = 'text';
                         state.pendingMemoryImage = '';
-                        state.pendingMemoryImageUrl = '';
-                        state.pendingMemoryThumbnailUrl = '';
                         if (state.showModal === 'videoPlayer') {
                             state.videoUrl = null;
                             state.videoError = null;
                             state.videoGenerating = false;
                         }
-                        if (state.showModal === 'architecture') {
+                        if (state.showModal === 'logs') {
                             refreshServerLogs();
                         }
                         render();
@@ -3187,11 +3254,7 @@
                         const memoryContentInput = document.getElementById('memoryContentInput');
                         if (memoryContentInput) state.pendingMemoryContent = memoryContentInput.value;
                         state.pendingMemoryType = newBtn.getAttribute('data-type');
-                        if (state.pendingMemoryType !== 'photo') {
-                            state.pendingMemoryImage = '';
-                            state.pendingMemoryImageUrl = '';
-                            state.pendingMemoryThumbnailUrl = '';
-                        }
+                        if (state.pendingMemoryType !== 'photo') state.pendingMemoryImage = '';
                         render();
                     }
                     else if (action === 'chooseMemoryImage') {
@@ -3216,6 +3279,19 @@
                             return;
                         }
 
+                        let imgUrl = null;
+                        if (state.pendingMemoryType === 'photo' && state.pendingMemoryImage && state.backendMode === 'server') {
+                            try {
+                                const blob = await fetch(state.pendingMemoryImage).then(r => r.blob());
+                                const file = new File([blob], 'memory.jpg', { type: blob.type });
+                                const uploaded = await uploadMediaFile(file);
+                                imgUrl = uploaded?.mediaUrl || state.pendingMemoryImage;
+                            } catch (err) {
+                                console.warn('Media upload failed, using base64', err);
+                                imgUrl = state.pendingMemoryImage;
+                            }
+                        }
+
                         const memoryData = {
                             uid: state.authUid || 'local',
                             date: today.getDate(),
@@ -3225,9 +3301,7 @@
                             childName: state.userName || (state.role === 'child' ? '我' : '媽媽'),
                             type: state.pendingMemoryType,
                             content,
-                            img: state.pendingMemoryType === 'photo' ? (state.pendingMemoryImage || null) : null,
-                            imgUrl: state.pendingMemoryType === 'photo' ? (state.pendingMemoryImageUrl || null) : null,
-                            thumbnailUrl: state.pendingMemoryType === 'photo' ? (state.pendingMemoryThumbnailUrl || null) : null
+                            img: imgUrl || (state.pendingMemoryType === 'photo' ? state.pendingMemoryImage : null)
                         };
 
                         if (state.backendMode === 'server' && state.familyId) {
@@ -3242,8 +3316,6 @@
                                 state.pendingMemoryType = 'text';
                                 state.pendingMemoryContent = '';
                                 state.pendingMemoryImage = '';
-                                state.pendingMemoryImageUrl = '';
-                                state.pendingMemoryThumbnailUrl = '';
                                 render();
                                 setTimeout(() => showMessage('已儲存今日回憶到自架服務器，並獲得 10 積分。'), 100);
                             } catch (error) {
@@ -3261,8 +3333,6 @@
                         state.pendingMemoryType = 'text';
                         state.pendingMemoryContent = '';
                         state.pendingMemoryImage = '';
-                        state.pendingMemoryImageUrl = '';
-                        state.pendingMemoryThumbnailUrl = '';
                         render();
                         setTimeout(() => showMessage('已儲存今日回憶，並獲得 10 積分。'), 100);
                     }
@@ -3379,18 +3449,10 @@
                 memoryImageInput.addEventListener('change', async event => {
                     const file = event.target.files?.[0];
                     if (!file) return;
-                    try {
-                        const result = await uploadMediaFile(file);
-                        state.pendingMemoryImage = await readFileAsDataUrl(file); // 保留預覽
-                        state.pendingMemoryImageUrl = result.mediaUrl;
-                        state.pendingMemoryThumbnailUrl = result.thumbnailUrl || result.mediaUrl;
-                        const memoryContentInput = document.getElementById('memoryContentInput');
-                        if (memoryContentInput) state.pendingMemoryContent = memoryContentInput.value;
-                        render();
-                    } catch (error) {
-                        console.error('Memory image upload failed', error);
-                        showMessage('相片上傳失敗，請重試。');
-                    }
+                    state.pendingMemoryImage = await readFileAsDataUrl(file);
+                    const memoryContentInput = document.getElementById('memoryContentInput');
+                    if (memoryContentInput) state.pendingMemoryContent = memoryContentInput.value;
+                    render();
                 });
             }
 
@@ -3399,18 +3461,10 @@
                 memoryCameraInput.addEventListener('change', async event => {
                     const file = event.target.files?.[0];
                     if (!file) return;
-                    try {
-                        const result = await uploadMediaFile(file);
-                        state.pendingMemoryImage = await readFileAsDataUrl(file); // 保留預覽
-                        state.pendingMemoryImageUrl = result.mediaUrl;
-                        state.pendingMemoryThumbnailUrl = result.thumbnailUrl || result.mediaUrl;
-                        const memoryContentInput = document.getElementById('memoryContentInput');
-                        if (memoryContentInput) state.pendingMemoryContent = memoryContentInput.value;
-                        render();
-                    } catch (error) {
-                        console.error('Memory camera upload failed', error);
-                        showMessage('相片上傳失敗，請重試。');
-                    }
+                    state.pendingMemoryImage = await readFileAsDataUrl(file);
+                    const memoryContentInput = document.getElementById('memoryContentInput');
+                    if (memoryContentInput) state.pendingMemoryContent = memoryContentInput.value;
+                    render();
                 });
             }
 
@@ -3420,18 +3474,8 @@
                     const file = event.target.files?.[0];
                     if (!file) return;
                     event.target.value = '';
-                    try {
-                        const result = await uploadMediaFile(file);
-                        await sendChatMessage({
-                            type: 'photo',
-                            content: '',
-                            imgUrl: result.mediaUrl,
-                            thumbnailUrl: result.thumbnailUrl || result.mediaUrl
-                        });
-                    } catch (error) {
-                        console.error('Image upload failed', error);
-                        showMessage('圖片上傳失敗，請重試。');
-                    }
+                    const img = await readFileAsDataUrl(file);
+                    await sendChatMessage({ type: 'photo', content: '', img });
                 });
             }
 
@@ -4032,7 +4076,7 @@
 
             const audio = recording.audio || '';
             const transcript = String(recording.transcript || '').trim();
-            if (!audio && !recording.audioUrl) {
+            if (!audio) {
                 showMessage('錄音失敗，請再試一次。');
                 return;
             }
@@ -4041,8 +4085,7 @@
                 type: 'audio',
                 content: transcript || '語音訊息',
                 transcript,
-                audio: recording.audio || null,  // 保留 base64 回退
-                audioUrl: recording.audioUrl || null,  // 新字段
+                audio,
                 audioMime: recording.audioMime || 'audio/mp4',
                 audioDurationMs: recording.durationMs || 0,
                 aiSummary: null
@@ -4114,7 +4157,7 @@
         async function transcribeVoiceMessage(messageId) {
             if (!messageId || state.backendMode !== 'server' || !state.familyId) return;
             const message = state.messages.find(item => String(item.id) === String(messageId));
-            if (!message?.audio && !message?.audioUrl) {
+            if (!message?.audio) {
                 showMessage('呢條語音沒有可轉譯的錄音。');
                 return;
             }
@@ -4171,9 +4214,8 @@
             const chatInput = document.getElementById('chatInput');
             const isTextMessage = !override;
             const content = override ? (override.content || '') : (chatInput?.value || chatDraft).trim();
-            const hasImage = override?.imgUrl || override?.img;
-            const hasAudio = override?.audioUrl || override?.audio;
-            if (!content && !hasImage && !hasAudio) return;
+            const hasImage = override?.img || override?.imgUrl;
+            if (!content && !hasImage) return;
             if (isTextMessage) {
                 chatDraft = '';
                 shouldRestoreChatInputFocus = false;
@@ -4191,7 +4233,6 @@
                 imgUrl: override?.imgUrl || null,
                 thumbnailUrl: override?.thumbnailUrl || null,
                 audio: override?.audio || null,
-                audioUrl: override?.audioUrl || null,
                 audioMime: override?.audioMime || '',
                 audioDurationMs: override?.audioDurationMs || 0,
                 transcript: override?.transcript || '',
@@ -4277,10 +4318,6 @@
 
             // 嘗試恢復登入狀態
             const hasAuth = restoreAuthState();
-
-            if (isAndroidApk() && window.BeckonStarsAndroid?.setMediaApiConfig) {
-                window.BeckonStarsAndroid.setMediaApiConfig(selfHostedApiBase, state.authToken || '');
-            }
 
             render(); // 先渲染，讓使用者看到畫面
 
