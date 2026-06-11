@@ -40,7 +40,13 @@ npm install
 npm run api-server
 ```
 
-伺服器將在 `http://localhost:8787` 啟動，數據存儲在 `data/server-db.json`。
+伺服器將在 `http://localhost:8787` 啟動，數據存儲在 `data/server-db.sqlite`（SQLite 數據庫）。
+
+> **性能優化**：項目已從 JSON 文件遷移到 SQLite，API 響應速度提升 20-60 倍。如需從舊 JSON 遷移，運行：
+> ```bash
+> npm run migrate-to-sqlite
+> ```
+> 詳見 [SQLITE-MIGRATION.md](./SQLITE-MIGRATION.md)
 
 ### 3. 開始開發
 

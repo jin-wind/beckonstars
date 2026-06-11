@@ -10,6 +10,10 @@ const bcrypt = require('bcryptjs');
 const formidable = require('formidable');
 const sharp = require('sharp');
 
+// 使用 SQLite 適配器（保持與舊 JSON 接口兼容）
+const USE_SQLITE = (process.env.USE_SQLITE || 'true').toLowerCase() === 'true';
+const dbAdapter = USE_SQLITE ? require('./db-adapter') : null;
+
 function loadEnvFile(filePath = path.join(process.cwd(), '.env')) {
   if (!fs.existsSync(filePath)) return;
 
@@ -346,6 +350,10 @@ function appendServerLog(level, args) {
 });
 
 function ensureDb() {
+  if (USE_SQLITE) {
+    require('./db-sqlite').initDb();
+    return;
+  }
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   if (!fs.existsSync(dbPath)) {
     fs.writeFileSync(dbPath, JSON.stringify({ families: {} }, null, 2));
@@ -353,6 +361,9 @@ function ensureDb() {
 }
 
 async function readDb() {
+  if (USE_SQLITE) {
+    return dbAdapter.readDb();
+  }
   ensureDb();
   const data = await fs.promises.readFile(dbPath, 'utf8');
   return JSON.parse(data);
@@ -360,6 +371,18 @@ async function readDb() {
 
 let _writeLock = Promise.resolve();
 function writeDb(db) {
+  if (USE_SQLITE) {
+    _writeLock = _writeLock
+      .then(async () => {
+        await dbAdapter.writeDb(db);
+      })
+      .catch(err => {
+        console.error('[db] write failed:', err.message);
+        throw err;
+      });
+    return _writeLock;
+  }
+
   const payload = JSON.stringify(db, null, 2);
   const tmpPath = `${dbPath}.tmp`;
   _writeLock = _writeLock
