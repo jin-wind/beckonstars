@@ -1,33 +1,30 @@
-$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = 'Continue'
 
-# Check if there are changes
-git diff --exit-code >$null 2>&1
-$hasChanges = $LASTEXITCODE -ne 0
+# Get changed files excluding worktrees
+$changedFiles = git diff --name-only --diff-filter=d | Where-Object { $_ -notmatch '^\.claude/worktrees/' }
 
-git diff --cached --exit-code >$null 2>&1
-$hasStagedChanges = $LASTEXITCODE -ne 0
+if ($changedFiles) {
+    # Stage files
+    $changedFiles | ForEach-Object { git add $_ }
 
-if ($hasChanges -or $hasStagedChanges) {
-    # Get list of changed files (modified/added, exclude deleted for now)
-    $changedFiles = git diff --name-only --diff-filter=d
-
-    if ($changedFiles) {
-        # Stage only the changed files (not untracked files like .exe)
-        $changedFiles | ForEach-Object { git add $_ }
-
-        # Generate commit message based on files changed
-        $commitMessage = @"
-feat: auto-commit changes
-
-Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
-"@
-
-        git commit -m $commitMessage 2>&1 | Out-Null
-        git push origin main 2>&1 | Out-Null
-
-        Write-Output '{"systemMessage": "Changes committed and pushed to main"}'
+    # Generate smart commit message
+    $fileList = $changedFiles -join ', '
+    $commitMessage = if ($changedFiles.Count -eq 1) {
+        "update: $fileList"
+    } elseif ($changedFiles.Count -le 3) {
+        "update: $fileList"
     } else {
-        Write-Output '{"systemMessage": "No tracked file changes to commit"}'
+        "update: multiple files ($($changedFiles.Count) files)"
+    }
+
+    git commit -m $commitMessage 2>&1 | Out-Null
+
+    # Push with error handling
+    git push origin main 2>&1 | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        Write-Output '{"systemMessage": "✓ Committed and pushed to main"}'
+    } else {
+        Write-Output '{"systemMessage": "⚠ Committed locally but push failed"}'
     }
 } else {
     Write-Output '{"systemMessage": "No changes to commit"}'
