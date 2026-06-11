@@ -245,7 +245,7 @@ function addMessage(familyId, message) {
     message.audioUrl || null,
     message.transcript || null,
     message.summary || null,
-    message.timestamp
+    message.timestamp || new Date().toISOString()
   );
 }
 
@@ -311,11 +311,11 @@ function addMemory(familyId, memory) {
     familyId,
     memory.userId || null,
     memory.date,
-    memory.title,
+    memory.title || '',
     memory.description || null,
     memory.imageUrl || null,
     memory.tags ? JSON.stringify(memory.tags) : null,
-    memory.createdAt
+    memory.createdAt || new Date().toISOString()
   );
 }
 
