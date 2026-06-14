@@ -319,6 +319,16 @@ function addMemory(familyId, memory) {
   );
 }
 
+function removeUserFamily(userId, familyId) {
+  const db = initDb();
+  db.prepare('DELETE FROM user_families WHERE user_id = ? AND family_id = ?').run(userId, familyId);
+}
+
+function removeFamilyMember(familyId, memberId) {
+  const db = initDb();
+  db.prepare('DELETE FROM family_members WHERE family_id = ? AND member_id = ?').run(familyId, memberId);
+}
+
 module.exports = {
   initDb,
   createUser,
@@ -327,9 +337,11 @@ module.exports = {
   getUserByGoogleSub,
   updateUser,
   addUserFamily,
+  removeUserFamily,
   createFamily,
   getFamily,
   addFamilyMember,
+  removeFamilyMember,
   getMessages,
   addMessage,
   updateMessage,

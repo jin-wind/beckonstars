@@ -2550,6 +2550,14 @@
                         <p class="bs-text-xs text-gray-400 text-center mt-2">分享此碼給家人加入</p>
                     </div>
 
+                    <!-- 退出家庭 -->
+                    <div class="bg-white rounded-3xl shadow-sm p-5">
+                        <button class="action-btn w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-orange-50 text-orange-600 font-bold hover:bg-orange-100 transition-colors" data-action="leaveFamily">
+                            <i class="fa-solid fa-right-from-bracket"></i>退出家庭
+                        </button>
+                        <p class="bs-text-xs text-gray-400 text-center mt-2">退出後可加入其他家庭</p>
+                    </div>
+
                     <!-- 操作按鈕 -->
                     <div class="bg-white rounded-3xl shadow-sm p-2">
                         <button class="action-btn w-full flex items-center px-4 py-4 rounded-2xl hover:bg-gray-50 transition-colors" data-action="openModal" data-modal="editProfile">
@@ -2850,6 +2858,23 @@
                 `;
             }
 
+            // 退出家庭確認
+            if (state.showModal === 'confirmLeaveFamily') {
+                modalContent = `
+                    <div class="bg-white w-full max-w-sm rounded-3xl p-6 text-center relative animate-fadeIn">
+                        <div class="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <i class="fa-solid fa-right-from-bracket bs-text-2xl text-orange-500"></i>
+                        </div>
+                        <h3 class="bs-text-xl font-bold text-gray-800 mb-2">確認退出家庭？</h3>
+                        <p class="text-gray-500 bs-text-sm mb-6">退出後你可以加入其他家庭，此家庭的訊息和回憶會保留</p>
+                        <div class="flex gap-3">
+                            <button class="action-btn flex-1 bg-gray-100 text-gray-600 font-bold py-3 rounded-2xl hover:bg-gray-200 transition-colors" data-action="closeModal">取消</button>
+                            <button class="action-btn flex-1 bg-orange-500 text-white font-bold py-3 rounded-2xl shadow-md hover:bg-orange-600 transition-colors" data-action="confirmLeaveFamily">退出</button>
+                        </div>
+                    </div>
+                `;
+            }
+
             // 編輯個人資料
             if (state.showModal === 'editProfile') {
                 const avatarOptions = state.role === 'senior' ? avatars.senior : avatars.child;
@@ -3089,6 +3114,38 @@
                         state.showModal = null;
                         signOut();
                         render();
+                    }
+                    else if (action === 'leaveFamily') {
+                        state.showModal = 'confirmLeaveFamily';
+                        render();
+                    }
+                    else if (action === 'confirmLeaveFamily') {
+                        if (unsubscribeMessages) { unsubscribeMessages(); unsubscribeMessages = null; }
+                        if (unsubscribeMemories) { unsubscribeMemories(); unsubscribeMemories = null; }
+                        const oldFamilyId = state.familyId;
+                        serverApi(`/api/families/${encodeURIComponent(oldFamilyId)}/leave`, { method: 'DELETE' })
+                            .then(() => {
+                                state.familyId = null;
+                                state.calendarCode = null;
+                                state.messages = [];
+                                state.memories = [];
+                                state.showModal = null;
+                                state.appReady = false;
+                                state.onboardingStep = 4;
+                                state.connectionMode = 'select';
+                                if (state.currentUser?.families) {
+                                    state.currentUser.families = state.currentUser.families.filter(f => f !== oldFamilyId);
+                                }
+                                saveDemoData();
+                                render();
+                                showMessage('已退出家庭，請選擇加入或建立新家庭');
+                            })
+                            .catch(err => {
+                                console.error('退出家庭失敗', err);
+                                showMessage('退出失敗，請稍後再試');
+                                state.showModal = null;
+                                render();
+                            });
                     }
                     else if (action === 'uploadAvatar') {
                         const fileInput = document.getElementById('avatarFileInput');

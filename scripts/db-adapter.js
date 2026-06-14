@@ -94,6 +94,14 @@ function jsonToSqlite(jsonDb) {
             }
           }
         }
+        // 同步刪除：移除 SQLite 中有但 JSON 中已不存在的家庭關係
+        const dbFamilies = db.prepare('SELECT family_id FROM user_families WHERE user_id = ?').all(userId);
+        const jsonFamilySet = new Set((user.families || []).map(f => typeof f === 'string' ? f : f.familyId));
+        for (const row of dbFamilies) {
+          if (!jsonFamilySet.has(row.family_id)) {
+            dbSqlite.removeUserFamily(userId, row.family_id);
+          }
+        }
       }
     }
 
@@ -119,6 +127,14 @@ function jsonToSqlite(jsonDb) {
               avatar: member.avatar,
               addedAt: member.addedAt || family.createdAt
             });
+          }
+          // 同步刪除：移除 SQLite 中有但 JSON 中已不存在的成員
+          const dbMembers = db.prepare('SELECT member_id FROM family_members WHERE family_id = ?').all(familyId);
+          const jsonMemberSet = new Set(Object.keys(family.members));
+          for (const row of dbMembers) {
+            if (!jsonMemberSet.has(row.member_id)) {
+              dbSqlite.removeFamilyMember(familyId, row.member_id);
+            }
           }
         }
 

@@ -1615,6 +1615,42 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === 'DELETE' && parts[3] === 'leave') {
+      const authUser = getAuthUser(req);
+      if (!authUser) {
+        sendJson(res, 401, { error: 'unauthorized', message: '請先登入' });
+        return;
+      }
+
+      const db = await readDb();
+      const user = db.users?.[authUser.userId];
+      if (!user) {
+        sendJson(res, 404, { error: 'user-not-found' });
+        return;
+      }
+
+      const family = getFamily(db, familyId);
+      if (!family) {
+        sendJson(res, 404, { error: 'family-not-found' });
+        return;
+      }
+
+      if (!family.members[authUser.userId]) {
+        sendJson(res, 400, { error: 'not-a-member', message: '你不是這個家庭的成員' });
+        return;
+      }
+
+      delete family.members[authUser.userId];
+      if (user.families) {
+        user.families = user.families.filter(f => f !== familyId);
+      }
+
+      writeDb(db);
+      console.log(`[data] 🚪 成員退出 [${familyId}] ${user.name} - 剩餘 ${Object.keys(family.members).length} 位成員`);
+      sendJson(res, 200, { success: true, message: '已退出家庭' });
+      return;
+    }
+
     const db = await readDb();
     const family = getFamily(db, familyId);
     if (!family) {
