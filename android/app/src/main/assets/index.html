@@ -691,6 +691,29 @@
 
         const selfHostedApiBase = 'http://144.79.170.102:8787';
         const useSelfHostedServer = true;
+        const CURRENT_VERSION_CODE = 63;
+
+        async function checkForUpdate() {
+            try {
+                const resp = await fetch('https://api.github.com/repos/jin-wind/beckonstars/releases/latest');
+                if (!resp.ok) return;
+                const release = await resp.json();
+                const tagName = release.tag_name;
+                const latestCode = parseInt(tagName.replace('v', ''), 10);
+                if (isNaN(latestCode) || latestCode <= CURRENT_VERSION_CODE) return;
+
+                state.updateInfo = {
+                    versionCode: latestCode,
+                    versionName: tagName,
+                    downloadUrl: `https://github.com/jin-wind/beckonstars/releases/download/${tagName}/app-debug.apk`,
+                    releaseNotes: release.body || ''
+                };
+                state.showModal = 'updateAvailable';
+                render();
+            } catch (e) {
+                console.log('[update] 檢查更新失敗:', e.message);
+            }
+        }
 
         function loadDemoData() {
             try {
@@ -2958,6 +2981,24 @@
                 `;
             }
 
+            // 更新提示
+            if (state.showModal === 'updateAvailable') {
+                const info = state.updateInfo || {};
+                modalContent = `
+                    <div class="bg-white w-full max-w-sm rounded-3xl p-6 text-center relative animate-fadeIn">
+                        <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <i class="fa-solid fa-arrow-up bs-text-2xl text-blue-500"></i>
+                        </div>
+                        <h3 class="bs-text-xl font-bold text-gray-800 mb-2">有新版本 ${escapeHtml(info.versionName || '')}</h3>
+                        ${info.releaseNotes ? `<p class="text-gray-500 bs-text-sm mb-4 text-left max-h-32 overflow-y-auto whitespace-pre-line">${escapeHtml(info.releaseNotes)}</p>` : ''}
+                        <div class="flex gap-3">
+                            <button class="action-btn flex-1 bg-gray-100 text-gray-600 font-bold py-3 rounded-2xl hover:bg-gray-200 transition-colors" data-action="closeModal">稍後再說</button>
+                            <button class="action-btn flex-1 bg-blue-500 text-white font-bold py-3 rounded-2xl shadow-md hover:bg-blue-600 transition-colors" data-action="downloadUpdate">立即更新</button>
+                        </div>
+                    </div>
+                `;
+            }
+
             return `
                 <div class="absolute inset-0 z-50 flex items-${state.showModal === 'addMemory' ? 'end' : 'center'} justify-center bg-black/40 backdrop-blur-sm">
                     ${modalContent}
@@ -3150,6 +3191,18 @@
                                 state.showModal = null;
                                 render();
                             });
+                    }
+                    else if (action === 'downloadUpdate') {
+                        if (window.BeckonStarsAndroid?.downloadAndInstallUpdate) {
+                            window.BeckonStarsAndroid.downloadAndInstallUpdate(state.updateInfo.downloadUrl);
+                            state.showModal = null;
+                            render();
+                            showMessage('正在下載更新，完成後會自動提示安裝');
+                        } else {
+                            window.open(state.updateInfo.downloadUrl, '_blank');
+                            state.showModal = null;
+                            render();
+                        }
                     }
                     else if (action === 'uploadAvatar') {
                         const fileInput = document.getElementById('avatarFileInput');
@@ -4385,6 +4438,9 @@
             // 嘗試連接伺服器
             const connected = await initCloudBackend();
             console.log('[beckon] Server connection result:', connected, 'mode:', state.backendMode);
+
+            // 檢查更新
+            checkForUpdate();
 
             // 載入今日黃曆
             fetchAlmanac().then(() => render());

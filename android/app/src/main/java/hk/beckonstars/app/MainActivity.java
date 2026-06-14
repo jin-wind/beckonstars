@@ -2,11 +2,15 @@ package hk.beckonstars.app;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.DownloadManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.content.BroadcastReceiver;
 import android.content.ClipData;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.media.MediaPlayer;
@@ -15,6 +19,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.CancellationSignal;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.MediaStore;
@@ -81,6 +86,8 @@ public class MainActivity extends Activity {
     private String pendingTranscriptionAudioDataUrl = "";
     private String mediaApiBase = "";
     private String mediaAuthToken = "";
+    private long updateDownloadId = -1;
+    private static final String UPDATE_FILE_NAME = "beckonstars-update.apk";
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private CredentialManager credentialManager;
     private ExecutorService credentialExecutor;
@@ -790,6 +797,53 @@ public class MainActivity extends Activity {
         } catch (Exception ignored) {}
     }
 
+    public void startDownloadAndInstall(String downloadUrl) {
+        try {
+            DownloadManager.Request request = new DownloadManager.Request(Uri.parse(downloadUrl));
+            request.setTitle("星喚 更新");
+            request.setDescription("正在下載新版本...");
+            request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+            request.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, UPDATE_FILE_NAME);
+            request.setMimeType("application/vnd.android.package-archive");
+
+            DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+            updateDownloadId = dm.enqueue(request);
+
+            registerReceiver(downloadCompleteReceiver, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE));
+        } catch (Exception e) {
+            Log.e(TAG, "下載更新失敗", e);
+        }
+    }
+
+    private final BroadcastReceiver downloadCompleteReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            long id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1);
+            if (id != updateDownloadId) return;
+            try { unregisterReceiver(this); } catch (Exception ignored) {}
+
+            File apkFile = new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), UPDATE_FILE_NAME);
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                Uri contentUri = FileProvider.getUriForFile(
+                    MainActivity.this,
+                    getPackageName() + ".fileprovider",
+                    apkFile
+                );
+                Intent install = new Intent(Intent.ACTION_INSTALL_PACKAGE);
+                install.setData(contentUri);
+                install.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                install.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(install);
+            } else {
+                Intent install = new Intent(Intent.ACTION_VIEW);
+                install.setDataAndType(Uri.fromFile(apkFile), "application/vnd.android.package-archive");
+                install.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(install);
+            }
+        }
+    };
+
     public class AndroidBridge {
         @JavascriptInterface
         public String getNotificationPermission() {
@@ -853,6 +907,11 @@ public class MainActivity extends Activity {
         public void setMediaApiConfig(String apiBase, String authToken) {
             mediaApiBase = apiBase == null ? "" : apiBase;
             mediaAuthToken = authToken == null ? "" : authToken;
+        }
+
+        @JavascriptInterface
+        public void downloadAndInstallUpdate(String downloadUrl) {
+            runOnUiThread(() -> startDownloadAndInstall(downloadUrl));
         }
     }
 }
