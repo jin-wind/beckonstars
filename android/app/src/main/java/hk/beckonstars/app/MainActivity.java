@@ -805,9 +805,13 @@ public class MainActivity extends Activity {
             request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
             request.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, UPDATE_FILE_NAME);
             request.setMimeType("application/vnd.android.package-archive");
+            request.addRequestHeader("Referer", "https://github.com");
+            request.setAllowedOverMetered(true);
+            request.setAllowedOverRoaming(true);
 
             DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
             updateDownloadId = dm.enqueue(request);
+            Log.d(TAG, "開始下載更新, downloadId=" + updateDownloadId + ", url=" + downloadUrl);
 
             registerReceiver(downloadCompleteReceiver, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE));
         } catch (Exception e) {
@@ -822,7 +826,22 @@ public class MainActivity extends Activity {
             if (id != updateDownloadId) return;
             try { unregisterReceiver(this); } catch (Exception ignored) {}
 
+            DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+            android.database.Cursor cursor = dm.query(new DownloadManager.Query().setFilterById(id));
+            if (cursor != null && cursor.moveToFirst()) {
+                int status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS));
+                int reason = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON));
+                Log.d(TAG, "下載狀態=" + status + ", 原因=" + reason);
+                if (status != DownloadManager.STATUS_SUCCESSFUL) {
+                    Log.e(TAG, "下載失敗, status=" + status + ", reason=" + reason);
+                    cursor.close();
+                    return;
+                }
+                cursor.close();
+            }
+
             File apkFile = new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), UPDATE_FILE_NAME);
+            Log.d(TAG, "下載完成, 檔案大小=" + apkFile.length() + ", 路徑=" + apkFile.getAbsolutePath());
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 Uri contentUri = FileProvider.getUriForFile(
