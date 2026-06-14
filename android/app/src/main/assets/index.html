@@ -2988,15 +2988,15 @@
             if (state.showModal === 'updateAvailable') {
                 const info = state.updateInfo || {};
                 modalContent = `
-                    <div class="bg-white w-full max-w-sm rounded-3xl p-6 text-center relative animate-fadeIn">
-                        <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <i class="fa-solid fa-arrow-up bs-text-2xl text-blue-500"></i>
+                    <div class="bg-white w-[80%] max-w-xs rounded-3xl p-6 text-center shadow-2xl animate-fadeIn">
+                        <div class="w-16 h-16 bg-brand-light text-brand rounded-full flex items-center justify-center bs-text-3xl mx-auto mb-4">
+                            <i class="fa-solid fa-arrow-up"></i>
                         </div>
                         <h3 class="bs-text-xl font-bold text-gray-800 mb-2">有新版本 ${escapeHtml(info.versionName || '')}</h3>
                         ${info.releaseNotes ? `<p class="text-gray-500 bs-text-sm mb-4 text-left max-h-32 overflow-y-auto whitespace-pre-line">${escapeHtml(info.releaseNotes)}</p>` : ''}
                         <div class="flex gap-3">
-                            <button class="action-btn flex-1 bg-gray-100 text-gray-600 font-bold py-3 rounded-2xl hover:bg-gray-200 transition-colors" data-action="closeModal">稍後再說</button>
-                            <button class="action-btn flex-1 bg-blue-500 text-white font-bold py-3 rounded-2xl shadow-md hover:bg-blue-600 transition-colors" data-action="downloadUpdate">立即更新</button>
+                            <button class="action-btn flex-1 py-3 bg-gray-100 text-gray-600 font-bold rounded-xl hover:bg-gray-200 transition-colors" data-action="closeModal">稍後再說</button>
+                            <button class="action-btn flex-1 py-3 bg-brand text-white font-bold rounded-xl shadow-md hover:bg-brand-dark transition-colors" data-action="downloadUpdate">立即更新</button>
                         </div>
                     </div>
                 `;
