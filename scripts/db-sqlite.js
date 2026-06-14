@@ -81,6 +81,10 @@ function initDb() {
     CREATE INDEX IF NOT EXISTS idx_memories_family ON memories(family_id, date DESC);
   `);
 
+  // 遷移：為 messages 和 memories 表添加 data JSON 欄位
+  try { db.prepare("ALTER TABLE messages ADD COLUMN data TEXT").run(); } catch (e) { /* already exists */ }
+  try { db.prepare("ALTER TABLE memories ADD COLUMN data TEXT").run(); } catch (e) { /* already exists */ }
+
   return db;
 }
 
@@ -219,33 +223,39 @@ function getMessages(familyId, limit = 100) {
     SELECT * FROM messages WHERE family_id = ? ORDER BY timestamp DESC LIMIT ?
   `).all(familyId, limit);
 
-  return rows.map(r => ({
-    id: r.message_id,
-    userId: r.user_id,
-    text: r.text || '',
-    imageUrl: r.image_url || '',
-    audioUrl: r.audio_url || '',
-    transcript: r.transcript || '',
-    summary: r.summary || '',
-    timestamp: r.timestamp
-  })).reverse();
+  return rows.map(r => {
+    if (r.data) {
+      try { return JSON.parse(r.data); } catch (e) { /* fall through */ }
+    }
+    return {
+      id: r.message_id,
+      userId: r.user_id,
+      text: r.text || '',
+      imageUrl: r.image_url || '',
+      audioUrl: r.audio_url || '',
+      transcript: r.transcript || '',
+      summary: r.summary || '',
+      timestamp: r.timestamp
+    };
+  }).reverse();
 }
 
 function addMessage(familyId, message) {
   const db = initDb();
   db.prepare(`
-    INSERT INTO messages (message_id, family_id, user_id, text, image_url, audio_url, transcript, summary, timestamp)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO messages (message_id, family_id, user_id, text, image_url, audio_url, transcript, summary, timestamp, data)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     message.id,
     familyId,
-    message.userId || null,
-    message.text || null,
-    message.imageUrl || null,
-    message.audioUrl || null,
+    message.userId || message.uid || message.senderId || null,
+    message.text || message.content || null,
+    message.imageUrl || message.img || null,
+    message.audioUrl || message.audio || null,
     message.transcript || null,
-    message.summary || null,
-    message.timestamp || new Date().toISOString()
+    message.summary || message.aiSummary || null,
+    message.timestamp || message.createdAt || new Date().toISOString(),
+    JSON.stringify(message)
   );
 }
 
@@ -258,6 +268,17 @@ function updateMessage(messageId, updates) {
   if (updates.transcript !== undefined) { fields.push('transcript = ?'); values.push(updates.transcript); }
   if (updates.summary !== undefined) { fields.push('summary = ?'); values.push(updates.summary); }
 
+  // 同步更新 data JSON 欄位
+  const row = db.prepare('SELECT data FROM messages WHERE message_id = ?').get(messageId);
+  if (row && row.data) {
+    try {
+      const data = JSON.parse(row.data);
+      Object.assign(data, updates);
+      fields.push('data = ?');
+      values.push(JSON.stringify(data));
+    } catch (e) { /* ignore parse error */ }
+  }
+
   if (fields.length === 0) return;
 
   values.push(messageId);
@@ -268,6 +289,9 @@ function getMessage(messageId) {
   const db = initDb();
   const r = db.prepare('SELECT * FROM messages WHERE message_id = ?').get(messageId);
   if (!r) return null;
+  if (r.data) {
+    try { return JSON.parse(r.data); } catch (e) { /* fall through */ }
+  }
   return {
     id: r.message_id,
     familyId: r.family_id,
@@ -289,33 +313,39 @@ function getMemories(familyId, limit = 100) {
     SELECT * FROM memories WHERE family_id = ? ORDER BY date DESC LIMIT ?
   `).all(familyId, limit);
 
-  return rows.map(r => ({
-    id: r.memory_id,
-    userId: r.user_id,
-    date: r.date,
-    title: r.title,
-    description: r.description || '',
-    imageUrl: r.image_url || '',
-    tags: r.tags ? JSON.parse(r.tags) : [],
-    createdAt: r.created_at
-  })).reverse();
+  return rows.map(r => {
+    if (r.data) {
+      try { return JSON.parse(r.data); } catch (e) { /* fall through */ }
+    }
+    return {
+      id: r.memory_id,
+      userId: r.user_id,
+      date: r.date,
+      title: r.title,
+      description: r.description || '',
+      imageUrl: r.image_url || '',
+      tags: r.tags ? JSON.parse(r.tags) : [],
+      createdAt: r.created_at
+    };
+  }).reverse();
 }
 
 function addMemory(familyId, memory) {
   const db = initDb();
   db.prepare(`
-    INSERT INTO memories (memory_id, family_id, user_id, date, title, description, image_url, tags, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO memories (memory_id, family_id, user_id, date, title, description, image_url, tags, created_at, data)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     memory.id,
     familyId,
-    memory.userId || null,
+    memory.userId || memory.uid || null,
     memory.date,
-    memory.title || '',
+    memory.title || memory.content || '',
     memory.description || null,
-    memory.imageUrl || null,
+    memory.imageUrl || memory.img || null,
     memory.tags ? JSON.stringify(memory.tags) : null,
-    memory.createdAt || new Date().toISOString()
+    memory.createdAt || new Date().toISOString(),
+    JSON.stringify(memory)
   );
 }
 

@@ -1422,6 +1422,10 @@
                 state.authUid = result.member.uid;
             }
 
+            // 重置載入標記，確保新加入的家庭能拉取歷史數據
+            hasLoadedCloudMessages = false;
+            hasLoadedCloudMemories = false;
+
             subscribeFamilyMessages(familyId);
             subscribeFamilyMemories(familyId);
             return true;
