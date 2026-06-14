@@ -949,7 +949,6 @@
                 subscribeFamilyMessages(state.familyId);
                 subscribeFamilyMemories(state.familyId);
                 render();
-                setTimeout(() => showMessage(`歡迎回來，${result.user.name}！`), 500);
             } else {
                 state.onboardingStep = 2;
                 render();
@@ -4464,7 +4463,6 @@
                     subscribeFamilyMessages(state.familyId);
                     subscribeFamilyMemories(state.familyId);
                     render();
-                    setTimeout(() => showMessage(`歡迎回來，${state.currentUser.name}！`), 500);
                 } else {
                     // 已登入但無家庭，進入角色選擇
                     state.onboardingStep = 2;
