@@ -1515,8 +1515,11 @@
             const knownIds = new Set(state.memories.map(memory => String(memory.id)));
             if (hasLoadedCloudMemories) {
                 incoming.forEach(memory => {
-                    if (!knownIds.has(String(memory.id)) && memory.uid !== state.authUid && document.hidden) {
+                    if (!knownIds.has(String(memory.id)) && memory.uid !== state.authUid) {
                         showLocalNotification(`星喚新回憶：${memory.childName}`, memory.content || '有人記錄了新回憶');
+                        if (!document.hidden) {
+                            showMessage(`${memory.childName} 剛記錄了新回憶！`);
+                        }
                     }
                 });
             }
