@@ -691,7 +691,7 @@
 
         const selfHostedApiBase = 'http://144.79.170.102:8787';
         const useSelfHostedServer = true;
-        const CURRENT_VERSION_CODE = 63;
+        const CURRENT_VERSION_CODE = window.BeckonStarsAndroid?.getVersionCode?.() || 0;
 
         async function checkForUpdate() {
             try {

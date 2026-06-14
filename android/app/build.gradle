@@ -10,7 +10,7 @@ android {
         applicationId "hk.beckonstars.app"
         minSdk 23
         targetSdk 34
-        versionCode 1
+        versionCode (System.getenv("VERSION_CODE") as Integer) ?: 1
         versionName "1.0"
     }
 }

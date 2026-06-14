@@ -36,6 +36,8 @@ jobs:
 
     - name: Build Debug APK
       working-directory: ./android
+      env:
+        VERSION_CODE: ${{ github.run_number }}
       run: ./gradlew assembleDebug -i
 
     - name: List build outputs

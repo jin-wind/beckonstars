@@ -935,5 +935,14 @@ public class MainActivity extends Activity {
         public void downloadAndInstallUpdate(String downloadUrl) {
             runOnUiThread(() -> startDownloadAndInstall(downloadUrl));
         }
+
+        @JavascriptInterface
+        public int getVersionCode() {
+            try {
+                return getPackageManager().getPackageInfo(getPackageName(), 0).versionCode;
+            } catch (Exception e) {
+                return 0;
+            }
+        }
     }
 }
