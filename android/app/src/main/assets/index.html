@@ -4635,13 +4635,22 @@
                 console.log('[AI Image] Request body prepared (image data length):', state.aiImageRefImage.substring(0, 50) + '...');
 
                 console.log('[AI Image] Making fetch request...');
-                // 調用 AI 圖片生成 API
-                const response = await fetch('http://144.79.170.102:8000/api/generate', {
+
+                // 使用 chat completions API (OpenAI 兼容格式)
+                const response = await fetch('http://144.79.170.102:38000/v1/chat/completions', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer sk-michael'
                     },
-                    body: JSON.stringify(requestBody)
+                    body: JSON.stringify({
+                        model: 'gemini-3.1-flash-image-landscape',
+                        messages: [{
+                            role: 'user',
+                            content: prompt + '\n\n參考圖片：' + state.aiImageRefImage
+                        }],
+                        stream: false
+                    })
                 });
 
                 console.log('[AI Image] Response received, status:', response.status, response.statusText);
@@ -4655,20 +4664,43 @@
                 console.log('[AI Image] Parsing response JSON...');
                 const result = await response.json();
                 console.log('[AI Image] Full result object:', JSON.stringify(result, null, 2));
-                console.log('[AI Image] Result summary:', {
-                    success: result.success,
-                    imageCount: result.images?.length,
-                    account: result.account,
-                    error: result.error
-                });
 
-                if (result.success && result.images && result.images.length > 0) {
+                // 处理 chat completions 格式的响应
+                if (result.error) {
+                    console.error('[AI Image] API error:', result.error);
+                    throw new Error(result.error.message || result.error);
+                }
+
+                // 从 chat completions 响应中提取图片
+                // 格式可能是: result.choices[0].message.content 包含图片 URL 或 base64
+                let images = [];
+                if (result.choices && result.choices.length > 0) {
+                    const content = result.choices[0].message?.content || '';
+                    console.log('[AI Image] Response content:', content.substring(0, 200) + '...');
+
+                    // 尝试提取 markdown 格式的图片: ![](url) 或直接的 data: URL
+                    const imageUrlRegex = /!\[.*?\]\((data:image\/[^)]+)\)|^(data:image\/[^\s]+)$/gm;
+                    const matches = content.matchAll(imageUrlRegex);
+                    for (const match of matches) {
+                        const imageUrl = match[1] || match[2];
+                        if (imageUrl) images.push(imageUrl);
+                    }
+
+                    // 如果没有匹配到，尝试将整个 content 作为 base64
+                    if (images.length === 0 && content.startsWith('data:image/')) {
+                        images.push(content);
+                    }
+                }
+
+                console.log('[AI Image] Extracted images count:', images.length);
+
+                if (images.length > 0) {
                     console.log('[AI Image] Success! Setting results');
-                    state.aiImageResults = result.images;
-                    showMessage(`🎉 成功生成 ${result.images.length} 張圖片！`);
+                    state.aiImageResults = images;
+                    showMessage(`🎉 成功生成 ${images.length} 張圖片！`);
                 } else {
-                    console.error('[AI Image] Generation failed:', result.error);
-                    throw new Error(result.error || '生成失敗');
+                    console.error('[AI Image] No images found in response');
+                    throw new Error('響應中未找到圖片數據');
                 }
             } catch (error) {
                 console.error('[AI Image] Generation error:', error);
