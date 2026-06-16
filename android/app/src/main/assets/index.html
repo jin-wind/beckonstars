@@ -4636,18 +4636,29 @@
 
                 console.log('[AI Image] Making fetch request...');
 
-                // 使用 chat completions API (OpenAI 兼容格式)
-                const response = await fetch('http://144.79.170.102:38000/v1/chat/completions', {
+                // 使用 chat completions API (OpenAI 兼容格式，支持图片输入)
+                const response = await fetch('http://144.79.170.102:8000/v1/chat/completions', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'Authorization': 'Bearer sk-michael'
+                        'Authorization': 'Bearer han1234'
                     },
                     body: JSON.stringify({
                         model: 'gemini-3.1-flash-image-landscape',
                         messages: [{
                             role: 'user',
-                            content: prompt + '\n\n參考圖片：' + state.aiImageRefImage
+                            content: [
+                                {
+                                    type: 'text',
+                                    text: prompt
+                                },
+                                {
+                                    type: 'image_url',
+                                    image_url: {
+                                        url: state.aiImageRefImage
+                                    }
+                                }
+                            ]
                         }],
                         stream: false
                     })
@@ -4672,23 +4683,41 @@
                 }
 
                 // 从 chat completions 响应中提取图片
-                // 格式可能是: result.choices[0].message.content 包含图片 URL 或 base64
                 let images = [];
                 if (result.choices && result.choices.length > 0) {
                     const content = result.choices[0].message?.content || '';
                     console.log('[AI Image] Response content:', content.substring(0, 200) + '...');
 
-                    // 尝试提取 markdown 格式的图片: ![](url) 或直接的 data: URL
-                    const imageUrlRegex = /!\[.*?\]\((data:image\/[^)]+)\)|^(data:image\/[^\s]+)$/gm;
-                    const matches = content.matchAll(imageUrlRegex);
-                    for (const match of matches) {
-                        const imageUrl = match[1] || match[2];
-                        if (imageUrl) images.push(imageUrl);
+                    // 提取 markdown 格式的图片: ![](url)
+                    const markdownImageRegex = /!\[.*?\]\((https?:\/\/[^)]+)\)/g;
+                    let match;
+                    while ((match = markdownImageRegex.exec(content)) !== null) {
+                        const imageUrl = match[1];
+                        console.log('[AI Image] Found image URL:', imageUrl);
+
+                        // 下载图片并转换为 base64
+                        try {
+                            const imgResponse = await fetch(imageUrl);
+                            const blob = await imgResponse.blob();
+                            const base64 = await new Promise((resolve) => {
+                                const reader = new FileReader();
+                                reader.onloadend = () => resolve(reader.result);
+                                reader.readAsDataURL(blob);
+                            });
+                            images.push(base64);
+                            console.log('[AI Image] Downloaded and converted image to base64');
+                        } catch (err) {
+                            console.warn('[AI Image] Failed to download image, using URL directly:', err);
+                            images.push(imageUrl);
+                        }
                     }
 
-                    // 如果没有匹配到，尝试将整个 content 作为 base64
-                    if (images.length === 0 && content.startsWith('data:image/')) {
-                        images.push(content);
+                    // 如果没有找到 markdown 图片，尝试提取 data: URL
+                    if (images.length === 0) {
+                        const dataUrlRegex = /(data:image\/[^,\s]+[^)\s]*)/g;
+                        while ((match = dataUrlRegex.exec(content)) !== null) {
+                            images.push(match[1]);
+                        }
                     }
                 }
 
