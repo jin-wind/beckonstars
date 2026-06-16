@@ -2691,7 +2691,15 @@
                         </div>
 
                         <!-- 生成結果 -->
-                        ${state.aiImageResults.length > 0 ? `
+                        ${state.aiImageGenerating ? `
+                            <div class="bg-white rounded-3xl shadow-sm p-6">
+                                <div class="flex flex-col items-center justify-center py-12">
+                                    <div class="w-20 h-20 border-4 border-brand border-t-transparent rounded-full animate-spin mb-4"></div>
+                                    <p class="bs-text-lg font-bold text-gray-800 mb-2">AI 正在生成圖片...</p>
+                                    <p class="bs-text-sm text-gray-500">這可能需要 10-30 秒</p>
+                                </div>
+                            </div>
+                        ` : state.aiImageResults.length > 0 ? `
                             <div class="bg-white rounded-3xl shadow-sm p-6">
                                 <h3 class="bs-text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
                                     <i class="fa-solid fa-sparkles text-brand"></i>生成結果
@@ -4573,6 +4581,9 @@
             state.aiImageResults = [];
             render();
 
+            // 顯示開始生成提示
+            showMessage('正在連接 AI 服務器，開始生成圖片...');
+
             try {
                 // 根據選擇的風格構建提示詞
                 let prompt = '將這張圖片進行藝術風格轉換';
@@ -4588,6 +4599,8 @@
                     prompt = stylePrompts[state.aiImageStyle];
                 }
 
+                console.log('[AI Image] Starting generation with style:', state.aiImageStyle);
+
                 // 調用 AI 圖片生成 API
                 const response = await fetch('http://144.79.170.102:8000/api/generate', {
                     method: 'POST',
@@ -4602,21 +4615,24 @@
                     })
                 });
 
+                console.log('[AI Image] Response status:', response.status);
+
                 if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
 
                 const result = await response.json();
+                console.log('[AI Image] Result:', result.success, 'Images:', result.images?.length);
 
                 if (result.success && result.images && result.images.length > 0) {
                     state.aiImageResults = result.images;
-                    showMessage(`成功生成 ${result.images.length} 張圖片！`);
+                    showMessage(`🎉 成功生成 ${result.images.length} 張圖片！`);
                 } else {
                     throw new Error(result.error || '生成失敗');
                 }
             } catch (error) {
-                console.error('AI image generation failed', error);
-                showMessage('圖片生成失敗，請檢查網絡連接或稍後再試。');
+                console.error('[AI Image] Generation failed:', error);
+                showMessage(`❌ 圖片生成失敗：${error.message || '請檢查網絡連接或稍後再試'}`);
             }
 
             state.aiImageGenerating = false;
