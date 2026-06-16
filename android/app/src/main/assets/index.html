@@ -192,6 +192,15 @@
             seniorMode: false,
             summarizingChat: false,
             chatSummaryContent: '',
+
+            // AI 圖片生成
+            aiImageGenView: false,           // 是否顯示 AI 圖片生成頁面
+            aiImageRefImage: null,            // 參考圖片 (base64 data URL)
+            aiImageStyle: 'random',           // 選擇的風格
+            aiImageGenerating: false,         // 是否正在生成
+            aiImageResults: [],               // 生成的圖片結果數組
+            selectedGeneratedImageIndex: 0,   // 查看的圖片索引
+
             memories: [
                 { id: 1, date: today.getDate(), month: today.getMonth() + 1, childId: 'child_1', childName: '大仔 (阿強)', type: 'photo', content: '今日去咗飲茶，啲點心好靚！', img: 'https://images.unsplash.com/photo-1563245372-f21724e3856d?auto=format&fit=crop&w=300&q=80' },
                 { id: 2, date: today.getDate() - 2, month: today.getMonth() + 1, childId: 'child_2', childName: '細女 (阿妹)', type: 'text', content: '買咗件新衫俾媽咪，週末攞返去！', img: null },
@@ -1758,6 +1767,8 @@
             
             if (!state.appReady) {
                 app.innerHTML = renderOnboardingFlow();
+            } else if (state.aiImageGenView) {
+                app.innerHTML = renderAIImageGen();
             } else {
                 app.innerHTML = `
                     ${renderHeader()}
@@ -2388,10 +2399,13 @@
                     </div>
 
                     ${state.backendMode === 'server' ? `
-                    <div class="shrink-0 px-3 py-2 bg-[#FFF8F0]">
-                        <button class="action-btn w-full bg-white border border-gray-100 rounded-2xl py-2.5 px-4 flex items-center justify-center gap-2 bs-text-sm font-bold text-gray-600 shadow-sm hover:bg-gray-50 transition-colors disabled:opacity-60" data-action="summarizeTodayChat" ${state.summarizingChat ? 'disabled' : ''}>
+                    <div class="shrink-0 px-3 py-2 bg-[#FFF8F0] flex gap-2">
+                        <button class="action-btn flex-1 bg-white border border-gray-100 rounded-2xl py-2.5 px-4 flex items-center justify-center gap-2 bs-text-sm font-bold text-gray-600 shadow-sm hover:bg-gray-50 transition-colors disabled:opacity-60" data-action="summarizeTodayChat" ${state.summarizingChat ? 'disabled' : ''}>
                             <i class="fa-solid ${state.summarizingChat ? 'fa-spinner fa-spin' : 'fa-wand-magic-sparkles'} text-brand"></i>
                             ${state.summarizingChat ? 'AI 總結中...' : 'AI 總結今日聊天'}
+                        </button>
+                        <button class="action-btn w-12 h-12 bg-white border border-gray-100 rounded-2xl flex items-center justify-center text-brand shadow-sm hover:bg-gray-50 transition-colors" data-action="openAIImageGen" title="AI 圖片生成">
+                            <i class="fa-solid fa-image bs-text-lg"></i>
                         </button>
                     </div>
                     ` : ''}
@@ -2610,6 +2624,103 @@
             `;
         }
 
+        // --- AI 圖片生成視圖 ---
+        function renderAIImageGen() {
+            const styles = [
+                { id: 'random', name: '隨機風格', icon: 'fa-shuffle' },
+                { id: 'garden', name: '中式庭園', icon: 'fa-tree', prompt: 'e2.txt' },
+                { id: 'explosion', name: '爆炸動作', icon: 'fa-fire', prompt: 'e4.txt' },
+                { id: 'studio', name: '影樓風格', icon: 'fa-building', prompt: 'e1.txt' },
+                { id: 'vintage', name: '復古照片', icon: 'fa-camera-retro', prompt: 'e3.txt' }
+            ];
+
+            return `
+                <div class="flex flex-col h-full bg-[#FFF8F0]">
+                    <!-- 頂部標題欄 -->
+                    <div class="shrink-0 bg-white border-b border-gray-100 px-4 py-3 flex items-center gap-3">
+                        <button class="action-btn w-10 h-10 flex items-center justify-center text-gray-600 hover:bg-gray-50 rounded-full transition-colors" data-action="closeAIImageGen">
+                            <i class="fa-solid fa-arrow-left bs-text-lg"></i>
+                        </button>
+                        <h1 class="bs-text-xl font-bold text-gray-800">AI 圖片生成</h1>
+                    </div>
+
+                    <!-- 主內容區 -->
+                    <div class="flex-1 overflow-y-auto no-scrollbar p-4 space-y-4">
+                        <!-- 上傳參考圖片 -->
+                        <div class="bg-white rounded-3xl shadow-sm p-6">
+                            <h3 class="bs-text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                                <i class="fa-solid fa-image text-brand"></i>參考圖片
+                            </h3>
+
+                            ${state.aiImageRefImage ? `
+                                <div class="relative rounded-2xl overflow-hidden bg-gray-100 mb-4">
+                                    <img src="${state.aiImageRefImage}" class="w-full h-auto" alt="參考圖片">
+                                    <button class="action-btn absolute top-2 right-2 w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-red-600 transition-colors" data-action="removeRefImage">
+                                        <i class="fa-solid fa-xmark"></i>
+                                    </button>
+                                </div>
+                            ` : `
+                                <div class="border-2 border-dashed border-gray-300 rounded-2xl p-8 text-center">
+                                    <i class="fa-solid fa-cloud-arrow-up bs-text-4xl text-gray-400 mb-3"></i>
+                                    <p class="bs-text-sm text-gray-600 mb-4">上傳或拍攝圖片</p>
+                                    <div class="flex gap-3 justify-center">
+                                        <button class="action-btn px-4 py-2 bg-brand text-white rounded-xl bs-text-sm font-bold shadow-md hover:bg-brand-dark transition-colors" data-action="uploadRefImage">
+                                            <i class="fa-solid fa-upload mr-1"></i>上傳圖片
+                                        </button>
+                                        <button class="action-btn px-4 py-2 bg-gray-600 text-white rounded-xl bs-text-sm font-bold shadow-md hover:bg-gray-700 transition-colors" data-action="captureRefImage">
+                                            <i class="fa-solid fa-camera mr-1"></i>拍照
+                                        </button>
+                                    </div>
+                                </div>
+                            `}
+                        </div>
+
+                        <!-- 選擇風格 -->
+                        <div class="bg-white rounded-3xl shadow-sm p-6">
+                            <h3 class="bs-text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                                <i class="fa-solid fa-palette text-brand"></i>選擇風格
+                            </h3>
+                            <div class="grid grid-cols-2 gap-3">
+                                ${styles.map(style => `
+                                    <button class="action-btn p-4 rounded-2xl border-2 transition-all ${state.aiImageStyle === style.id ? 'border-brand bg-orange-50' : 'border-gray-200 bg-white hover:border-gray-300'}" data-action="selectStyle" data-style="${style.id}">
+                                        <i class="fa-solid ${style.icon} bs-text-2xl ${state.aiImageStyle === style.id ? 'text-brand' : 'text-gray-400'} mb-2"></i>
+                                        <p class="bs-text-sm font-bold ${state.aiImageStyle === style.id ? 'text-brand' : 'text-gray-700'}">${style.name}</p>
+                                    </button>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                        <!-- 生成結果 -->
+                        ${state.aiImageResults.length > 0 ? `
+                            <div class="bg-white rounded-3xl shadow-sm p-6">
+                                <h3 class="bs-text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                                    <i class="fa-solid fa-sparkles text-brand"></i>生成結果
+                                </h3>
+                                <div class="grid grid-cols-2 gap-3">
+                                    ${state.aiImageResults.map((img, idx) => `
+                                        <div class="relative rounded-2xl overflow-hidden bg-gray-100 cursor-pointer hover:opacity-90 transition-opacity" data-action="viewGeneratedImage" data-index="${idx}">
+                                            <img src="${img}" class="w-full h-auto" alt="生成圖片 ${idx + 1}">
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>
+
+                    <!-- 底部生成按鈕 -->
+                    <div class="shrink-0 bg-white border-t border-gray-100 p-4">
+                        <button class="action-btn w-full py-4 rounded-2xl font-bold bs-text-lg shadow-lg transition-colors disabled:opacity-50 ${state.aiImageGenerating ? 'bg-gray-400 text-white' : 'bg-brand text-white hover:bg-brand-dark'}" data-action="generateAIImage" ${!state.aiImageRefImage || state.aiImageGenerating ? 'disabled' : ''}>
+                            ${state.aiImageGenerating ? '<i class="fa-solid fa-spinner fa-spin mr-2"></i>生成中...' : '<i class="fa-solid fa-wand-magic-sparkles mr-2"></i>開始生成'}
+                        </button>
+                    </div>
+
+                    <!-- 隱藏的文件輸入 -->
+                    <input type="file" id="aiImageFileInput" accept="image/*" class="hidden">
+                    <input type="file" id="aiImageCameraInput" accept="image/*" capture="environment" class="hidden">
+                </div>
+            `;
+        }
+
         // --- 彈出視窗 ---
         function renderModals() {
             if (!state.showModal) return '';
@@ -2659,6 +2770,28 @@
                         <h3 class="bs-text-2xl font-bold text-gray-800 mb-2">今日聊天總結</h3>
                         <p class="bs-text-base text-gray-700 leading-relaxed mb-5 whitespace-pre-line">${state.chatSummaryContent}</p>
                         <button class="action-btn w-full py-3 bg-brand text-white font-bold rounded-xl shadow-md" data-action="closeModal">關閉</button>
+                    </div>
+                `;
+            }
+
+            if (state.showModal === 'viewGeneratedImage') {
+                const imageUrl = state.aiImageResults[state.selectedGeneratedImageIndex] || '';
+                modalContent = `
+                    <div class="bg-white w-[95%] max-w-2xl rounded-3xl p-4 shadow-2xl animate-fadeIn relative">
+                        <button class="action-btn absolute top-4 right-4 w-10 h-10 bg-gray-900 bg-opacity-60 rounded-full text-white flex items-center justify-center z-10" data-action="closeModal">
+                            <i class="fa-solid fa-times"></i>
+                        </button>
+                        <div class="rounded-2xl overflow-hidden bg-gray-100">
+                            <img src="${imageUrl}" class="w-full h-auto" alt="生成圖片">
+                        </div>
+                        <div class="mt-4 flex gap-2">
+                            <button class="action-btn flex-1 py-3 bg-brand text-white font-bold rounded-xl shadow-md" data-action="downloadGeneratedImage" data-url="${escapeAttribute(imageUrl)}">
+                                <i class="fa-solid fa-download mr-2"></i>下載圖片
+                            </button>
+                            <button class="action-btn flex-1 py-3 bg-gray-600 text-white font-bold rounded-xl shadow-md" data-action="shareGeneratedImage" data-url="${escapeAttribute(imageUrl)}">
+                                <i class="fa-solid fa-share-nodes mr-2"></i>分享
+                            </button>
+                        </div>
                     </div>
                 `;
             }
@@ -3536,8 +3669,114 @@
                         render();
                         setTimeout(() => showMessage(`已成功兌換「${reward.title}」。`), 100);
                     }
+                    // AI 圖片生成操作
+                    else if (action === 'openAIImageGen') {
+                        state.aiImageGenView = true;
+                        state.aiImageRefImage = null;
+                        state.aiImageStyle = 'random';
+                        state.aiImageGenerating = false;
+                        state.aiImageResults = [];
+                        render();
+                    }
+                    else if (action === 'closeAIImageGen') {
+                        state.aiImageGenView = false;
+                        render();
+                    }
+                    else if (action === 'uploadRefImage') {
+                        const input = document.getElementById('aiImageFileInput');
+                        if (input) input.click();
+                    }
+                    else if (action === 'captureRefImage') {
+                        const input = document.getElementById('aiImageCameraInput');
+                        if (input) input.click();
+                    }
+                    else if (action === 'removeRefImage') {
+                        state.aiImageRefImage = null;
+                        render();
+                    }
+                    else if (action === 'selectStyle') {
+                        state.aiImageStyle = newBtn.getAttribute('data-style');
+                        render();
+                    }
+                    else if (action === 'generateAIImage') {
+                        if (!state.aiImageRefImage || state.aiImageGenerating) return;
+                        await handleGenerateAIImage();
+                    }
+                    else if (action === 'viewGeneratedImage') {
+                        const index = parseInt(newBtn.getAttribute('data-index'));
+                        if (state.aiImageResults[index]) {
+                            state.showModal = 'viewGeneratedImage';
+                            state.selectedGeneratedImageIndex = index;
+                            render();
+                        }
+                    }
+                    else if (action === 'downloadGeneratedImage') {
+                        const url = newBtn.getAttribute('data-url');
+                        if (url) {
+                            try {
+                                const link = document.createElement('a');
+                                link.href = url;
+                                link.download = `ai-generated-${Date.now()}.jpg`;
+                                link.click();
+                                showMessage('圖片已開始下載。');
+                            } catch (err) {
+                                console.error('Download failed', err);
+                                showMessage('下載失敗，請長按圖片保存。');
+                            }
+                        }
+                    }
+                    else if (action === 'shareGeneratedImage') {
+                        const url = newBtn.getAttribute('data-url');
+                        if (url && navigator.share) {
+                            try {
+                                // 將 base64 轉換為 Blob
+                                const base64Data = url.split(',')[1];
+                                const byteCharacters = atob(base64Data);
+                                const byteNumbers = new Array(byteCharacters.length);
+                                for (let i = 0; i < byteCharacters.length; i++) {
+                                    byteNumbers[i] = byteCharacters.charCodeAt(i);
+                                }
+                                const byteArray = new Uint8Array(byteNumbers);
+                                const blob = new Blob([byteArray], { type: 'image/jpeg' });
+                                const file = new File([blob], `ai-image-${Date.now()}.jpg`, { type: 'image/jpeg' });
+
+                                navigator.share({
+                                    files: [file],
+                                    title: 'AI 生成圖片'
+                                }).catch(err => console.log('Share cancelled', err));
+                            } catch (err) {
+                                console.error('Share failed', err);
+                                showMessage('分享失敗，請嘗試下載後分享。');
+                            }
+                        } else {
+                            showMessage('您的設備不支持分享功能。');
+                        }
+                    }
                 });
             });
+
+            // AI 圖片上傳輸入
+            const aiImageFileInput = document.getElementById('aiImageFileInput');
+            if (aiImageFileInput) {
+                aiImageFileInput.addEventListener('change', async event => {
+                    const file = event.target.files?.[0];
+                    if (!file) return;
+                    event.target.value = '';
+                    state.aiImageRefImage = await readFileAsDataUrl(file);
+                    render();
+                });
+            }
+
+            const aiImageCameraInput = document.getElementById('aiImageCameraInput');
+            if (aiImageCameraInput) {
+                aiImageCameraInput.addEventListener('change', async event => {
+                    const file = event.target.files?.[0];
+                    if (!file) return;
+                    event.target.value = '';
+                    state.aiImageRefImage = await readFileAsDataUrl(file);
+                    render();
+                });
+            }
 
             const chatInput = document.getElementById('chatInput');
             if (chatInput) {
@@ -4324,6 +4563,64 @@
                 console.warn('Voice message summary failed', error);
                 showMessage('總結錄音失敗，請稍後再試。');
             }
+        }
+
+        // --- AI 圖片生成 ---
+        async function handleGenerateAIImage() {
+            if (!state.aiImageRefImage || state.aiImageGenerating) return;
+
+            state.aiImageGenerating = true;
+            state.aiImageResults = [];
+            render();
+
+            try {
+                // 根據選擇的風格構建提示詞
+                let prompt = '將這張圖片進行藝術風格轉換';
+
+                const stylePrompts = {
+                    'garden': 'A professional, high-resolution portrait photograph of the smiling subject in a tranquil traditional Chinese garden at sunrise. The soft, golden sunlight filters through stylized bamboo stalks. Soft bokeh of pink cherry blossoms and traditional stone architecture in the background. Peaceful, elegant, and spiritually uplifting atmosphere.',
+                    'explosion': 'A professional, hyper-realistic photo of the single smiling person from the reference image, maintaining the exact same serene expression. The entire scene around them, however, is a chaotic action movie explosion. Huge fireballs are blooming behind them from a multi-car pileup, debris is flying, and smoke fills the air. They stand perfectly still and peaceful.',
+                    'studio': 'A high-resolution, full-body portrait photograph of the person standing against a plain, light-grey wall. The person has a sincere, pleasant, but slightly practiced smile. The scene is lit with bright, even studio light, giving it a slightly institutional feel. The entire image has a high-quality, sharp finish.',
+                    'vintage': 'A scanned analog photograph (vintage film grain, warm faded colors) of the smiling subject, standing against a subtly faded studio background. The overall aesthetic is nostalgic and comforting, like an old family keepsake.'
+                };
+
+                if (state.aiImageStyle !== 'random' && stylePrompts[state.aiImageStyle]) {
+                    prompt = stylePrompts[state.aiImageStyle];
+                }
+
+                // 調用 AI 圖片生成 API
+                const response = await fetch('http://144.79.170.102:8000/api/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        prompt: prompt,
+                        count: 4,
+                        ratio: '1:1',
+                        reference_image: state.aiImageRefImage
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const result = await response.json();
+
+                if (result.success && result.images && result.images.length > 0) {
+                    state.aiImageResults = result.images;
+                    showMessage(`成功生成 ${result.images.length} 張圖片！`);
+                } else {
+                    throw new Error(result.error || '生成失敗');
+                }
+            } catch (error) {
+                console.error('AI image generation failed', error);
+                showMessage('圖片生成失敗，請檢查網絡連接或稍後再試。');
+            }
+
+            state.aiImageGenerating = false;
+            render();
         }
 
         async function sendChatMessage(override = null) {
