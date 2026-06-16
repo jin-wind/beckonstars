@@ -4628,6 +4628,7 @@
                     prompt: prompt,
                     count: 4,
                     ratio: '1:1',
+                    model: 'nano_banana_pro',
                     reference_image: state.aiImageRefImage,
                     account: 'main'
                 };
@@ -4653,7 +4654,8 @@
 
                 console.log('[AI Image] Parsing response JSON...');
                 const result = await response.json();
-                console.log('[AI Image] Result:', {
+                console.log('[AI Image] Full result object:', JSON.stringify(result, null, 2));
+                console.log('[AI Image] Result summary:', {
                     success: result.success,
                     imageCount: result.images?.length,
                     account: result.account,
