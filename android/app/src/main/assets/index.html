@@ -4673,7 +4673,17 @@
             } catch (error) {
                 console.error('[AI Image] Generation error:', error);
                 console.error('[AI Image] Error stack:', error.stack);
-                showMessage(`❌ 圖片生成失敗：${error.message || '請檢查網絡連接或稍後再試'}`);
+
+                let errorMsg = '請檢查網絡連接或稍後再試';
+                if (error.message && error.message.includes('Unauthorized')) {
+                    errorMsg = '服務器認證失敗，請聯系管理員更新賬號憑證';
+                } else if (error.message && error.message.includes('沒有可用賬號')) {
+                    errorMsg = '服務器賬號憑證已過期，請聯系管理員重新登錄 Google Flow';
+                } else if (error.message) {
+                    errorMsg = error.message;
+                }
+
+                showMessage(`❌ 圖片生成失敗：${errorMsg}`);
             }
 
             console.log('[AI Image] Setting generating state to false');
