@@ -3707,7 +3707,14 @@
                         render();
                     }
                     else if (action === 'generateAIImage') {
-                        if (!state.aiImageRefImage || state.aiImageGenerating) return;
+                        console.log('[AI Image] Button clicked');
+                        console.log('[AI Image] Has ref image:', !!state.aiImageRefImage);
+                        console.log('[AI Image] Is generating:', state.aiImageGenerating);
+                        if (!state.aiImageRefImage || state.aiImageGenerating) {
+                            console.log('[AI Image] Blocked - no image or already generating');
+                            return;
+                        }
+                        console.log('[AI Image] Starting generation...');
                         await handleGenerateAIImage();
                     }
                     else if (action === 'viewGeneratedImage') {
@@ -4575,16 +4582,31 @@
 
         // --- AI 圖片生成 ---
         async function handleGenerateAIImage() {
-            if (!state.aiImageRefImage || state.aiImageGenerating) return;
+            console.log('[AI Image] handleGenerateAIImage called');
+            console.log('[AI Image] Current state:', {
+                aiImageRefImage: state.aiImageRefImage ? 'exists' : 'null',
+                aiImageGenerating: state.aiImageGenerating,
+                aiImageStyle: state.aiImageStyle
+            });
 
+            if (!state.aiImageRefImage || state.aiImageGenerating) {
+                console.log('[AI Image] Guard clause triggered, returning');
+                return;
+            }
+
+            console.log('[AI Image] Setting generating state to true');
             state.aiImageGenerating = true;
             state.aiImageResults = [];
+
+            console.log('[AI Image] Calling render()');
             render();
 
+            console.log('[AI Image] Showing message');
             // 顯示開始生成提示
             showMessage('正在連接 AI 服務器，開始生成圖片...');
 
             try {
+                console.log('[AI Image] Building prompt');
                 // 根據選擇的風格構建提示詞
                 let prompt = '將這張圖片進行藝術風格轉換';
 
@@ -4600,44 +4622,63 @@
                 }
 
                 console.log('[AI Image] Starting generation with style:', state.aiImageStyle);
+                console.log('[AI Image] Prompt length:', prompt.length);
 
+                const requestBody = {
+                    prompt: prompt,
+                    count: 4,
+                    ratio: '1:1',
+                    reference_image: state.aiImageRefImage,
+                    account: 'main'
+                };
+                console.log('[AI Image] Request body prepared (image data length):', state.aiImageRefImage.substring(0, 50) + '...');
+
+                console.log('[AI Image] Making fetch request...');
                 // 調用 AI 圖片生成 API
                 const response = await fetch('http://144.79.170.102:8000/api/generate', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({
-                        prompt: prompt,
-                        count: 4,
-                        ratio: '1:1',
-                        reference_image: state.aiImageRefImage,
-                        account: 'main'
-                    })
+                    body: JSON.stringify(requestBody)
                 });
 
-                console.log('[AI Image] Response status:', response.status);
+                console.log('[AI Image] Response received, status:', response.status, response.statusText);
 
                 if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('[AI Image] HTTP error response:', errorText);
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
 
+                console.log('[AI Image] Parsing response JSON...');
                 const result = await response.json();
-                console.log('[AI Image] Result:', result.success, 'Images:', result.images?.length);
+                console.log('[AI Image] Result:', {
+                    success: result.success,
+                    imageCount: result.images?.length,
+                    account: result.account,
+                    error: result.error
+                });
 
                 if (result.success && result.images && result.images.length > 0) {
+                    console.log('[AI Image] Success! Setting results');
                     state.aiImageResults = result.images;
                     showMessage(`🎉 成功生成 ${result.images.length} 張圖片！`);
                 } else {
+                    console.error('[AI Image] Generation failed:', result.error);
                     throw new Error(result.error || '生成失敗');
                 }
             } catch (error) {
-                console.error('[AI Image] Generation failed:', error);
+                console.error('[AI Image] Generation error:', error);
+                console.error('[AI Image] Error stack:', error.stack);
                 showMessage(`❌ 圖片生成失敗：${error.message || '請檢查網絡連接或稍後再試'}`);
             }
 
+            console.log('[AI Image] Setting generating state to false');
             state.aiImageGenerating = false;
+            console.log('[AI Image] Calling final render()');
             render();
+            console.log('[AI Image] handleGenerateAIImage completed');
         }
 
         async function sendChatMessage(override = null) {
