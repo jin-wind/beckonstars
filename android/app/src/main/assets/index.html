@@ -737,6 +737,11 @@
                     showModal: null,
                     modalMessage: '',
                     selectedDate: null,
+                    aiImageGenView: false,
+                    aiImageGenerating: false,
+                    aiImageRefImage: null,
+                    aiImageResults: [],
+                    selectedGeneratedImageUrl: null,
                     pendingMemoryType: saved.pendingMemoryType || 'text',
                     dailyCardMode: localStorage.getItem(DAILY_CARD_MODE_KEY) || saved.dailyCardMode || 'almanac',
                     backendMode: 'server',
@@ -1774,7 +1779,7 @@
             if (!state.appReady) {
                 app.innerHTML = renderOnboardingFlow();
             } else if (state.aiImageGenView) {
-                app.innerHTML = renderAIImageGen();
+                app.innerHTML = renderAIImageGen() + renderModals();
             } else {
                 app.innerHTML = `
                     ${renderHeader()}
@@ -4948,6 +4953,26 @@
             state.canInstallApp = false;
             showMessage('已安裝星喚到手機主畫面。');
         });
+
+        // Android 返回鍵處理
+        document.addEventListener('backbutton', (e) => {
+            e.preventDefault();
+            if (state.showModal) {
+                state.showModal = null;
+                state.selectedGeneratedImageUrl = null;
+                render();
+            } else if (state.aiImageGenView) {
+                state.aiImageGenView = false;
+                state.aiImageRefImage = null;
+                state.aiImageResults = [];
+                render();
+            } else {
+                // 沒有可返回的視圖，讓系統處理（退出 app）
+                if (navigator.app && navigator.app.exitApp) {
+                    navigator.app.exitApp();
+                }
+            }
+        }, false);
 
     </script>
 </body>
