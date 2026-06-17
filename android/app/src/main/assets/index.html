@@ -4635,8 +4635,8 @@
         }
 
         // --- AI 圖片生成 ---
-        async function requestSingleAIImage(prompt, refImage) {
-            console.log(`[AI Image] Requesting image...`);
+        async function requestSingleAIImage(prompt, refImage, count = 1) {
+            console.log(`[AI Image] Requesting ${count} image(s)...`);
             const response = await fetch('http://144.79.170.102:8000/v1/chat/completions', {
                 method: 'POST',
                 headers: {
@@ -4645,6 +4645,7 @@
                 },
                 body: JSON.stringify({
                     model: 'gemini-3.1-flash-image-landscape',
+                    n: count,
                     messages: [{
                         role: 'user',
                         content: [
@@ -4666,37 +4667,41 @@
             const result = await response.json();
             if (result.error) throw new Error(result.error.message || result.error);
 
-            const content = result.choices?.[0]?.message?.content || '';
-            console.log(`[AI Image] Response content:`, content.substring(0, 200) + '...');
-
-            const images = [];
-            const markdownImageRegex = /!\[.*?\]\((https?:\/\/[^)]+)\)/g;
-            let match;
-            while ((match = markdownImageRegex.exec(content)) !== null) {
-                try {
-                    const imgResponse = await fetch(match[1]);
-                    const blob = await imgResponse.blob();
-                    const base64 = await new Promise((resolve) => {
-                        const reader = new FileReader();
-                        reader.onloadend = () => resolve(reader.result);
-                        reader.readAsDataURL(blob);
-                    });
-                    images.push(base64);
-                } catch (err) {
-                    console.warn(`[AI Image] Failed to download image, using URL:`, err);
-                    images.push(match[1]);
+            const allImages = [];
+            for (const choice of (result.choices || [])) {
+                const content = choice?.message?.content || '';
+                const images = [];
+                const markdownImageRegex = /!\[.*?\]\((https?:\/\/[^)]+)\)/g;
+                let match;
+                while ((match = markdownImageRegex.exec(content)) !== null) {
+                    try {
+                        const imgResponse = await fetch(match[1]);
+                        const blob = await imgResponse.blob();
+                        const base64 = await new Promise((resolve) => {
+                            const reader = new FileReader();
+                            reader.onloadend = () => resolve(reader.result);
+                            reader.readAsDataURL(blob);
+                        });
+                        images.push(base64);
+                    } catch (err) {
+                        console.warn(`[AI Image] Failed to download image, using URL:`, err);
+                        images.push(match[1]);
+                    }
                 }
+
+                if (images.length === 0) {
+                    const dataUrlRegex = /(data:image\/[^,\s]+[^)\s]*)/g;
+                    while ((match = dataUrlRegex.exec(content)) !== null) {
+                        images.push(match[1]);
+                    }
+                }
+
+                if (images.length > 0) allImages.push(images[0]);
             }
 
-            if (images.length === 0) {
-                const dataUrlRegex = /(data:image\/[^,\s]+[^)\s]*)/g;
-                while ((match = dataUrlRegex.exec(content)) !== null) {
-                    images.push(match[1]);
-                }
-            }
-
-            if (images.length === 0) throw new Error('響應中未找到圖片數據');
-            return images[0];
+            if (allImages.length === 0) throw new Error('響應中未找到圖片數據');
+            console.log(`[AI Image] Extracted ${allImages.length} image(s)`);
+            return allImages;
         }
 
         function isFatalAIImageError(error) {
@@ -4739,14 +4744,14 @@
                     prompt = stylePrompts[state.aiImageStyle];
                 }
 
-                console.log('[AI Image] Starting single request with style:', state.aiImageStyle);
+                console.log('[AI Image] Starting request with style:', state.aiImageStyle);
 
-                const image = await requestSingleAIImage(prompt, state.aiImageRefImage, 0, 1);
-                state.aiImageResults = [image];
+                const images = await requestSingleAIImage(prompt, state.aiImageRefImage, 4);
+                state.aiImageResults = images;
                 state.aiImageProgress = 100;
                 render();
 
-                showMessage('🎉 圖片生成成功！');
+                showMessage(`🎉 成功生成 ${images.length} 張圖片！`);
             } catch (error) {
                 console.error('[AI Image] Generation error:', error);
                 let errorMsg = '請檢查網絡連接或稍後再試';
