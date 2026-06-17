@@ -4625,33 +4625,79 @@
         }
 
         // --- AI 圖片生成 ---
-        async function handleGenerateAIImage() {
-            console.log('[AI Image] handleGenerateAIImage called');
-            console.log('[AI Image] Current state:', {
-                aiImageRefImage: state.aiImageRefImage ? 'exists' : 'null',
-                aiImageGenerating: state.aiImageGenerating,
-                aiImageStyle: state.aiImageStyle
+        async function requestSingleAIImage(prompt, refImage, index) {
+            console.log(`[AI Image] Requesting image ${index + 1}/4...`);
+            const response = await fetch('http://144.79.170.102:8000/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer han1234'
+                },
+                body: JSON.stringify({
+                    model: 'gemini-3.1-flash-image-landscape',
+                    messages: [{
+                        role: 'user',
+                        content: [
+                            { type: 'text', text: prompt },
+                            { type: 'image_url', image_url: { url: refImage } }
+                        ]
+                    }],
+                    stream: false
+                })
             });
 
-            if (!state.aiImageRefImage || state.aiImageGenerating) {
-                console.log('[AI Image] Guard clause triggered, returning');
-                return;
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`);
             }
 
-            console.log('[AI Image] Setting generating state to true');
+            const result = await response.json();
+            if (result.error) throw new Error(result.error.message || result.error);
+
+            const content = result.choices?.[0]?.message?.content || '';
+            console.log(`[AI Image] Response ${index + 1} content:`, content.substring(0, 200) + '...');
+
+            const images = [];
+            const markdownImageRegex = /!\[.*?\]\((https?:\/\/[^)]+)\)/g;
+            let match;
+            while ((match = markdownImageRegex.exec(content)) !== null) {
+                try {
+                    const imgResponse = await fetch(match[1]);
+                    const blob = await imgResponse.blob();
+                    const base64 = await new Promise((resolve) => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => resolve(reader.result);
+                        reader.readAsDataURL(blob);
+                    });
+                    images.push(base64);
+                } catch (err) {
+                    console.warn(`[AI Image] Failed to download image ${index + 1}, using URL:`, err);
+                    images.push(match[1]);
+                }
+            }
+
+            if (images.length === 0) {
+                const dataUrlRegex = /(data:image\/[^,\s]+[^)\s]*)/g;
+                while ((match = dataUrlRegex.exec(content)) !== null) {
+                    images.push(match[1]);
+                }
+            }
+
+            if (images.length === 0) throw new Error('響應中未找到圖片數據');
+            return images[0];
+        }
+
+        async function handleGenerateAIImage() {
+            console.log('[AI Image] handleGenerateAIImage called');
+            if (!state.aiImageRefImage || state.aiImageGenerating) return;
+
             state.aiImageGenerating = true;
             state.aiImageResults = [];
-
-            console.log('[AI Image] Calling render()');
+            state.aiImageProgress = 0;
             render();
-
-            console.log('[AI Image] Showing message');
-            // 顯示開始生成提示
-            showMessage('正在連接 AI 服務器，開始生成圖片...');
+            showMessage('正在連接 AI 服務器，並行生成 4 張圖片...');
 
             try {
-                console.log('[AI Image] Building prompt');
-                // 根據選擇的風格構建提示詞（使用 demo 文件夹中的精确提示词）
                 let prompt = '基於參考圖片，保持圖片中主體人物的面部特徵、姿勢和構圖，進行藝術風格轉換';
 
                 const stylePrompts = {
@@ -4668,137 +4714,46 @@
                     prompt = stylePrompts[state.aiImageStyle];
                 }
 
-                console.log('[AI Image] Starting generation with style:', state.aiImageStyle);
-                console.log('[AI Image] Prompt length:', prompt.length);
+                console.log('[AI Image] Starting 4 parallel requests with style:', state.aiImageStyle);
 
-                const requestBody = {
-                    prompt: prompt,
-                    count: 4,
-                    ratio: '1:1',
-                    model: 'nano_banana_pro',
-                    reference_image: state.aiImageRefImage,
-                    account: 'main'
-                };
-                console.log('[AI Image] Request body prepared (image data length):', state.aiImageRefImage.substring(0, 50) + '...');
+                const imagePromises = [0, 1, 2, 3].map(i => requestSingleAIImage(prompt, state.aiImageRefImage, i));
+                const results = await Promise.allSettled(imagePromises);
 
-                console.log('[AI Image] Making fetch request...');
-
-                // 使用 chat completions API (OpenAI 兼容格式，支持图片输入)
-                const response = await fetch('http://144.79.170.102:8000/v1/chat/completions', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': 'Bearer han1234'
-                    },
-                    body: JSON.stringify({
-                        model: 'gemini-3.1-flash-image-landscape',
-                        messages: [{
-                            role: 'user',
-                            content: [
-                                {
-                                    type: 'text',
-                                    text: prompt
-                                },
-                                {
-                                    type: 'image_url',
-                                    image_url: {
-                                        url: state.aiImageRefImage
-                                    }
-                                }
-                            ]
-                        }],
-                        stream: false
-                    })
-                });
-
-                console.log('[AI Image] Response received, status:', response.status, response.statusText);
-
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error('[AI Image] HTTP error response:', errorText);
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-
-                console.log('[AI Image] Parsing response JSON...');
-                const result = await response.json();
-                console.log('[AI Image] Full result object:', JSON.stringify(result, null, 2));
-
-                // 处理 chat completions 格式的响应
-                if (result.error) {
-                    console.error('[AI Image] API error:', result.error);
-                    throw new Error(result.error.message || result.error);
-                }
-
-                // 从 chat completions 响应中提取图片
-                let images = [];
-                if (result.choices && result.choices.length > 0) {
-                    const content = result.choices[0].message?.content || '';
-                    console.log('[AI Image] Response content:', content.substring(0, 200) + '...');
-
-                    // 提取 markdown 格式的图片: ![](url)
-                    const markdownImageRegex = /!\[.*?\]\((https?:\/\/[^)]+)\)/g;
-                    let match;
-                    while ((match = markdownImageRegex.exec(content)) !== null) {
-                        const imageUrl = match[1];
-                        console.log('[AI Image] Found image URL:', imageUrl);
-
-                        // 下载图片并转换为 base64
-                        try {
-                            const imgResponse = await fetch(imageUrl);
-                            const blob = await imgResponse.blob();
-                            const base64 = await new Promise((resolve) => {
-                                const reader = new FileReader();
-                                reader.onloadend = () => resolve(reader.result);
-                                reader.readAsDataURL(blob);
-                            });
-                            images.push(base64);
-                            console.log('[AI Image] Downloaded and converted image to base64');
-                        } catch (err) {
-                            console.warn('[AI Image] Failed to download image, using URL directly:', err);
-                            images.push(imageUrl);
-                        }
-                    }
-
-                    // 如果没有找到 markdown 图片，尝试提取 data: URL
-                    if (images.length === 0) {
-                        const dataUrlRegex = /(data:image\/[^,\s]+[^)\s]*)/g;
-                        while ((match = dataUrlRegex.exec(content)) !== null) {
-                            images.push(match[1]);
-                        }
+                const images = [];
+                let failedCount = 0;
+                for (const r of results) {
+                    if (r.status === 'fulfilled') {
+                        images.push(r.value);
+                    } else {
+                        failedCount++;
+                        console.warn('[AI Image] One request failed:', r.reason);
                     }
                 }
-
-                console.log('[AI Image] Extracted images count:', images.length);
 
                 if (images.length > 0) {
-                    console.log('[AI Image] Success! Setting results');
                     state.aiImageResults = images;
-                    showMessage(`🎉 成功生成 ${images.length} 張圖片！`);
+                    const msg = failedCount > 0
+                        ? `🎉 成功生成 ${images.length} 張圖片（${failedCount} 張失敗）`
+                        : `🎉 成功生成 ${images.length} 張圖片！`;
+                    showMessage(msg);
                 } else {
-                    console.error('[AI Image] No images found in response');
-                    throw new Error('響應中未找到圖片數據');
+                    throw new Error('所有請求均失敗，未生成任何圖片');
                 }
             } catch (error) {
                 console.error('[AI Image] Generation error:', error);
-                console.error('[AI Image] Error stack:', error.stack);
-
                 let errorMsg = '請檢查網絡連接或稍後再試';
-                if (error.message && error.message.includes('Unauthorized')) {
+                if (error.message?.includes('Unauthorized')) {
                     errorMsg = '服務器認證失敗，請聯系管理員更新賬號憑證';
-                } else if (error.message && error.message.includes('沒有可用賬號')) {
+                } else if (error.message?.includes('沒有可用賬號')) {
                     errorMsg = '服務器賬號憑證已過期，請聯系管理員重新登錄 Google Flow';
                 } else if (error.message) {
                     errorMsg = error.message;
                 }
-
                 showMessage(`❌ 圖片生成失敗：${errorMsg}`);
             }
 
-            console.log('[AI Image] Setting generating state to false');
             state.aiImageGenerating = false;
-            console.log('[AI Image] Calling final render()');
             render();
-            console.log('[AI Image] handleGenerateAIImage completed');
         }
 
         async function sendChatMessage(override = null) {
