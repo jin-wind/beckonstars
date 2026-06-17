@@ -4701,7 +4701,10 @@
             const result = await response.json();
             if (result.error) throw new Error(result.error.message || result.error);
 
+            console.log(`[AI Image] Response choices count: ${result.choices?.length || 0}`);
             const allImages = [];
+
+            // 先嘗試從多個 choices 提取
             for (const choice of (result.choices || [])) {
                 const content = choice?.message?.content || '';
                 const images = [];
@@ -4730,11 +4733,12 @@
                     }
                 }
 
-                if (images.length > 0) allImages.push(images[0]);
+                allImages.push(...images);
             }
 
+            // 如果只有一個 choice 但包含多張圖片，已經在上面處理了
+            console.log(`[AI Image] Total extracted: ${allImages.length} image(s)`);
             if (allImages.length === 0) throw new Error('響應中未找到圖片數據');
-            console.log(`[AI Image] Extracted ${allImages.length} image(s)`);
             return allImages;
         }
 
