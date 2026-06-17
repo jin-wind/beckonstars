@@ -4731,15 +4731,19 @@
         }
 
         async function requestMultipleAIImages(prompt, refImage, count = 4) {
-            console.log(`[AI Image] Requesting ${count} images in parallel...`);
-            const promises = [];
+            console.log(`[AI Image] Requesting ${count} images sequentially...`);
+            const images = [];
             for (let i = 0; i < count; i++) {
-                promises.push(requestSingleAIImage(prompt, refImage));
+                console.log(`[AI Image] Generating image ${i + 1}/${count}...`);
+                try {
+                    const image = await requestSingleAIImage(prompt, refImage);
+                    images.push(image);
+                    console.log(`[AI Image] Image ${i + 1} done`);
+                    if (i < count - 1) await new Promise(r => setTimeout(r, 1000));
+                } catch (err) {
+                    console.warn(`[AI Image] Image ${i + 1} failed:`, err);
+                }
             }
-            const results = await Promise.allSettled(promises);
-            const images = results
-                .filter(r => r.status === 'fulfilled')
-                .map(r => r.value);
             console.log(`[AI Image] Got ${images.length}/${count} images`);
             if (images.length === 0) throw new Error('所有圖片生成請求都失敗了');
             return images;
