@@ -4608,13 +4608,13 @@
             try {
                 console.log('[AI Image] Building prompt');
                 // 根據選擇的風格構建提示詞
-                let prompt = '將這張圖片進行藝術風格轉換';
+                let prompt = '基於參考圖片，保持圖片中主體人物的面部特徵、姿勢和構圖，進行藝術風格轉換';
 
                 const stylePrompts = {
-                    'garden': 'A professional, high-resolution portrait photograph of the smiling subject in a tranquil traditional Chinese garden at sunrise. The soft, golden sunlight filters through stylized bamboo stalks. Soft bokeh of pink cherry blossoms and traditional stone architecture in the background. Peaceful, elegant, and spiritually uplifting atmosphere.',
-                    'explosion': 'A professional, hyper-realistic photo of the single smiling person from the reference image, maintaining the exact same serene expression. The entire scene around them, however, is a chaotic action movie explosion. Huge fireballs are blooming behind them from a multi-car pileup, debris is flying, and smoke fills the air. They stand perfectly still and peaceful.',
-                    'studio': 'A high-resolution, full-body portrait photograph of the person standing against a plain, light-grey wall. The person has a sincere, pleasant, but slightly practiced smile. The scene is lit with bright, even studio light, giving it a slightly institutional feel. The entire image has a high-quality, sharp finish.',
-                    'vintage': 'A scanned analog photograph (vintage film grain, warm faded colors) of the smiling subject, standing against a subtly faded studio background. The overall aesthetic is nostalgic and comforting, like an old family keepsake.'
+                    'garden': '基於參考圖片，保持圖片中人物的面部特徵、表情和姿勢完全一致。將場景轉換為：寧靜的傳統中式園林，清晨日出時分，柔和的金色陽光透過竹林，背景有粉色櫻花和傳統石頭建築的柔焦效果，營造平和、優雅、充滿靈性的氛圍。',
+                    'explosion': '基於參考圖片，保持圖片中人物的面部特徵、表情和姿勢完全一致。人物保持平靜祥和的表情，但周圍場景變為：混亂的動作電影爆炸場景，背後汽車連環爆炸產生巨大火球，碎片飛濺，煙霧瀰漫。人物在混亂中保持完全靜止和平靜，形成強烈對比。',
+                    'studio': '基於參考圖片，保持圖片中人物的面部特徵、表情和姿勢完全一致。將場景轉換為：專業影樓風格，人物站在淺灰色純色背景牆前，真誠愉悅但略帶正式的微笑。使用明亮均勻的影樓燈光照明，營造略帶正式感的氛圍。高質量、清晰的專業攝影效果。',
+                    'vintage': '基於參考圖片，保持圖片中人物的面部特徵、表情和姿勢完全一致。將整體效果轉換為：掃描的模擬膠片照片風格，帶有復古膠片顆粒感和溫暖褪色的色調，站在微微褪色的影樓背景前。整體呈現懷舊舒適的氛圍，像是珍貴的老式家庭紀念照。'
                 };
 
                 if (state.aiImageStyle !== 'random' && stylePrompts[state.aiImageStyle]) {
