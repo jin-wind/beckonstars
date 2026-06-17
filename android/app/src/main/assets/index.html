@@ -1263,6 +1263,11 @@
             });
         }
 
+        // AI 圖片專用壓縮：800px 寬、質量 0.7，約 100-200KB
+        function compressAIRefImage(file, maxSize = 800, quality = 0.7) {
+            return compressImage(file, maxSize, quality);
+        }
+
         async function summarizeVoiceText(text) {
             if (!text || state.backendMode !== 'server') return '';
             try {
@@ -3821,7 +3826,7 @@
                     const file = event.target.files?.[0];
                     if (!file) return;
                     event.target.value = '';
-                    state.aiImageRefImage = await readFileAsDataUrl(file);
+                    state.aiImageRefImage = await compressAIRefImage(file);
                     render();
                 });
             }
@@ -3832,7 +3837,7 @@
                     const file = event.target.files?.[0];
                     if (!file) return;
                     event.target.value = '';
-                    state.aiImageRefImage = await readFileAsDataUrl(file);
+                    state.aiImageRefImage = await compressAIRefImage(file);
                     render();
                 });
             }
@@ -4710,7 +4715,7 @@
             state.aiImageResults = [];
             state.aiImageProgress = 0;
             render();
-            showMessage('正在連接 AI 服務器，逐張生成圖片...');
+            showMessage('正在連接 AI 服務器，並行生成 4 張圖片...');
 
             try {
                 let prompt = '基於參考圖片，保持圖片中主體人物的面部特徵、姿勢和構圖，進行藝術風格轉換';
@@ -4733,21 +4738,22 @@
                 const images = [];
                 let failedCount = 0;
 
-                console.log('[AI Image] Starting sequential requests with style:', state.aiImageStyle);
+                console.log('[AI Image] Starting parallel requests with style:', state.aiImageStyle);
 
-                for (let i = 0; i < totalImages; i++) {
-                    try {
-                        const image = await requestSingleAIImage(prompt, state.aiImageRefImage, i, totalImages);
-                        images.push(image);
-                        state.aiImageResults = images;
-                    } catch (error) {
+                const imagePromises = [0, 1, 2, 3].map(i => requestSingleAIImage(prompt, state.aiImageRefImage, i, totalImages));
+                const results = await Promise.allSettled(imagePromises);
+
+                for (let i = 0; i < results.length; i++) {
+                    const r = results[i];
+                    if (r.status === 'fulfilled') {
+                        images.push(r.value);
+                    } else {
                         failedCount++;
-                        console.warn('[AI Image] One request failed:', error);
-                        if (isFatalAIImageError(error)) break;
-                    } finally {
-                        state.aiImageProgress = Math.round(((i + 1) / totalImages) * 100);
-                        render();
+                        console.warn('[AI Image] One request failed:', r.reason);
                     }
+                    state.aiImageResults = images;
+                    state.aiImageProgress = Math.round(((i + 1) / totalImages) * 100);
+                    render();
                 }
 
                 if (images.length > 0) {
