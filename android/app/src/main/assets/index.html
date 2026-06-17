@@ -4625,8 +4625,8 @@
         }
 
         // --- AI 圖片生成 ---
-        async function requestSingleAIImage(prompt, refImage, index) {
-            console.log(`[AI Image] Requesting image ${index + 1}/4...`);
+        async function requestSingleAIImage(prompt, refImage, index, total) {
+            console.log(`[AI Image] Requesting image ${index + 1}/${total}...`);
             const response = await fetch('http://144.79.170.102:8000/v1/chat/completions', {
                 method: 'POST',
                 headers: {
@@ -4648,7 +4648,9 @@
 
             if (!response.ok) {
                 const errorText = await response.text();
-                throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`);
+                const error = new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`);
+                error.status = response.status;
+                throw error;
             }
 
             const result = await response.json();
@@ -4687,6 +4689,19 @@
             return images[0];
         }
 
+        function isFatalAIImageError(error) {
+            const status = Number(error?.status);
+            const message = String(error?.message || '').toLowerCase();
+            return status === 401 ||
+                status === 403 ||
+                status === 429 ||
+                status >= 500 ||
+                message.includes('captcha') ||
+                message.includes('recaptcha') ||
+                message.includes('沒有可用') ||
+                message.includes('token');
+        }
+
         async function handleGenerateAIImage() {
             console.log('[AI Image] handleGenerateAIImage called');
             if (!state.aiImageRefImage || state.aiImageGenerating) return;
@@ -4695,7 +4710,7 @@
             state.aiImageResults = [];
             state.aiImageProgress = 0;
             render();
-            showMessage('正在連接 AI 服務器，並行生成 4 張圖片...');
+            showMessage('正在連接 AI 服務器，逐張生成圖片...');
 
             try {
                 let prompt = '基於參考圖片，保持圖片中主體人物的面部特徵、姿勢和構圖，進行藝術風格轉換';
@@ -4714,19 +4729,24 @@
                     prompt = stylePrompts[state.aiImageStyle];
                 }
 
-                console.log('[AI Image] Starting 4 parallel requests with style:', state.aiImageStyle);
-
-                const imagePromises = [0, 1, 2, 3].map(i => requestSingleAIImage(prompt, state.aiImageRefImage, i));
-                const results = await Promise.allSettled(imagePromises);
-
+                const totalImages = 4;
                 const images = [];
                 let failedCount = 0;
-                for (const r of results) {
-                    if (r.status === 'fulfilled') {
-                        images.push(r.value);
-                    } else {
+
+                console.log('[AI Image] Starting sequential requests with style:', state.aiImageStyle);
+
+                for (let i = 0; i < totalImages; i++) {
+                    try {
+                        const image = await requestSingleAIImage(prompt, state.aiImageRefImage, i, totalImages);
+                        images.push(image);
+                        state.aiImageResults = images;
+                    } catch (error) {
                         failedCount++;
-                        console.warn('[AI Image] One request failed:', r.reason);
+                        console.warn('[AI Image] One request failed:', error);
+                        if (isFatalAIImageError(error)) break;
+                    } finally {
+                        state.aiImageProgress = Math.round(((i + 1) / totalImages) * 100);
+                        render();
                     }
                 }
 
