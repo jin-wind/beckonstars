@@ -4669,8 +4669,7 @@
         }
 
         // --- AI 圖片生成 ---
-        async function requestSingleAIImage(prompt, refImage, count = 1) {
-            console.log(`[AI Image] Requesting ${count} image(s)...`);
+        async function requestSingleAIImage(prompt, refImage) {
             const response = await fetch('http://144.79.170.102:8000/v1/chat/completions', {
                 method: 'POST',
                 headers: {
@@ -4679,7 +4678,6 @@
                 },
                 body: JSON.stringify({
                     model: 'gemini-3.1-flash-image-landscape',
-                    n: count,
                     messages: [{
                         role: 'user',
                         content: [
@@ -4701,45 +4699,50 @@
             const result = await response.json();
             if (result.error) throw new Error(result.error.message || result.error);
 
-            console.log(`[AI Image] Response choices count: ${result.choices?.length || 0}`);
-            const allImages = [];
-
-            // 先嘗試從多個 choices 提取
-            for (const choice of (result.choices || [])) {
-                const content = choice?.message?.content || '';
-                const images = [];
-                const markdownImageRegex = /!\[.*?\]\((https?:\/\/[^)]+)\)/g;
-                let match;
-                while ((match = markdownImageRegex.exec(content)) !== null) {
-                    try {
-                        const imgResponse = await fetch(match[1]);
-                        const blob = await imgResponse.blob();
-                        const base64 = await new Promise((resolve) => {
-                            const reader = new FileReader();
-                            reader.onloadend = () => resolve(reader.result);
-                            reader.readAsDataURL(blob);
-                        });
-                        images.push(base64);
-                    } catch (err) {
-                        console.warn(`[AI Image] Failed to download image, using URL:`, err);
-                        images.push(match[1]);
-                    }
+            const content = result.choices?.[0]?.message?.content || '';
+            const images = [];
+            const markdownImageRegex = /!\[.*?\]\((https?:\/\/[^)]+)\)/g;
+            let match;
+            while ((match = markdownImageRegex.exec(content)) !== null) {
+                try {
+                    const imgResponse = await fetch(match[1]);
+                    const blob = await imgResponse.blob();
+                    const base64 = await new Promise((resolve) => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => resolve(reader.result);
+                        reader.readAsDataURL(blob);
+                    });
+                    images.push(base64);
+                } catch (err) {
+                    console.warn(`[AI Image] Failed to download image, using URL:`, err);
+                    images.push(match[1]);
                 }
-
-                if (images.length === 0) {
-                    const dataUrlRegex = /(data:image\/[^,\s]+[^)\s]*)/g;
-                    while ((match = dataUrlRegex.exec(content)) !== null) {
-                        images.push(match[1]);
-                    }
-                }
-
-                allImages.push(...images);
             }
 
-            // 如果只有一個 choice 但包含多張圖片，已經在上面處理了
-            console.log(`[AI Image] Total extracted: ${allImages.length} image(s)`);
-            if (allImages.length === 0) throw new Error('響應中未找到圖片數據');
-            return allImages;
+            if (images.length === 0) {
+                const dataUrlRegex = /(data:image\/[^,\s]+[^)\s]*)/g;
+                while ((match = dataUrlRegex.exec(content)) !== null) {
+                    images.push(match[1]);
+                }
+            }
+
+            if (images.length === 0) throw new Error('響應中未找到圖片數據');
+            return images[0];
+        }
+
+        async function requestMultipleAIImages(prompt, refImage, count = 4) {
+            console.log(`[AI Image] Requesting ${count} images in parallel...`);
+            const promises = [];
+            for (let i = 0; i < count; i++) {
+                promises.push(requestSingleAIImage(prompt, refImage));
+            }
+            const results = await Promise.allSettled(promises);
+            const images = results
+                .filter(r => r.status === 'fulfilled')
+                .map(r => r.value);
+            console.log(`[AI Image] Got ${images.length}/${count} images`);
+            if (images.length === 0) throw new Error('所有圖片生成請求都失敗了');
+            return images;
         }
 
         function isFatalAIImageError(error) {
@@ -4784,7 +4787,7 @@
 
                 console.log('[AI Image] Starting request with style:', state.aiImageStyle, 'count:', state.aiImageCount || 4);
 
-                const images = await requestSingleAIImage(prompt, state.aiImageRefImage, state.aiImageCount || 4);
+                const images = await requestMultipleAIImages(prompt, state.aiImageRefImage, state.aiImageCount || 4);
                 state.aiImageResults = images;
                 state.aiImageProgress = 100;
                 render();
