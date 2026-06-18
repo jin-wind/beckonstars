@@ -2777,6 +2777,31 @@
             `;
         }
 
+        function closeAIImageGen() {
+            state.aiImageGenView = false;
+            state.aiImageRefImage = null;
+            state.aiImageResults = [];
+            render();
+        }
+
+        function handleInAppBackNavigation() {
+            if (state.showModal) {
+                state.showModal = null;
+                state.selectedGeneratedImageUrl = null;
+                render();
+                return true;
+            }
+
+            if (state.aiImageGenView) {
+                closeAIImageGen();
+                return true;
+            }
+
+            return false;
+        }
+
+        window.handleAndroidBackButton = handleInAppBackNavigation;
+
         // --- 彈出視窗 ---
         function renderModals() {
             if (!state.showModal) return '';
@@ -3755,8 +3780,7 @@
                         render();
                     }
                     else if (action === 'closeAIImageGen') {
-                        state.aiImageGenView = false;
-                        render();
+                        closeAIImageGen();
                     }
                     else if (action === 'uploadRefImage') {
                         const input = document.getElementById('aiImageFileInput');
@@ -4984,16 +5008,7 @@
         // Android 返回鍵處理
         document.addEventListener('backbutton', (e) => {
             e.preventDefault();
-            if (state.showModal) {
-                state.showModal = null;
-                state.selectedGeneratedImageUrl = null;
-                render();
-            } else if (state.aiImageGenView) {
-                state.aiImageGenView = false;
-                state.aiImageRefImage = null;
-                state.aiImageResults = [];
-                render();
-            } else {
+            if (!handleInAppBackNavigation()) {
                 // 沒有可返回的視圖，讓系統處理（退出 app）
                 if (navigator.app && navigator.app.exitApp) {
                     navigator.app.exitApp();
