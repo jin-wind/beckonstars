@@ -4925,12 +4925,13 @@
             return images[0];
         }
 
-        async function requestMultipleAIImages(prompt, refImage, count = 4) {
+        async function requestMultipleAIImages(promptProvider, refImage, count = 4) {
             console.log(`[AI Image] Requesting ${count} images sequentially...`);
             const images = [];
             for (let i = 0; i < count; i++) {
                 console.log(`[AI Image] Generating image ${i + 1}/${count}...`);
                 try {
+                    const prompt = typeof promptProvider === 'function' ? promptProvider(i) : promptProvider;
                     const image = await requestSingleAIImage(prompt, refImage);
                     images.push(image);
                     console.log(`[AI Image] Image ${i + 1} done`);
@@ -4980,13 +4981,20 @@
                     'vintage': 'A scanned analog photograph (vintage film grain, warm faded colors) of the smiling [主體] (based on image_1.png), posing exactly like the woman in image_0.png with joined hands in a downward triangle. The subject is wearing the identical light grey short-sleeve t-shirt with green leaf and white flower embroidery on the shoulders, standing against a subtly faded studio background.\n\nAll six lines of Chinese text from image_0.png are precisely overlaid in the same positions, using the exact traditional fonts and colors, but appearing slightly aged and part of the photograph\'s print:\n\nTop-left large horizontal red text: "早安"\n\nFar-left vertical red text: "笑口常開"\n\nInner-left vertical red text: "开心微微笑"\n\nMiddle-left vertical red text: "甜美要大方"\n\nInner-right vertical red text: "甜甜笑一笑"\n\nFar-right vertical yellow text with black outline: "人人都喜愛"\n\nThe overall aesthetic is nostalgic and comforting, like an old family keepsake.'
                 };
 
-                if (state.aiImageStyle !== 'random' && stylePrompts[state.aiImageStyle]) {
-                    prompt = stylePrompts[state.aiImageStyle];
-                }
+                const styleIds = Object.keys(stylePrompts);
+                const pickRandomStyleId = () => styleIds[Math.floor(Math.random() * styleIds.length)];
+                const getPromptForRequest = imageIndex => {
+                    if (state.aiImageStyle === 'random') {
+                        const randomStyleId = pickRandomStyleId();
+                        console.log(`[AI Image] Random style for image ${imageIndex + 1}:`, randomStyleId);
+                        return stylePrompts[randomStyleId];
+                    }
+                    return stylePrompts[state.aiImageStyle] || prompt;
+                };
 
                 console.log('[AI Image] Starting request with style:', state.aiImageStyle, 'count:', state.aiImageCount || 4);
 
-                const images = await requestMultipleAIImages(prompt, state.aiImageRefImage, state.aiImageCount || 4);
+                const images = await requestMultipleAIImages(getPromptForRequest, state.aiImageRefImage, state.aiImageCount || 4);
                 state.aiImageResults = images;
                 state.aiImageProgress = 100;
                 render();
