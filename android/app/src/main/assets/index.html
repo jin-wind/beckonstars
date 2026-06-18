@@ -336,6 +336,124 @@
             return url;
         }
 
+        function isRemoteUrl(value) {
+            const url = String(value || '').trim();
+            return url.startsWith('http://') || url.startsWith('https://');
+        }
+
+        function isImageDataUrl(value) {
+            return String(value || '').trim().startsWith('data:image/');
+        }
+
+        function extractAIImageUrls(content) {
+            const text = String(content || '');
+            const images = [];
+            const seen = new Set();
+            const addImage = url => {
+                const value = String(url || '').trim();
+                if (!value || seen.has(value)) return;
+                if (!isRemoteUrl(value) && !isImageDataUrl(value)) return;
+                seen.add(value);
+                images.push(value);
+            };
+
+            const markdownImageRegex = /!\[[^\]]*]\((https?:\/\/[^)\s]+|data:image\/[^)]+)\)/g;
+            let match;
+            while ((match = markdownImageRegex.exec(text)) !== null) {
+                addImage(match[1]);
+            }
+
+            const directUrlRegex = /(https?:\/\/[^\s)]+|data:image\/[A-Za-z0-9.+-]+;base64,[A-Za-z0-9+/=]+)/g;
+            while ((match = directUrlRegex.exec(text)) !== null) {
+                addImage(match[1]);
+            }
+
+            return images;
+        }
+
+        function downloadImage(url) {
+            const imageUrl = String(url || '').trim();
+            if (!imageUrl) return;
+
+            if (isAndroidApk() && window.BeckonStarsAndroid?.saveImageToGallery) {
+                window.BeckonStarsAndroid.saveImageToGallery(imageUrl);
+                return;
+            }
+
+            try {
+                const link = document.createElement('a');
+                link.href = imageUrl;
+                link.download = `ai-generated-${Date.now()}.jpg`;
+                link.rel = 'noopener';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                showMessage('✅ 圖片已開始下載到您的設備。');
+            } catch (err) {
+                console.error('Download failed', err);
+                showMessage('下載失敗，請長按圖片保存。');
+            }
+        }
+
+        async function shareGeneratedImageUrl(url) {
+            const imageUrl = String(url || '').trim();
+            if (!imageUrl) return;
+
+            if (isAndroidApk() && window.BeckonStarsAndroid?.shareAIImage) {
+                window.BeckonStarsAndroid.shareAIImage(imageUrl);
+                return;
+            }
+
+            if (navigator.share) {
+                try {
+                    if (isRemoteUrl(imageUrl)) {
+                        await navigator.share({
+                            title: 'AI 生成圖片',
+                            url: imageUrl
+                        });
+                        return;
+                    }
+
+                    if (isImageDataUrl(imageUrl)) {
+                        const base64Data = imageUrl.split(',')[1];
+                        const byteCharacters = atob(base64Data);
+                        const byteNumbers = new Array(byteCharacters.length);
+                        for (let i = 0; i < byteCharacters.length; i++) {
+                            byteNumbers[i] = byteCharacters.charCodeAt(i);
+                        }
+                        const byteArray = new Uint8Array(byteNumbers);
+                        const mime = imageUrl.match(/^data:([^;,]+)/)?.[1] || 'image/jpeg';
+                        const blob = new Blob([byteArray], { type: mime });
+                        const ext = mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : 'jpg';
+                        const file = new File([blob], `ai-image-${Date.now()}.${ext}`, { type: mime });
+
+                        if (!navigator.canShare || navigator.canShare({ files: [file] })) {
+                            await navigator.share({
+                                files: [file],
+                                title: 'AI 生成圖片'
+                            });
+                            return;
+                        }
+                    }
+                } catch (err) {
+                    if (err?.name === 'AbortError') return;
+                    console.error('Share failed', err);
+                }
+            }
+
+            if (isRemoteUrl(imageUrl) && navigator.clipboard?.writeText) {
+                try {
+                    await navigator.clipboard.writeText(imageUrl);
+                    showMessage('已複製圖片鏈接，可以貼到其他 App 分享。');
+                    return;
+                } catch (err) {
+                    console.warn('Copy image URL failed', err);
+                }
+            }
+
+            showMessage('分享失敗，請先保存圖片後再分享。');
+        }
+
         function getMessageImageSrc(message) {
             return resolveMediaUrl(message?.thumbnailUrl || message?.imgUrl || message?.img || '');
         }
@@ -2992,13 +3110,13 @@
                         <button class="action-btn absolute top-4 right-4 w-12 h-12 bg-white bg-opacity-90 rounded-full text-gray-800 flex items-center justify-center z-10 shadow-lg" data-action="closeModal">
                             <i class="fa-solid fa-times bs-text-xl"></i>
                         </button>
-                        <img src="${imageUrl}" class="max-w-full max-h-full object-contain" alt="生成的圖片">
-                        <div class="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex gap-3">
-                            <button class="action-btn px-6 py-3 bg-brand text-white font-bold rounded-xl shadow-lg" data-action="downloadGeneratedImage" data-url="${escapeAttribute(imageUrl)}">
-                                <i class="fa-solid fa-download mr-2"></i>保存到手機
+                        <img src="${imageUrl}" class="max-w-full max-h-[calc(100%-6rem)] object-contain" alt="生成的圖片">
+                        <div class="absolute bottom-4 left-4 right-4 flex gap-3 justify-center">
+                            <button class="action-btn min-w-0 flex-1 max-w-40 px-4 py-3 bg-brand text-white font-bold rounded-xl shadow-lg flex items-center justify-center gap-2 whitespace-nowrap" data-action="downloadGeneratedImage" data-url="${escapeAttribute(imageUrl)}">
+                                <i class="fa-solid fa-download shrink-0"></i><span>保存</span>
                             </button>
-                            <button class="action-btn px-6 py-3 bg-gray-800 text-white font-bold rounded-xl shadow-lg" data-action="shareGeneratedImage" data-url="${escapeAttribute(imageUrl)}">
-                                <i class="fa-solid fa-share-nodes mr-2"></i>分享
+                            <button class="action-btn min-w-0 flex-1 max-w-40 px-4 py-3 bg-gray-800 text-white font-bold rounded-xl shadow-lg flex items-center justify-center gap-2 whitespace-nowrap" data-action="shareGeneratedImage" data-url="${escapeAttribute(imageUrl)}">
+                                <i class="fa-solid fa-share-nodes shrink-0"></i><span>分享</span>
                             </button>
                         </div>
                     </div>
@@ -3356,6 +3474,10 @@
             state.showModal = 'messageBox';
             render();
         }
+
+        window.handleAndroidImageSaveResult = function(success, message) {
+            showMessage(message || (success ? '✅ 圖片已保存到手機相簿。' : '圖片保存失敗，請稍後再試。'));
+        };
 
         // --- 事件處理 ---
         function attachEvents() {
@@ -3939,45 +4061,16 @@
                     else if (action === 'downloadGeneratedImage') {
                         const url = newBtn.getAttribute('data-url');
                         if (url) {
-                            try {
-                                const link = document.createElement('a');
-                                link.href = url;
-                                link.download = `ai-generated-${Date.now()}.jpg`;
-                                document.body.appendChild(link);
-                                link.click();
-                                document.body.removeChild(link);
-                                showMessage('✅ 圖片已開始下載到您的設備。');
-                            } catch (err) {
-                                console.error('Download failed', err);
-                                showMessage('下載失敗，請長按圖片保存。');
+                            if (isAndroidApk() && window.BeckonStarsAndroid?.saveImageToGallery) {
+                                showMessage('正在保存圖片到手機相簿...');
                             }
+                            downloadImage(url);
                         }
                     }
                     else if (action === 'shareGeneratedImage') {
                         const url = newBtn.getAttribute('data-url');
-                        if (url && navigator.share) {
-                            try {
-                                // 將 base64 轉換為 Blob
-                                const base64Data = url.split(',')[1];
-                                const byteCharacters = atob(base64Data);
-                                const byteNumbers = new Array(byteCharacters.length);
-                                for (let i = 0; i < byteCharacters.length; i++) {
-                                    byteNumbers[i] = byteCharacters.charCodeAt(i);
-                                }
-                                const byteArray = new Uint8Array(byteNumbers);
-                                const blob = new Blob([byteArray], { type: 'image/jpeg' });
-                                const file = new File([blob], `ai-image-${Date.now()}.jpg`, { type: 'image/jpeg' });
-
-                                navigator.share({
-                                    files: [file],
-                                    title: 'AI 生成圖片'
-                                }).catch(err => console.log('Share cancelled', err));
-                            } catch (err) {
-                                console.error('Share failed', err);
-                                showMessage('分享失敗，請嘗試下載後分享。');
-                            }
-                        } else {
-                            showMessage('您的設備不支持分享功能。');
+                        if (url) {
+                            await shareGeneratedImageUrl(url);
                         }
                     }
                 });
@@ -4827,32 +4920,7 @@
             if (result.error) throw new Error(result.error.message || result.error);
 
             const content = result.choices?.[0]?.message?.content || '';
-            const images = [];
-            const markdownImageRegex = /!\[.*?\]\((https?:\/\/[^)]+)\)/g;
-            let match;
-            while ((match = markdownImageRegex.exec(content)) !== null) {
-                try {
-                    const imgResponse = await fetch(match[1]);
-                    const blob = await imgResponse.blob();
-                    const base64 = await new Promise((resolve) => {
-                        const reader = new FileReader();
-                        reader.onloadend = () => resolve(reader.result);
-                        reader.readAsDataURL(blob);
-                    });
-                    images.push(base64);
-                } catch (err) {
-                    console.warn(`[AI Image] Failed to download image, using URL:`, err);
-                    images.push(match[1]);
-                }
-            }
-
-            if (images.length === 0) {
-                const dataUrlRegex = /(data:image\/[^,\s]+[^)\s]*)/g;
-                while ((match = dataUrlRegex.exec(content)) !== null) {
-                    images.push(match[1]);
-                }
-            }
-
+            const images = extractAIImageUrls(content);
             if (images.length === 0) throw new Error('響應中未找到圖片數據');
             return images[0];
         }

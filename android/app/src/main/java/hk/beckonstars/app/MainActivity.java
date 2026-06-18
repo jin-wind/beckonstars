@@ -5,6 +5,7 @@ import android.app.Activity;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.content.ContentValues;
 import android.content.ClipData;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -47,7 +48,9 @@ import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
@@ -65,6 +68,7 @@ public class MainActivity extends Activity {
     private static final int REQUEST_POST_NOTIFICATIONS = 1001;
     private static final int REQUEST_RECORD_AUDIO = 1002;
     private static final int REQUEST_FILE_CHOOSER = 1003;
+    private static final int REQUEST_WRITE_EXTERNAL_STORAGE = 1004;
     private static final String SPEECH_LANGUAGE = "zh-HK";
     private WebView webView;
     private ValueCallback<Uri[]> filePathCallback;
@@ -80,6 +84,7 @@ public class MainActivity extends Activity {
     private boolean pendingVoiceRecordingStart = false;
     private String pendingTranscriptionMessageId = "";
     private String pendingTranscriptionAudioDataUrl = "";
+    private String pendingImageSaveUrl = "";
     private String mediaApiBase = "";
     private String mediaAuthToken = "";
     private static final String UPDATE_FILE_NAME = "beckonstars-update.apk";
@@ -196,6 +201,18 @@ public class MainActivity extends Activity {
             return;
         }
 
+        if (requestCode == REQUEST_WRITE_EXTERNAL_STORAGE) {
+            if (hasLegacyImageWritePermission() && !pendingImageSaveUrl.isEmpty()) {
+                String imageUrl = pendingImageSaveUrl;
+                pendingImageSaveUrl = "";
+                saveImageToGalleryInternal(imageUrl);
+            } else {
+                pendingImageSaveUrl = "";
+                postImageSaveResult(false, "保存圖片需要儲存權限，請在 Android 設定中允許。");
+            }
+            return;
+        }
+
         if (requestCode != REQUEST_POST_NOTIFICATIONS) return;
 
         String permission = hasNotificationPermission() ? "granted" : "denied";
@@ -295,6 +312,12 @@ public class MainActivity extends Activity {
     private boolean hasAudioPermission() {
         return Build.VERSION.SDK_INT < Build.VERSION_CODES.M
             || checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private boolean hasLegacyImageWritePermission() {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+            || Build.VERSION.SDK_INT < Build.VERSION_CODES.M
+            || checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
     }
 
     private void showNotification(String title, String body) {
@@ -760,6 +783,215 @@ public class MainActivity extends Activity {
         return output.toByteArray();
     }
 
+    private boolean isRemoteUrl(String value) {
+        if (value == null) return false;
+        String url = value.trim().toLowerCase();
+        return url.startsWith("http://") || url.startsWith("https://");
+    }
+
+    private boolean isImageDataUrl(String value) {
+        return value != null && value.trim().toLowerCase().startsWith("data:image/");
+    }
+
+    private String guessImageMime(String imageUrl, String contentType) {
+        String type = contentType == null ? "" : contentType.split(";")[0].trim().toLowerCase();
+        if (type.startsWith("image/")) return type;
+
+        String url = imageUrl == null ? "" : imageUrl.toLowerCase();
+        if (url.contains(".png")) return "image/png";
+        if (url.contains(".webp")) return "image/webp";
+        return "image/jpeg";
+    }
+
+    private String imageExtensionForMime(String mime) {
+        if ("image/png".equals(mime)) return "png";
+        if ("image/webp".equals(mime)) return "webp";
+        return "jpg";
+    }
+
+    private byte[] readImageBytes(String imageUrl, String[] mimeOut) throws Exception {
+        if (isImageDataUrl(imageUrl)) {
+            int commaIndex = imageUrl.indexOf(',');
+            String header = commaIndex >= 0 ? imageUrl.substring(0, commaIndex) : "";
+            String encoded = commaIndex >= 0 ? imageUrl.substring(commaIndex + 1) : imageUrl;
+            String mime = "image/jpeg";
+            int colon = header.indexOf(':');
+            int semicolon = header.indexOf(';');
+            if (colon >= 0 && semicolon > colon) {
+                mime = header.substring(colon + 1, semicolon);
+            }
+            mimeOut[0] = guessImageMime(imageUrl, mime);
+            return Base64.decode(encoded, Base64.DEFAULT);
+        }
+
+        URL url = new URL(imageUrl);
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.setInstanceFollowRedirects(true);
+        conn.setConnectTimeout(30000);
+        conn.setReadTimeout(60000);
+        conn.setRequestProperty("User-Agent", "BeckonStars/1.0");
+
+        int code = conn.getResponseCode();
+        if (code >= 300 && code < 400) {
+            String location = conn.getHeaderField("Location");
+            conn.disconnect();
+            if (location == null || location.trim().isEmpty()) {
+                throw new IOException("Image redirect missing location");
+            }
+            conn = (HttpURLConnection) new URL(location).openConnection();
+            conn.setConnectTimeout(30000);
+            conn.setReadTimeout(60000);
+            conn.setRequestProperty("User-Agent", "BeckonStars/1.0");
+            code = conn.getResponseCode();
+        }
+
+        if (code != 200) {
+            conn.disconnect();
+            throw new IOException("Image download failed: HTTP " + code);
+        }
+
+        mimeOut[0] = guessImageMime(imageUrl, conn.getContentType());
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        try (InputStream input = conn.getInputStream()) {
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = input.read(buffer)) != -1) {
+                output.write(buffer, 0, read);
+            }
+        } finally {
+            conn.disconnect();
+        }
+        return output.toByteArray();
+    }
+
+    private Uri writeImageToGallery(byte[] bytes, String mime) throws Exception {
+        String safeMime = guessImageMime("", mime);
+        String extension = imageExtensionForMime(safeMime);
+        String filename = "beckon-stars-ai-" + System.currentTimeMillis() + "." + extension;
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.Images.Media.DISPLAY_NAME, filename);
+            values.put(MediaStore.Images.Media.MIME_TYPE, safeMime);
+            values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/星喚");
+            values.put(MediaStore.Images.Media.IS_PENDING, 1);
+
+            Uri uri = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+            if (uri == null) throw new IOException("Unable to create gallery image");
+
+            try (OutputStream output = getContentResolver().openOutputStream(uri)) {
+                if (output == null) throw new IOException("Unable to open gallery image");
+                output.write(bytes);
+            }
+
+            values.clear();
+            values.put(MediaStore.Images.Media.IS_PENDING, 0);
+            getContentResolver().update(uri, values, null, null);
+            return uri;
+        }
+
+        File picturesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
+        File appDir = new File(picturesDir, "星喚");
+        if (!appDir.exists() && !appDir.mkdirs()) {
+            throw new IOException("Unable to create picture directory");
+        }
+
+        File outputFile = new File(appDir, filename);
+        try (FileOutputStream output = new FileOutputStream(outputFile)) {
+            output.write(bytes);
+        }
+
+        Intent scanIntent = new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE);
+        Uri uri = Uri.fromFile(outputFile);
+        scanIntent.setData(uri);
+        sendBroadcast(scanIntent);
+        return uri;
+    }
+
+    private File writeImageToCacheFile(String imageUrl) throws Exception {
+        String[] mimeOut = new String[] { "image/jpeg" };
+        byte[] bytes = readImageBytes(imageUrl, mimeOut);
+        String extension = imageExtensionForMime(mimeOut[0]);
+        File imageFile = File.createTempFile("beckon-stars-share-", "." + extension, getCacheDir());
+        try (FileOutputStream output = new FileOutputStream(imageFile)) {
+            output.write(bytes);
+        }
+        return imageFile;
+    }
+
+    private void saveImageToGalleryInternal(String imageUrl) {
+        if (imageUrl == null || imageUrl.trim().isEmpty()) {
+            postImageSaveResult(false, "圖片地址無效，不能保存。");
+            return;
+        }
+
+        if (!hasLegacyImageWritePermission()) {
+            pendingImageSaveUrl = imageUrl;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                requestPermissions(new String[] { Manifest.permission.WRITE_EXTERNAL_STORAGE }, REQUEST_WRITE_EXTERNAL_STORAGE);
+            }
+            return;
+        }
+
+        new Thread(() -> {
+            try {
+                String[] mimeOut = new String[] { "image/jpeg" };
+                byte[] bytes = readImageBytes(imageUrl, mimeOut);
+                writeImageToGallery(bytes, mimeOut[0]);
+                postImageSaveResult(true, "✅ 圖片已保存到手機相簿。");
+            } catch (Exception error) {
+                Log.e(TAG, "Image save failed", error);
+                postImageSaveResult(false, "圖片保存失敗，請稍後再試。");
+            }
+        }).start();
+    }
+
+    private void shareAIImageInternal(String imageUrl) {
+        if (imageUrl == null || imageUrl.trim().isEmpty()) return;
+
+        if (isRemoteUrl(imageUrl)) {
+            try {
+                Intent sendIntent = new Intent(Intent.ACTION_SEND);
+                sendIntent.setType("text/plain");
+                sendIntent.putExtra(Intent.EXTRA_SUBJECT, "AI 生成圖片");
+                sendIntent.putExtra(Intent.EXTRA_TEXT, imageUrl);
+                startActivity(Intent.createChooser(sendIntent, "分享圖片"));
+            } catch (Exception error) {
+                Log.e(TAG, "Image URL share failed", error);
+                postImageSaveResult(false, "分享失敗，請先保存圖片後再分享。");
+            }
+            return;
+        }
+
+        new Thread(() -> {
+            try {
+                File imageFile = writeImageToCacheFile(imageUrl);
+                Uri contentUri = FileProvider.getUriForFile(
+                    MainActivity.this,
+                    getPackageName() + ".fileprovider",
+                    imageFile
+                );
+
+                mainHandler.post(() -> {
+                    try {
+                        Intent sendIntent = new Intent(Intent.ACTION_SEND);
+                        sendIntent.setType("image/*");
+                        sendIntent.putExtra(Intent.EXTRA_STREAM, contentUri);
+                        sendIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        sendIntent.setClipData(ClipData.newUri(getContentResolver(), "AI image", contentUri));
+                        startActivity(Intent.createChooser(sendIntent, "分享圖片"));
+                    } catch (Exception error) {
+                        Log.e(TAG, "Image file share failed", error);
+                        postImageSaveResult(false, "分享失敗，請先保存圖片後再分享。");
+                    }
+                });
+            } catch (Exception error) {
+                Log.e(TAG, "Image share failed", error);
+                postImageSaveResult(false, "分享失敗，請先保存圖片後再分享。");
+            }
+        }).start();
+    }
+
     private void postGoogleCredential(String idToken) {
         if (webView == null) return;
         webView.post(() -> webView.evaluateJavascript(
@@ -805,6 +1037,14 @@ public class MainActivity extends Activity {
                 null
             ));
         } catch (Exception ignored) {}
+    }
+
+    private void postImageSaveResult(boolean success, String message) {
+        if (webView == null) return;
+        webView.post(() -> webView.evaluateJavascript(
+            "window.handleAndroidImageSaveResult && window.handleAndroidImageSaveResult(" + success + ", " + JSONObject.quote(message) + ")",
+            null
+        ));
     }
 
     public void startDownloadAndInstall(String downloadUrl) {
@@ -949,6 +1189,16 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void downloadAndInstallUpdate(String downloadUrl) {
             runOnUiThread(() -> startDownloadAndInstall(downloadUrl));
+        }
+
+        @JavascriptInterface
+        public void saveImageToGallery(String imageUrl) {
+            runOnUiThread(() -> saveImageToGalleryInternal(imageUrl));
+        }
+
+        @JavascriptInterface
+        public void shareAIImage(String imageUrl) {
+            runOnUiThread(() -> shareAIImageInternal(imageUrl));
         }
 
         @JavascriptInterface
