@@ -250,7 +250,7 @@ function addMessage(familyId, message) {
     familyId,
     message.userId || message.uid || message.senderId || null,
     message.text || message.content || null,
-    message.imageUrl || message.img || null,
+    message.imageUrl || message.imgUrl || message.img || null,
     message.audioUrl || message.audio || null,
     message.transcript || null,
     message.summary || message.aiSummary || null,

@@ -226,6 +226,109 @@ function publicUser(user) {
   };
 }
 
+const DAILY_MESSAGE_REWARD_ID = 'daily-message-avatar-frame';
+const DAILY_MESSAGE_REWARD_THRESHOLD = Number(process.env.DAILY_MESSAGE_REWARD_THRESHOLD || 20);
+const DAILY_MESSAGE_REWARD_TIME_ZONE = process.env.DAILY_MESSAGE_REWARD_TIME_ZONE || 'Asia/Hong_Kong';
+const DAILY_MESSAGE_REWARD_FRAME_URL = 'avatar-frame-daily.png';
+
+function getRewardDateKey(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: DAILY_MESSAGE_REWARD_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(date);
+}
+
+function getMessageSenderId(message, rowUserId = '') {
+  return cleanText(message?.senderId || message?.uid || message?.userId || rowUserId);
+}
+
+function getMessageCreatedAt(message, rowTimestamp = '') {
+  return message?.createdAt || message?.timestamp || rowTimestamp || '';
+}
+
+function countJsonDailyMessages(family) {
+  const todayKey = getRewardDateKey();
+  const counts = {};
+  for (const message of family?.messages || []) {
+    const senderId = getMessageSenderId(message);
+    if (!senderId) continue;
+    if (getRewardDateKey(getMessageCreatedAt(message)) !== todayKey) continue;
+    counts[senderId] = (counts[senderId] || 0) + 1;
+  }
+  return counts;
+}
+
+function countSqliteDailyMessages(familyId) {
+  const todayKey = getRewardDateKey();
+  const counts = {};
+  try {
+    const sqlite = require('./db-sqlite').initDb();
+    const rows = sqlite.prepare('SELECT user_id, timestamp, data FROM messages WHERE family_id = ?').all(familyId);
+    for (const row of rows) {
+      let message = null;
+      if (row.data) {
+        try { message = JSON.parse(row.data); } catch (e) { message = null; }
+      }
+      const senderId = getMessageSenderId(message, row.user_id);
+      if (!senderId) continue;
+      if (getRewardDateKey(getMessageCreatedAt(message, row.timestamp)) !== todayKey) continue;
+      counts[senderId] = (counts[senderId] || 0) + 1;
+    }
+  } catch (error) {
+    console.warn('[reward] failed to count sqlite messages:', error.message);
+  }
+  return counts;
+}
+
+function buildDailyMessageRewardStatus(db, familyId, currentUserId = '') {
+  const family = getFamily(db, familyId);
+  const counts = USE_SQLITE ? countSqliteDailyMessages(familyId) : countJsonDailyMessages(family);
+  const members = {};
+  const memberEntries = Object.entries(family?.members || {});
+
+  const toStatus = userId => {
+    const count = counts[userId] || 0;
+    const active = count >= DAILY_MESSAGE_REWARD_THRESHOLD;
+    return {
+      userId,
+      count,
+      threshold: DAILY_MESSAGE_REWARD_THRESHOLD,
+      remaining: Math.max(DAILY_MESSAGE_REWARD_THRESHOLD - count, 0),
+      active,
+      frameId: active ? DAILY_MESSAGE_REWARD_ID : null,
+      frameUrl: active ? DAILY_MESSAGE_REWARD_FRAME_URL : ''
+    };
+  };
+
+  for (const [memberId] of memberEntries) {
+    members[memberId] = toStatus(memberId);
+  }
+  for (const userId of Object.keys(counts)) {
+    if (!members[userId]) members[userId] = toStatus(userId);
+  }
+  if (currentUserId && !members[currentUserId]) {
+    members[currentUserId] = toStatus(currentUserId);
+  }
+
+  return {
+    ok: true,
+    dateKey: getRewardDateKey(),
+    timezone: DAILY_MESSAGE_REWARD_TIME_ZONE,
+    reward: {
+      id: DAILY_MESSAGE_REWARD_ID,
+      title: '每日 20 條訊息頭像框',
+      threshold: DAILY_MESSAGE_REWARD_THRESHOLD,
+      frameUrl: DAILY_MESSAGE_REWARD_FRAME_URL
+    },
+    currentUser: currentUserId ? members[currentUserId] : null,
+    members
+  };
+}
+
 function googleAuthErrorMessage(code) {
   const messages = {
     'google-client-not-configured': 'Google 登入尚未設定，請在伺服器設定 GOOGLE_CLIENT_ID',
@@ -1124,6 +1227,21 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === 'GET' && url.pathname === '/avatar-frame-daily.png') {
+      const filePath = path.join(__dirname, '..', 'android', 'app', 'src', 'main', 'assets', 'avatar-frame-daily.png');
+      if (fs.existsSync(filePath)) {
+        res.writeHead(200, {
+          'Content-Type': 'image/png',
+          'Cache-Control': 'public, max-age=86400'
+        });
+        fs.createReadStream(filePath).pipe(res);
+      } else {
+        res.writeHead(404);
+        res.end('Not found');
+      }
+      return;
+    }
+
     if (req.method === 'OPTIONS') {
       sendNoContent(res);
       return;
@@ -1659,7 +1777,19 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'GET' && parts[3] === 'messages') {
-      sendJson(res, 200, { messages: family.messages.slice(-80) });
+      const authUser = getAuthUser(req);
+      sendJson(res, 200, {
+        messages: family.messages.slice(-80),
+        rewards: {
+          dailyMessageFrame: buildDailyMessageRewardStatus(db, familyId, authUser?.userId || '')
+        }
+      });
+      return;
+    }
+
+    if (req.method === 'GET' && parts[3] === 'rewards' && parts[4] === 'daily-message-frame') {
+      const authUser = getAuthUser(req);
+      sendJson(res, 200, buildDailyMessageRewardStatus(db, familyId, authUser?.userId || ''));
       return;
     }
 
@@ -1783,7 +1913,10 @@ const server = http.createServer(async (req, res) => {
         type: cleanText(body.type, 'text'),
         content: cleanText(body.content),
         img: cleanLargeText(body.img) || null,
+        imgUrl: cleanLargeText(body.imgUrl) || null,
+        thumbnailUrl: cleanLargeText(body.thumbnailUrl) || null,
         audio: cleanLargeText(body.audio) || null,
+        audioUrl: cleanLargeText(body.audioUrl) || null,
         audioMime: cleanText(body.audioMime),
         audioDurationMs: Number(body.audioDurationMs) || 0,
         transcript: cleanTranscript(body.transcript),
@@ -1792,15 +1925,16 @@ const server = http.createServer(async (req, res) => {
         childId: cleanText(body.childId, 'child_1'),
         createdAt: now.toISOString()
       };
-      if (!message.content && !message.img && !message.audio) {
+      if (!message.content && !message.img && !message.imgUrl && !message.audio && !message.audioUrl) {
         sendJson(res, 400, { error: 'empty-content' });
         return;
       }
       latestFamily.messages.push(message);
       latestFamily.messages = latestFamily.messages.slice(-500);
-      writeDb(latestDb);
+      await writeDb(latestDb);
+      const rewardStatus = buildDailyMessageRewardStatus(latestDb, familyId, message.senderId);
       console.log(`[data] 💬 新訊息 [${familyId}] ${message.senderName}: ${message.type === 'photo' ? '📷 圖片' : message.type === 'audio' ? '🎤 語音' : message.content.slice(0, 50)}`);
-      sendJson(res, 201, { message });
+      sendJson(res, 201, { message, rewards: { dailyMessageFrame: rewardStatus } });
 
       // 背景自動轉譯語音訊息
       if (message.type === 'audio' && message.audio && !message.transcript) {

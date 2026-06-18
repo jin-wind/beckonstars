@@ -76,6 +76,10 @@
         .animate-shake { animation: shake 0.3s ease-in-out; }
         @keyframes recordingPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
         .recording-pulse { animation: recordingPulse 1.1s ease-in-out infinite; }
+        .avatar-wrap { position: relative; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .avatar-core { border-radius: 9999px; overflow: hidden; display: flex; align-items: center; justify-content: center; position: relative; z-index: 1; }
+        .avatar-reward-frame { position: absolute; inset: -18%; width: 136%; height: 136%; object-fit: contain; pointer-events: none; z-index: 2; }
+        .avatar-frame-spacing { margin: 0.25rem; }
 
         /* 日曆連續跟手疊頁動畫 */
         .calendar-page-container { position: relative; overflow: hidden; touch-action: pan-y; background: #fff; }
@@ -166,8 +170,17 @@
             calendarDay: today.getDate(),
             dailyCardMode: 'almanac', // 'almanac' 或 'bible'
             points: 240,
-            dailyMessages: 3,
+            dailyMessages: 0,
             claimedDailyReward: false,
+            dailyMessageReward: {
+                count: 0,
+                threshold: 20,
+                remaining: 20,
+                active: false,
+                frameUrl: 'avatar-frame-daily.png',
+                members: {},
+                dateKey: ''
+            },
             redeemedRewards: [],
             showModal: null,         // 'addMemory', 'memoryDetail', 'videoPlayer', 'messageBox', 'confirmReset'
             videoGenerating: false,
@@ -313,6 +326,75 @@
         function resetVoiceRecordingState() {
             stopVoiceRecordingTimer();
             state.voiceRecording = createIdleVoiceRecordingState();
+        }
+
+        function resolveMediaUrl(value) {
+            const url = String(value || '').trim();
+            if (!url) return '';
+            if (url.startsWith('data:') || url.startsWith('http://') || url.startsWith('https://') || url.startsWith('file:')) return url;
+            if (url.startsWith('/')) return `${selfHostedApiBase}${url}`;
+            return url;
+        }
+
+        function getMessageImageSrc(message) {
+            return resolveMediaUrl(message?.thumbnailUrl || message?.imgUrl || message?.img || '');
+        }
+
+        function getMessageAudioSrc(message) {
+            return resolveMediaUrl(message?.audioUrl || message?.audio || '');
+        }
+
+        function updateDailyMessageRewardStatus(status) {
+            if (!status) return { activeChanged: false, countChanged: false };
+            const previousActive = !!state.dailyMessageReward?.active;
+            const previousCount = Number(state.dailyMessageReward?.count || 0);
+            const previousDateKey = state.dailyMessageReward?.dateKey || '';
+            const current = status.currentUser || {};
+            const reward = status.reward || {};
+            const threshold = Number(current.threshold || reward.threshold || state.dailyMessageReward?.threshold || 20);
+            const count = Number(current.count || 0);
+            state.dailyMessages = count;
+            state.dailyMessageReward = {
+                count,
+                threshold,
+                remaining: Math.max(threshold - count, 0),
+                active: !!current.active,
+                frameId: current.frameId || null,
+                frameUrl: current.frameUrl || reward.frameUrl || state.dailyMessageReward?.frameUrl || 'avatar-frame-daily.png',
+                members: status.members || {},
+                dateKey: status.dateKey || ''
+            };
+            return {
+                activeChanged: previousActive !== state.dailyMessageReward.active || previousDateKey !== state.dailyMessageReward.dateKey,
+                countChanged: previousCount !== count
+            };
+        }
+
+        function getAvatarFrameForUser(userId) {
+            if (!userId) return '';
+            const memberStatus = state.dailyMessageReward?.members?.[userId];
+            if (memberStatus?.active) return memberStatus.frameUrl || state.dailyMessageReward?.frameUrl || 'avatar-frame-daily.png';
+            if (userId === state.authUid && state.dailyMessageReward?.active) return state.dailyMessageReward.frameUrl || 'avatar-frame-daily.png';
+            return '';
+        }
+
+        function renderAvatar(avatar, options = {}) {
+            const sizeClass = options.sizeClass || 'w-10 h-10';
+            const coreClass = options.coreClass || 'bg-orange-100 text-brand-dark font-bold bs-text-xl';
+            const extraClass = options.extraClass || '';
+            const frameUrl = options.frameUrl || getAvatarFrameForUser(options.userId);
+            const value = avatar || '👤';
+            const isImage = typeof value === 'string' && (value.startsWith('data:') || value.startsWith('http') || value.startsWith('/'));
+            const imageSrc = isImage ? resolveMediaUrl(value) : '';
+            const content = isImage
+                ? `<img src="${escapeAttribute(imageSrc)}" class="w-full h-full object-cover" alt="avatar">`
+                : `<span>${escapeHtml(value)}</span>`;
+            return `
+                <div class="avatar-wrap ${sizeClass} ${frameUrl ? 'avatar-frame-spacing' : ''} ${extraClass}">
+                    <div class="avatar-core ${sizeClass} ${coreClass}">${content}</div>
+                    ${frameUrl ? `<img src="${escapeAttribute(frameUrl)}" class="avatar-reward-frame" alt="">` : ''}
+                </div>
+            `;
         }
 
         function applySeniorModeVars() {
@@ -477,6 +559,7 @@
 
         function renderVoicePlayer(message, isMe) {
             const messageId = String(message.id);
+            const audioSource = getMessageAudioSrc(message);
             const isActive = voicePlayback.messageId === messageId;
             const duration = isActive && voicePlayback.duration ? voicePlayback.duration : getVoiceDurationSeconds(message);
             const currentTime = isActive ? voicePlayback.currentTime : 0;
@@ -487,7 +570,7 @@
             const buttonClass = isMe ? 'bg-white text-brand' : 'bg-brand text-white';
             const timeClass = isMe ? 'text-white/85' : 'text-gray-500';
 
-            if (!message.audio) {
+            if (!audioSource) {
                 return `
                     <div class="flex items-center gap-3 min-w-48">
                         <div class="w-9 h-9 rounded-full ${isMe ? 'bg-white/20' : 'bg-orange-100'} flex items-center justify-center">
@@ -641,7 +724,8 @@
         async function toggleVoiceMessage(messageId) {
             const id = String(messageId || '');
             const message = state.messages.find(item => String(item.id) === id);
-            if (!message?.audio) {
+            const audioSource = getMessageAudioSrc(message);
+            if (!audioSource) {
                 showMessage('錄音檔未同步，暫時不能播放。');
                 return;
             }
@@ -657,7 +741,7 @@
                 voicePlayback.messageId = id;
                 voicePlayback.duration = getVoiceDurationSeconds(message);
                 voicePlayback.currentTime = 0;
-                audio.src = message.audio;
+                audio.src = audioSource;
                 try {
                     audio.currentTime = 0;
                 } catch (error) {}
@@ -676,7 +760,8 @@
         function seekVoiceMessage(messageId, ratio) {
             const id = String(messageId || '');
             const message = state.messages.find(item => String(item.id) === id);
-            if (!message?.audio) return;
+            const audioSource = getMessageAudioSrc(message);
+            if (!audioSource) return;
 
             const audio = getVoiceAudio();
             if (voicePlayback.messageId !== id) {
@@ -684,7 +769,7 @@
                 voicePlayback.messageId = id;
                 voicePlayback.duration = getVoiceDurationSeconds(message);
                 voicePlayback.currentTime = 0;
-                audio.src = message.audio;
+                audio.src = audioSource;
             }
 
             const duration = voicePlayback.duration || getVoiceDurationSeconds(message);
@@ -748,6 +833,15 @@
                     backendMode: 'server',
                     authUid: saved.authUid || null,
                     familyId: saved.familyId || saved.calendarCode || null,
+                    dailyMessageReward: saved.dailyMessageReward || {
+                        count: 0,
+                        threshold: 20,
+                        remaining: 20,
+                        active: false,
+                        frameUrl: 'avatar-frame-daily.png',
+                        members: {},
+                        dateKey: ''
+                    },
                     notificationPermission: getRuntimeNotificationPermission(),
                     canInstallApp: false,
                     pushStatus: '未開啟推送',
@@ -775,6 +869,7 @@
                 data.pushStatus = '';
                 data.googleSignInLoading = false;
                 data.voiceRecording = createIdleVoiceRecordingState();
+                data.dailyMessageReward = state.dailyMessageReward;
                 // 保留最近的數據，避免 localStorage 過大
                 data.messages = (state.messages || []).slice(-50).map(m => ({
                     id: m.id, senderId: m.senderId, senderName: m.senderName,
@@ -1476,6 +1571,7 @@
 
         async function refreshServerMessages(familyId) {
             const result = await serverApi(`/api/families/${encodeURIComponent(familyId)}/messages`);
+            const rewardUpdate = updateDailyMessageRewardStatus(result?.rewards?.dailyMessageFrame);
             const incoming = (result.messages || []).map(message => normalizeCloudMessage(message.id, message));
             const knownIds = new Set(state.messages.map(message => String(message.id)));
             if (hasLoadedCloudMessages) {
@@ -1493,6 +1589,10 @@
             });
             if (changed) state.messages = incoming;
             hasLoadedCloudMessages = true;
+            if (rewardUpdate.activeChanged && state.appReady) {
+                render();
+                return;
+            }
             if (changed) refreshVisibleContent();
         }
 
@@ -1522,6 +1622,7 @@
                 imgUrl: data.imgUrl || null,
                 thumbnailUrl: data.thumbnailUrl || null,
                 audio: data.audio || null,
+                audioUrl: data.audioUrl || null,
                 audioMime: data.audioMime || '',
                 audioDurationMs: data.audioDurationMs || 0,
                 transcript: data.transcript || '',
@@ -1586,11 +1687,12 @@
                 msg.senderName,
                 msg.type,
                 msg.content,
-                msg.img ? 'img' : '',
-                msg.audio ? 'audio' : '',
+                msg.img || msg.imgUrl || msg.thumbnailUrl || '',
+                msg.audio || msg.audioUrl || '',
                 msg.audioDurationMs || 0,
                 msg.transcript || '',
                 msg.aiSummary || '',
+                getAvatarFrameForUser(msg.senderId || msg.uid || ''),
                 state.transcribingMessageId === String(msg.id) ? 'transcribing' : ''
             ].map(value => String(value ?? '')).join('|');
         }
@@ -1693,14 +1795,17 @@
             const displayAvatar = isMe ? state.userAvatar : ((msg.senderName || '家')[0] || '👤');
             const displayName = isMe ? state.userName : (msg.senderName || '家庭成員');
             const messageId = String(msg.id);
+            const senderUserId = msg.senderId || msg.uid || '';
+            const imageSrc = getMessageImageSrc(msg);
+            const audioSrc = getMessageAudioSrc(msg);
             return `
                 <div data-msg-id="${escapeAttribute(messageId)}" data-msg-key="${escapeAttribute(getMessageRenderKey(msg))}" class="flex ${isMe ? 'justify-end' : 'justify-start'}">
-                    ${!isMe ? `<div class="w-10 h-10 rounded-full bg-orange-200 flex items-center justify-center text-brand-dark font-bold mr-2 flex-shrink-0 bs-text-xl">${displayAvatar}</div>` : ''}
+                    ${!isMe ? renderAvatar(displayAvatar, { userId: senderUserId, sizeClass: 'w-10 h-10', coreClass: 'bg-orange-200 text-brand-dark font-bold bs-text-xl', extraClass: 'mr-2' }) : ''}
                     <div class="max-w-[75%] flex flex-col ${isMe ? 'items-end' : 'items-start'}">
                         ${!isMe ? `<span class="bs-text-xs text-gray-500 mb-1 ml-1">${displayName}</span>` : ''}
                         <div class="p-3 rounded-2xl shadow-sm ${isMe ? 'bg-brand text-white rounded-tr-none' : 'bg-white text-gray-800 rounded-tl-none border border-gray-100'}">
                             ${msg.type === 'text' ? `<p class="bs-text-lg">${msg.content}</p>` : ''}
-                            ${msg.type === 'photo' && msg.img ? `<img src="${msg.img}" class="max-w-56 max-h-56 rounded-xl object-cover">${msg.content ? `<p class="bs-text-base mt-2">${msg.content}</p>` : ''}` : ''}
+                            ${msg.type === 'photo' && imageSrc ? `<img src="${escapeAttribute(imageSrc)}" class="max-w-56 max-h-56 rounded-xl object-cover">${msg.content ? `<p class="bs-text-base mt-2">${msg.content}</p>` : ''}` : ''}
                             ${msg.type === 'audio' ? `<div class="space-y-2 w-60 max-w-[68vw]">${renderVoicePlayer(msg, isMe)}<div class="${isMe ? 'bg-white/10' : 'bg-gray-50'} rounded-xl p-2"><p class="bs-text-xs opacity-70 mb-1">語音轉譯</p>${msg.transcript ? `<p class="bs-text-base">${msg.transcript}</p>` : `<p class="bs-text-sm opacity-80">未取得轉譯文字，可播放錄音確認內容。</p>`}</div></div>` : ''}
                         </div>
                         ${msg.type === 'audio' && msg.transcript && !msg.aiSummary && state.backendMode === 'server' ? `
@@ -1766,7 +1871,7 @@
                 const icon = rank <= 3 ? rankIcons[index] : String(rank);
                 const subtitle = rank <= 3 ? subtitles[index] : (member.messageCount > 0 ? `${member.messageCount} 則訊息` : '潛水中...');
                 const avatarBg = rank === 1 ? 'bg-[#f6d1aa] text-[#b66122]' : (rank <= 3 ? 'bg-orange-100 text-brand-dark' : 'bg-gray-100 text-gray-500');
-                return `<div class="flex items-center py-4 px-5 border-b border-gray-50"><div class="w-8 text-center mr-4 ${rank <= 3 ? (rank===1?'bs-text-2xl text-yellow-400':rank===2?'bs-text-xl text-gray-400':'bs-text-lg text-amber-600') : 'bs-text-base text-gray-400'} font-bold">${icon}</div><div class="w-12 h-12 rounded-full ${avatarBg} flex items-center justify-center bs-text-xl font-bold mr-4">${member.avatar}</div><div class="flex-1"><div class="font-bold text-gray-800 bs-text-base">${member.name}</div><div class="bs-text-xs text-gray-400">${subtitle}</div></div><div class="text-right"><div class="bs-text-lg font-bold text-brand">${member.score.toLocaleString()}</div><div class="bs-text-xs text-gray-400">分</div></div></div>`;
+                return `<div class="flex items-center py-4 px-5 border-b border-gray-50"><div class="w-8 text-center mr-4 ${rank <= 3 ? (rank===1?'bs-text-2xl text-yellow-400':rank===2?'bs-text-xl text-gray-400':'bs-text-lg text-amber-600') : 'bs-text-base text-gray-400'} font-bold">${icon}</div>${renderAvatar(member.avatar, { userId: member.id, sizeClass: 'w-12 h-12', coreClass: `${avatarBg} bs-text-xl font-bold`, extraClass: 'mr-4' })}<div class="flex-1"><div class="font-bold text-gray-800 bs-text-base">${member.name}</div><div class="bs-text-xs text-gray-400">${subtitle}</div></div><div class="text-right"><div class="bs-text-lg font-bold text-brand">${member.score.toLocaleString()}</div><div class="bs-text-xs text-gray-400">分</div></div></div>`;
             }).join('');
             return `<div class="bg-white rounded-3xl shadow-sm overflow-hidden">${rankItems}</div>`;
         }
@@ -2027,9 +2132,7 @@
             return `
                 <header class="bg-white px-6 pt-12 pb-4 shadow-sm z-10 sticky top-0 flex justify-between items-center rounded-b-2xl">
                     <div class="flex items-center">
-                        <div class="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center bs-text-2xl mr-3 border-2 border-brand-light shadow-sm overflow-hidden">
-                            ${(state.userAvatar && (state.userAvatar.startsWith('data:') || state.userAvatar.startsWith('http'))) ? `<img src="${state.userAvatar}" class="w-full h-full object-cover">` : `<span>${state.userAvatar || '👤'}</span>`}
-                        </div>
+                        ${renderAvatar(state.userAvatar, { userId: state.authUid, sizeClass: 'w-10 h-10', coreClass: 'bg-orange-100 bs-text-2xl border-2 border-brand-light shadow-sm', extraClass: 'mr-3' })}
                         <h2 class="bs-text-2xl font-bold text-gray-800">${currentTitle}</h2>
                     </div>
                     <div class="flex items-center gap-2">
@@ -2500,27 +2603,35 @@
 
         // 獎勵視圖
         function renderRewards() {
+            const reward = state.dailyMessageReward || {};
+            const threshold = Number(reward.threshold || 20);
+            const count = Math.min(Number(reward.count || state.dailyMessages || 0), threshold);
+            const remaining = Math.max(threshold - count, 0);
+            const progress = threshold > 0 ? Math.min((count / threshold) * 100, 100) : 0;
             return `
                 <div class="p-6">
                     <div class="bg-gradient-to-br from-brand-light to-brand text-white rounded-3xl p-6 shadow-lg mb-8 relative overflow-hidden">
                         <i class="fa-solid fa-star absolute -right-4 -bottom-4 text-7xl text-white opacity-20 transform -rotate-15"></i>
-                        <h3 class="bs-text-xl font-bold mb-1">每日溫馨任務</h3>
-                        <p class="text-white/80 bs-text-sm mb-4">發送5條訊息與家人保持聯絡</p>
+                        <div class="flex items-center gap-4 mb-4">
+                            ${renderAvatar(state.userAvatar, { userId: state.authUid, sizeClass: 'w-16 h-16', coreClass: 'bg-white/20 bs-text-3xl text-white font-bold border border-white/30' })}
+                            <div class="min-w-0 flex-1">
+                                <h3 class="bs-text-xl font-bold mb-1">每日頭像框任務</h3>
+                                <p class="text-white/80 bs-text-sm">今天發送 20 條訊息即可即時獲得頭像框</p>
+                            </div>
+                        </div>
                         
                         <div class="bg-black/10 rounded-full h-3 mb-2 relative overflow-hidden">
-                            <div class="bg-white h-full rounded-full transition-all duration-1000" style="width: ${(state.dailyMessages/5)*100}%;"></div>
+                            <div class="bg-white h-full rounded-full transition-all duration-1000" style="width: ${progress}%;"></div>
                         </div>
                         <div class="flex justify-between bs-text-sm font-bold">
                             <span>進度</span>
-                            <span>${state.dailyMessages} / 5 條</span>
+                            <span>${count} / ${threshold} 條</span>
                         </div>
                         
-                        ${state.dailyMessages >= 5 && !state.claimedDailyReward ? `
-                            <button class="action-btn mt-4 w-full bg-white text-brand font-bold py-2 rounded-xl shadow" data-action="claimDailyReward">領取今日積分 (+50)</button>
-                        ` : state.claimedDailyReward ? `
-                            <p class="mt-4 bs-text-xs text-center text-white/80 font-bold">今日積分已領取</p>
+                        ${reward.active ? `
+                            <p class="mt-4 bs-text-xs text-center text-white/90 font-bold">今日頭像框已生效，明天會重新計算</p>
                         ` : `
-                            <p class="mt-4 bs-text-xs text-center text-white/70">仲差${5 - state.dailyMessages}條訊息就可以拎積分啦！</p>
+                            <p class="mt-4 bs-text-xs text-center text-white/70">仲差 ${remaining} 條訊息即可獲得今日頭像框</p>
                         `}
                     </div>
 
@@ -2551,7 +2662,6 @@
         // --- 個人資料視圖 ---
         function renderProfile() {
             const avatar = state.userAvatar || '👤';
-            const isImage = avatar.startsWith('data:') || avatar.startsWith('http');
             const roleLabel = state.role === 'senior' ? '長輩' : state.role === 'child' ? '子女' : '未設定';
             const usesBibleVerse = state.dailyCardMode === 'bible';
 
@@ -2559,9 +2669,7 @@
                 <div class="p-6 space-y-4">
                     <!-- 頭像和基本資訊 -->
                     <div class="bg-white rounded-3xl shadow-sm p-6 text-center">
-                        <div class="w-24 h-24 mx-auto mb-4 rounded-full bg-orange-100 flex items-center justify-center overflow-hidden border-4 border-orange-200">
-                            ${isImage ? `<img src="${avatar}" class="w-full h-full object-cover" alt="avatar">` : `<span class="text-5xl">${avatar}</span>`}
-                        </div>
+                        ${renderAvatar(avatar, { userId: state.authUid, sizeClass: 'w-24 h-24', coreClass: 'bg-orange-100 border-4 border-orange-200 text-5xl', extraClass: 'mx-auto mb-4' })}
                         <h2 class="bs-text-2xl font-bold text-gray-800">${state.userName || '用戶'}</h2>
                         <p class="text-gray-500 bs-text-sm mt-1">${state.currentUser?.email || ''}</p>
                         <span class="inline-block mt-2 px-3 py-1 rounded-full bs-text-xs font-medium bg-orange-100 text-brand-dark">${roleLabel}</span>
@@ -3750,13 +3858,6 @@
                             showMessage('摘要已模擬分享至家庭聊天室。');
                         }, 700);
                     }
-                    else if (action === 'claimDailyReward') {
-                        if (state.dailyMessages < 5 || state.claimedDailyReward) return;
-                        state.points += 50;
-                        state.claimedDailyReward = true;
-                        render();
-                        setTimeout(() => showMessage('已領取今日 50 積分。'), 100);
-                    }
                     else if (action === 'redeemReward') {
                         const rewardId = parseInt(newBtn.getAttribute('data-reward-id'));
                         const reward = state.rewards.find(item => item.id === rewardId);
@@ -4557,8 +4658,9 @@
             if (!recording || recording.cancelled) return;
 
             const audio = recording.audio || '';
+            const audioUrl = recording.audioUrl || '';
             const transcript = String(recording.transcript || '').trim();
-            if (!audio) {
+            if (!audio && !audioUrl) {
                 showMessage('錄音失敗，請再試一次。');
                 return;
             }
@@ -4568,6 +4670,7 @@
                 content: transcript || '語音訊息',
                 transcript,
                 audio,
+                audioUrl,
                 audioMime: recording.audioMime || 'audio/mp4',
                 audioDurationMs: recording.durationMs || 0,
                 aiSummary: null
@@ -4843,7 +4946,8 @@
             const isTextMessage = !override;
             const content = override ? (override.content || '') : (chatInput?.value || chatDraft).trim();
             const hasImage = override?.img || override?.imgUrl;
-            if (!content && !hasImage) return;
+            const hasAudio = override?.audio || override?.audioUrl;
+            if (!content && !hasImage && !hasAudio) return;
             if (isTextMessage) {
                 chatDraft = '';
                 shouldRestoreChatInputFocus = false;
@@ -4861,6 +4965,7 @@
                 imgUrl: override?.imgUrl || null,
                 thumbnailUrl: override?.thumbnailUrl || null,
                 audio: override?.audio || null,
+                audioUrl: override?.audioUrl || null,
                 audioMime: override?.audioMime || '',
                 audioDurationMs: override?.audioDurationMs || 0,
                 transcript: override?.transcript || '',
@@ -4868,7 +4973,7 @@
                 time: `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`,
                 childId: state.role === 'child' ? 'child_1' : 'senior'
             };
-            state.dailyMessages = Math.min(state.dailyMessages + 1, 5);
+            state.dailyMessages = Math.min(state.dailyMessages + 1, state.dailyMessageReward?.threshold || 20);
             state.points += 5;
 
             if (state.backendMode === 'server' && state.familyId) {
@@ -4883,9 +4988,16 @@
                         body: JSON.stringify(message)
                     });
                     if (result?.message?.id) {
+                        const rewardUpdate = updateDailyMessageRewardStatus(result?.rewards?.dailyMessageFrame);
                         const serverMessage = normalizeCloudMessage(result.message.id, result.message);
                         const index = state.messages.findIndex(item => String(item.id) === String(message.id));
                         if (index >= 0) state.messages[index] = serverMessage;
+
+                        if (rewardUpdate.activeChanged) {
+                            shouldStickChatToBottom = true;
+                            render();
+                            return serverMessage;
+                        }
 
                         const localEl = document.querySelector(`[data-msg-id="${CSS.escape(String(message.id))}"]`);
                         if (localEl) {
