@@ -76,6 +76,18 @@
         .animate-shake { animation: shake 0.3s ease-in-out; }
         @keyframes recordingPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
         .recording-pulse { animation: recordingPulse 1.1s ease-in-out infinite; }
+        @keyframes rewardCardPop { 0% { opacity: 0; transform: translateY(18px) scale(0.92); } 60% { opacity: 1; transform: translateY(-2px) scale(1.02); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
+        @keyframes rewardHaloPulse { 0%, 100% { opacity: 0.55; transform: translate(-50%, -50%) scale(0.92); } 50% { opacity: 0.95; transform: translate(-50%, -50%) scale(1.08); } }
+        @keyframes rewardSparkFloat { 0% { opacity: 0; transform: translateY(8px) scale(0.75) rotate(0deg); } 25% { opacity: 1; } 100% { opacity: 0; transform: translateY(-24px) scale(1.1) rotate(18deg); } }
+        @keyframes rewardAvatarPulse { 0%, 100% { transform: scale(1); } 45% { transform: scale(1.07); } }
+        .daily-reward-card { animation: rewardCardPop 0.62s cubic-bezier(0.16, 1, 0.3, 1); }
+        .daily-reward-halo { position: absolute; left: 50%; top: 50%; width: 9rem; height: 9rem; border-radius: 9999px; background: radial-gradient(circle, rgba(255, 209, 102, 0.42) 0%, rgba(255, 148, 77, 0.20) 48%, transparent 72%); animation: rewardHaloPulse 1.8s ease-in-out infinite; }
+        .daily-reward-avatar-shell { animation: rewardAvatarPulse 1.9s ease-in-out infinite; }
+        .daily-reward-spark { position: absolute; color: #facc15; text-shadow: 0 0 14px rgba(250, 204, 21, 0.55); animation: rewardSparkFloat 1.65s ease-in-out infinite; }
+        .daily-reward-spark:nth-child(1) { left: 16%; top: 30%; animation-delay: 0s; }
+        .daily-reward-spark:nth-child(2) { right: 15%; top: 26%; animation-delay: 0.24s; }
+        .daily-reward-spark:nth-child(3) { left: 24%; bottom: 26%; animation-delay: 0.48s; }
+        .daily-reward-spark:nth-child(4) { right: 22%; bottom: 22%; animation-delay: 0.72s; }
         .avatar-wrap { position: relative; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
         .avatar-core { border-radius: 9999px; overflow: hidden; display: flex; align-items: center; justify-content: center; position: relative; z-index: 1; }
         .avatar-reward-frame { position: absolute; left: 50%; top: 50%; display: block; width: 136%; height: 136%; max-width: none; max-height: none; aspect-ratio: 1 / 1; object-fit: contain; transform: translate(-50%, -50%); pointer-events: none; z-index: 2; }
@@ -182,7 +194,8 @@
                 dateKey: ''
             },
             redeemedRewards: [],
-            showModal: null,         // 'addMemory', 'memoryDetail', 'videoPlayer', 'messageBox', 'confirmReset'
+            dailyRewardCelebration: null,
+            showModal: null,         // 'addMemory', 'memoryDetail', 'videoPlayer', 'messageBox', 'dailyRewardCelebration', 'confirmReset'
             videoGenerating: false,
             videoUrl: null,
             videoError: null,
@@ -238,6 +251,7 @@
 
         const STORAGE_KEY = 'beckon-stars-demo-state-v1';
         const DAILY_CARD_MODE_KEY = 'beckon-stars-daily-card-mode';
+        const DAILY_REWARD_CELEBRATED_DATE_KEY = 'beckon-stars-daily-reward-celebrated-date';
         const initialState = JSON.parse(JSON.stringify(state));
         let unsubscribeMessages = null;
         let unsubscribeMemories = null;
@@ -527,6 +541,52 @@
                 activeChanged: previousActive !== state.dailyMessageReward.active || previousDateKey !== state.dailyMessageReward.dateKey,
                 countChanged: previousCount !== count
             };
+        }
+
+        function getDailyRewardCelebrationDateKey(reward = state.dailyMessageReward) {
+            return reward?.dateKey || getDisplayedDateKey(today.getFullYear(), today.getMonth() + 1, today.getDate());
+        }
+
+        function hasCelebratedDailyReward(reward = state.dailyMessageReward) {
+            const dateKey = getDailyRewardCelebrationDateKey(reward);
+            return !!dateKey && localStorage.getItem(DAILY_REWARD_CELEBRATED_DATE_KEY) === dateKey;
+        }
+
+        function playRewardHaptic() {
+            try {
+                if (isAndroidApk() && window.BeckonStarsAndroid?.playRewardHaptic) {
+                    window.BeckonStarsAndroid.playRewardHaptic();
+                    return;
+                }
+            } catch (error) {
+                console.warn('Reward haptic bridge failed', error);
+            }
+            try {
+                navigator.vibrate?.([35, 45, 70]);
+            } catch (error) {
+                // Haptics are optional.
+            }
+        }
+
+        function showDailyRewardCelebration(reward = state.dailyMessageReward) {
+            const dateKey = getDailyRewardCelebrationDateKey(reward);
+            if (!reward?.active || !dateKey || hasCelebratedDailyReward(reward)) return false;
+            localStorage.setItem(DAILY_REWARD_CELEBRATED_DATE_KEY, dateKey);
+            state.dailyRewardCelebration = {
+                dateKey,
+                frameUrl: reward.frameUrl || 'avatar-frame-daily.png',
+                threshold: Number(reward.threshold || 20),
+                count: Number(reward.count || reward.threshold || 20)
+            };
+            state.showModal = 'dailyRewardCelebration';
+            playRewardHaptic();
+            return true;
+        }
+
+        function maybeShowDailyRewardCelebration(rewardUpdate, options = {}) {
+            if (!rewardUpdate?.activeChanged || !state.dailyMessageReward?.active) return false;
+            if (options.skipIfInitialSync) return false;
+            return showDailyRewardCelebration(state.dailyMessageReward);
         }
 
         function getAvatarFrameForUser(userId) {
@@ -981,6 +1041,7 @@
                     errorMsg: '',
                     showModal: null,
                     modalMessage: '',
+                    dailyRewardCelebration: null,
                     selectedDate: null,
                     aiImageGenView: false,
                     aiImageGenerating: false,
@@ -1024,6 +1085,7 @@
                 data.errorMsg = '';
                 data.showModal = null;
                 data.modalMessage = '';
+                data.dailyRewardCelebration = null;
                 data.selectedDate = null;
                 data.pendingMemoryImage = '';
                 data.pushStatus = '';
@@ -1748,7 +1810,12 @@
                     || getMessageRenderKey(message) !== getMessageRenderKey(current);
             });
             if (changed) state.messages = incoming;
+            const wasInitialSync = !hasLoadedCloudMessages;
             hasLoadedCloudMessages = true;
+            if (state.appReady && maybeShowDailyRewardCelebration(rewardUpdate, { skipIfInitialSync: wasInitialSync })) {
+                render();
+                return;
+            }
             if (rewardUpdate.activeChanged && state.appReady) {
                 render();
                 return;
@@ -3055,6 +3122,7 @@
         function handleInAppBackNavigation() {
             if (state.showModal) {
                 state.showModal = null;
+                state.dailyRewardCelebration = null;
                 state.selectedGeneratedImageUrl = null;
                 render();
                 return true;
@@ -3088,6 +3156,51 @@
                         <div class="flex gap-3">
                             <button class="action-btn flex-1 py-3 bg-gray-100 text-gray-600 font-bold rounded-xl hover:bg-gray-200 transition-colors" data-action="closeModal">取消</button>
                             <button class="action-btn flex-1 py-3 bg-red-500 text-white font-bold rounded-xl shadow-md hover:bg-red-600 transition-colors" data-action="resetData">確定刪除</button>
+                        </div>
+                    </div>
+                `;
+            }
+
+            if (state.showModal === 'dailyRewardCelebration') {
+                const celebration = state.dailyRewardCelebration || {};
+                const frameUrl = celebration.frameUrl || state.dailyMessageReward?.frameUrl || 'avatar-frame-daily.png';
+                const count = Number(celebration.count || state.dailyMessageReward?.count || 20);
+                const threshold = Number(celebration.threshold || state.dailyMessageReward?.threshold || 20);
+                modalContent = `
+                    <div class="daily-reward-card relative w-[88%] max-w-sm overflow-hidden rounded-[2rem] bg-white shadow-2xl border border-orange-100">
+                        <div class="absolute inset-0 bg-gradient-to-b from-[#fff7ed] via-white to-[#fff1e6]"></div>
+                        <div class="absolute -top-16 left-1/2 h-36 w-36 -translate-x-1/2 rounded-full bg-yellow-200/40 blur-3xl"></div>
+                        <div class="relative px-6 pt-7 pb-6 text-center">
+                            <div class="absolute inset-0 pointer-events-none overflow-hidden">
+                                <i class="daily-reward-spark fa-solid fa-star bs-text-lg"></i>
+                                <i class="daily-reward-spark fa-solid fa-star bs-text-xl"></i>
+                                <i class="daily-reward-spark fa-solid fa-star bs-text-sm"></i>
+                                <i class="daily-reward-spark fa-solid fa-star bs-text-lg"></i>
+                            </div>
+                            <div class="relative mx-auto mb-5 flex h-36 items-center justify-center">
+                                <div class="daily-reward-halo"></div>
+                                <div class="daily-reward-avatar-shell relative z-10">
+                                    ${renderAvatar(state.userAvatar, { frameUrl, sizeClass: 'w-24 h-24', coreClass: 'bg-orange-100 text-brand-dark font-bold bs-text-4xl shadow-xl ring-4 ring-white' })}
+                                </div>
+                            </div>
+                            <div class="mx-auto mb-3 inline-flex items-center gap-2 rounded-full bg-orange-100 px-4 py-2 text-brand-dark bs-text-xs font-bold">
+                                <i class="fa-solid fa-crown text-yellow-500"></i>
+                                今日限定獎勵
+                            </div>
+                            <h3 class="bs-text-2xl font-bold text-gray-900 mb-2">恭喜獲得今日頭像框</h3>
+                            <p class="bs-text-base text-gray-600 mb-5">每日 ${threshold} 條訊息任務完成</p>
+                            <div class="rounded-2xl bg-white/80 border border-orange-100 px-4 py-3 mb-5 shadow-sm">
+                                <div class="flex items-center justify-between bs-text-sm font-bold text-gray-700">
+                                    <span>任務進度</span>
+                                    <span class="text-brand">${Math.min(count, threshold)} / ${threshold}</span>
+                                </div>
+                                <div class="mt-2 h-2 rounded-full bg-orange-100 overflow-hidden">
+                                    <div class="h-full rounded-full bg-gradient-to-r from-brand to-yellow-400" style="width: 100%;"></div>
+                                </div>
+                            </div>
+                            <button class="action-btn w-full py-3.5 rounded-2xl bg-brand text-white font-bold shadow-lg shadow-orange-200 hover:bg-brand-dark transition-colors" data-action="closeModal">
+                                太好了
+                            </button>
                         </div>
                     </div>
                 `;
@@ -3860,6 +3973,7 @@
                         const mv = document.getElementById('memVideo');
                         if (mv) { mv.pause(); mv.src = ''; }
                         state.showModal = null;
+                        state.dailyRewardCelebration = null;
                         state.selectedDate = null;
                         state.pendingMemoryContent = '';
                         state.videoUrl = null;
@@ -5112,6 +5226,7 @@
 
                         if (rewardUpdate.activeChanged) {
                             shouldStickChatToBottom = true;
+                            maybeShowDailyRewardCelebration(rewardUpdate);
                             render();
                             return serverMessage;
                         }

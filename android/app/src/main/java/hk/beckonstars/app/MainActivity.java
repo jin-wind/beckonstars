@@ -19,6 +19,8 @@ import android.os.CancellationSignal;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
 import android.provider.MediaStore;
 import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
@@ -1142,6 +1144,26 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void showLocalNotification(String title, String body) {
             runOnUiThread(() -> showNotification(title, body));
+        }
+
+        @JavascriptInterface
+        public void playRewardHaptic() {
+            runOnUiThread(() -> {
+                try {
+                    Vibrator vibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);
+                    if (vibrator == null || !vibrator.hasVibrator()) return;
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        vibrator.vibrate(VibrationEffect.createWaveform(
+                            new long[] { 0, 35, 45, 70 },
+                            new int[] { 0, 110, 0, 180 },
+                            -1
+                        ));
+                    } else {
+                        vibrator.vibrate(new long[] { 0, 35, 45, 70 }, -1);
+                    }
+                } catch (Exception ignored) {
+                }
+            });
         }
 
         @JavascriptInterface
