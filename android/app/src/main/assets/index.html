@@ -175,7 +175,7 @@
             currentUser: null,       // 用戶資訊 { userId, email, name, picture, families }
             googleSignInLoading: false,
 
-            currentTab: 'calendar',  // 'calendar', 'chat', 'rewards'
+            currentTab: 'calendar',  // 'calendar', 'chat', 'rewards', 'profile'
             calendarMode: 'tear-off',// 'tear-off', 'monthly'
             calendarYear: today.getFullYear(),
             calendarMonth: today.getMonth() + 1,
@@ -1070,6 +1070,7 @@
                     googleSignInLoading: false,
                     voiceRecording: createIdleVoiceRecordingState()
                 });
+                if (state.currentTab === 'leaderboard') state.currentTab = 'profile';
                 mergeDailyMessageReward(state.dailyMessageReward);
             } catch (error) {
                 console.warn('Unable to load demo data', error);
@@ -1984,9 +1985,9 @@
                     }
                 }
             }
-            // 更新排行榜
-            if (state.currentTab === 'leaderboard') {
-                const lb = document.querySelector('.p-6 > .bg-white.rounded-3xl');
+            // 更新「我」頁內的家庭成員活躍度列表
+            if (state.currentTab === 'profile') {
+                const lb = document.getElementById('familyMemberActivityCard');
                 if (lb) {
                     lb.outerHTML = renderLeaderboardCard();
                 }
@@ -2089,7 +2090,7 @@
             });
             const sorted = Object.values(memberScores).sort((a, b) => b.score - a.score);
             if (sorted.length === 0) {
-                return `<div class="bg-white rounded-3xl shadow-sm overflow-hidden"><div class="flex flex-col items-center justify-center py-12 text-center"><div class="w-20 h-20 bg-orange-100 rounded-full flex items-center justify-center mb-4"><i class="fa-solid fa-ranking-star bs-text-3xl text-brand"></i></div><h3 class="bs-text-xl font-bold text-gray-800 mb-2">排行榜暫無數據</h3><p class="text-gray-500">開始聊天和分享回憶後，排行榜會自動更新！</p></div></div>`;
+                return `<div id="familyMemberActivityCard" class="bg-white rounded-3xl shadow-sm overflow-hidden"><div class="flex flex-col items-center justify-center py-12 px-6 text-center"><div class="w-20 h-20 bg-orange-100 rounded-full flex items-center justify-center mb-4"><i class="fa-solid fa-users bs-text-3xl text-brand"></i></div><h3 class="bs-text-xl font-bold text-gray-800 mb-2">暫未有家庭互動</h3><p class="text-gray-500">開始聊天和分享回憶後，家庭成員活躍度會自動更新。</p></div></div>`;
             }
             const rankIcons = ['👑', '2', '3'];
             const subtitles = ['本週互動最熱烈！', '繼續保持～', '加油追上去！'];
@@ -2100,13 +2101,14 @@
                 const avatarBg = rank === 1 ? 'bg-[#f6d1aa] text-[#b66122]' : (rank <= 3 ? 'bg-orange-100 text-brand-dark' : 'bg-gray-100 text-gray-500');
                 return `<div class="flex items-center py-4 px-5 border-b border-gray-50"><div class="w-8 text-center mr-4 ${rank <= 3 ? (rank===1?'bs-text-2xl text-yellow-400':rank===2?'bs-text-xl text-gray-400':'bs-text-lg text-amber-600') : 'bs-text-base text-gray-400'} font-bold">${icon}</div>${renderAvatar(member.avatar, { userId: member.id, sizeClass: 'w-12 h-12', coreClass: `${avatarBg} bs-text-xl font-bold`, extraClass: 'mr-4' })}<div class="flex-1"><div class="font-bold text-gray-800 bs-text-base">${member.name}</div><div class="bs-text-xs text-gray-400">${subtitle}</div></div><div class="text-right"><div class="bs-text-lg font-bold text-brand">${member.score.toLocaleString()}</div><div class="bs-text-xs text-gray-400">分</div></div></div>`;
             }).join('');
-            return `<div class="bg-white rounded-3xl shadow-sm overflow-hidden">${rankItems}</div>`;
+            return `<div id="familyMemberActivityCard" class="bg-white rounded-3xl shadow-sm overflow-hidden">${rankItems}</div>`;
         }
 
         // --- 核心渲染引擎 ---
         function render() {
             const app = document.getElementById('app');
             const previousChatSnapshot = readChatScrollSnapshot();
+            if (state.currentTab === 'leaderboard') state.currentTab = 'profile';
             saveDemoData();
             
             if (!state.appReady) {
@@ -2119,7 +2121,6 @@
                     <main class="flex-1 min-h-0 ${state.currentTab === 'chat' ? 'overflow-hidden pb-[calc(5.75rem+env(safe-area-inset-bottom))]' : 'overflow-y-auto no-scrollbar pb-[calc(5.75rem+env(safe-area-inset-bottom))]'}">
                         ${state.currentTab === 'calendar' ? renderCalendar() : ''}
                         ${state.currentTab === 'chat' ? renderChat() : ''}
-                        ${state.currentTab === 'leaderboard' ? renderLeaderboard() : ''}
                         ${state.currentTab === 'rewards' ? renderRewards() : ''}
                         ${state.currentTab === 'profile' ? renderProfile() : ''}
                     </main>
@@ -2354,7 +2355,7 @@
 
         // 頂部導航列 (加入一鍵刪除按鈕)
         function renderHeader() {
-            const titles = { 'calendar': '日曆', 'chat': '對話', 'rewards': '獎勵', 'leaderboard': '活躍度排行榜', 'profile': '我' };
+            const titles = { 'calendar': '日曆', 'chat': '對話', 'rewards': '獎勵', 'profile': '我' };
             const currentTitle = titles[state.currentTab] || '星喚';
             return `
                 <header class="bg-white px-6 pt-12 pb-4 shadow-sm z-10 sticky top-0 flex justify-between items-center rounded-b-2xl">
@@ -2390,7 +2391,6 @@
             const tabs = [
                 { id: 'calendar', icon: 'fa-calendar-days', label: '日曆' },
                 { id: 'chat', icon: 'fa-comments', label: '聊天' },
-                { id: 'leaderboard', icon: 'fa-ranking-star', label: '排行榜' },
                 { id: 'rewards', icon: 'fa-gift', label: '獎勵' },
                 { id: 'profile', icon: 'fa-user', label: '我' }
             ];
@@ -2823,11 +2823,6 @@
             }
         }
 
-        // 排行榜視圖
-        function renderLeaderboard() {
-            return `<div class="p-6">${renderLeaderboardCard()}</div>`;
-        }
-
         // 獎勵視圖
         function renderRewards() {
             const reward = state.dailyMessageReward || {};
@@ -2900,6 +2895,14 @@
                         <h2 class="bs-text-2xl font-bold text-gray-800">${state.userName || '用戶'}</h2>
                         <p class="text-gray-500 bs-text-sm mt-1">${state.currentUser?.email || ''}</p>
                         <span class="inline-block mt-2 px-3 py-1 rounded-full bs-text-xs font-medium bg-orange-100 text-brand-dark">${roleLabel}</span>
+                    </div>
+
+                    <!-- 家庭成員列表 -->
+                    <div>
+                        <h3 class="bs-text-lg font-bold text-gray-800 mb-3 flex items-center">
+                            <i class="fa-solid fa-users text-brand mr-2"></i>家庭成員列表
+                        </h3>
+                        ${renderLeaderboardCard()}
                     </div>
 
                     <!-- 長者模式開關 -->
