@@ -2546,7 +2546,7 @@
                         <div class="flex gap-2 overflow-x-auto no-scrollbar">
                             ${dayMemories.map(m => `
                                 <div class="w-12 h-12 rounded-lg bg-white border border-orange-200 flex-shrink-0 flex items-center justify-center overflow-hidden">
-                                    ${m.img ? `<img src="${m.img}" class="w-full h-full object-cover">` : `<i class="fa-solid ${m.type === 'audio' ? 'fa-microphone text-blue-400' : 'fa-font text-gray-400'} bs-text-xl"></i>`}
+                                    ${m.img ? `<img src="${resolveMediaUrl(m.img)}" class="w-full h-full object-cover">` : `<i class="fa-solid ${m.type === 'audio' ? 'fa-microphone text-blue-400' : 'fa-font text-gray-400'} bs-text-xl"></i>`}
                                 </div>
                             `).join('')}
                         </div>
@@ -3400,7 +3400,7 @@
                                         </div>
                                         <span class="bs-text-sm font-bold text-gray-700">${m.childName}</span>
                                     </div>
-                                    ${m.img ? `<img src="${m.img}" class="w-full h-32 object-cover rounded-xl mb-2">` : ''}
+                                    ${m.img ? `<img src="${resolveMediaUrl(m.img)}" class="w-full h-32 object-cover rounded-xl mb-2">` : ''}
                                     <p class="text-gray-800">${m.content}</p>
                                 </div>
                             `).join('')}
