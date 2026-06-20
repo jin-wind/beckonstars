@@ -342,7 +342,7 @@ function addMemory(familyId, memory) {
     memory.date,
     memory.title || memory.content || '',
     memory.description || null,
-    memory.imageUrl || memory.img || null,
+    memory.imageUrl || memory.imgUrl || memory.img || null,
     memory.tags ? JSON.stringify(memory.tags) : null,
     memory.createdAt || new Date().toISOString(),
     JSON.stringify(memory)

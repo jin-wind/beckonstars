@@ -472,6 +472,12 @@
             return resolveMediaUrl(message?.thumbnailUrl || message?.imgUrl || message?.img || '');
         }
 
+        function getMemoryImageSrc(memory, preferThumbnail = false) {
+            const primary = memory?.imgUrl || memory?.imageUrl || memory?.img || '';
+            const thumbnail = memory?.thumbnailUrl || memory?.thumbnail || '';
+            return resolveMediaUrl(preferThumbnail ? (thumbnail || primary) : (primary || thumbnail));
+        }
+
         function getMessageAudioSrc(message) {
             return resolveMediaUrl(message?.audioUrl || message?.audio || '');
         }
@@ -1891,6 +1897,8 @@
 
         function normalizeCloudMemory(id, data) {
             const date = data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt ? new Date(data.createdAt) : new Date());
+            const imageUrl = data.imgUrl || data.imageUrl || data.image_url || data.img || null;
+            const thumbnailUrl = data.thumbnailUrl || data.thumbnail || data.thumbnail_url || null;
             return {
                 id,
                 date: data.date || date.getDate(),
@@ -1901,9 +1909,10 @@
                 childName: data.childName || '家庭成員',
                 type: data.type || 'text',
                 content: data.content || '',
-                img: data.img || null,
-                imgUrl: data.imgUrl || null,
-                thumbnailUrl: data.thumbnailUrl || null
+                img: data.img || imageUrl,
+                imgUrl,
+                imageUrl,
+                thumbnailUrl
             };
         }
 
@@ -2544,11 +2553,14 @@
                     <div class="bg-orange-50 p-4 border-t border-orange-100">
                         <p class="bs-text-sm font-bold text-brand-dark mb-2"><i class="fa-solid fa-heart"></i> ${displayDay}日已有 ${dayMemories.length} 個回憶</p>
                         <div class="flex gap-2 overflow-x-auto no-scrollbar">
-                            ${dayMemories.map(m => `
-                                <div class="w-12 h-12 rounded-lg bg-white border border-orange-200 flex-shrink-0 flex items-center justify-center overflow-hidden">
-                                    ${m.img ? `<img src="${resolveMediaUrl(m.img)}" class="w-full h-full object-cover">` : `<i class="fa-solid ${m.type === 'audio' ? 'fa-microphone text-blue-400' : 'fa-font text-gray-400'} bs-text-xl"></i>`}
-                                </div>
-                            `).join('')}
+                            ${dayMemories.map(m => {
+                                const memoryImageSrc = getMemoryImageSrc(m, true);
+                                return `
+                                    <div class="w-12 h-12 rounded-lg bg-white border border-orange-200 flex-shrink-0 flex items-center justify-center overflow-hidden">
+                                        ${memoryImageSrc ? `<img src="${escapeAttribute(memoryImageSrc)}" class="w-full h-full object-cover">` : `<i class="fa-solid ${m.type === 'audio' ? 'fa-microphone text-blue-400' : 'fa-font text-gray-400'} bs-text-xl"></i>`}
+                                    </div>
+                                `;
+                            }).join('')}
                         </div>
                     </div>
                 ` : ''}
@@ -3392,25 +3404,28 @@
                         </button>
                         <h3 class="bs-text-xl font-bold text-gray-800 mb-4">${today.getMonth() + 1}月${state.selectedDate}日 的回憶</h3>
                         <div class="space-y-4 max-h-[60vh] overflow-y-auto no-scrollbar">
-                            ${dayMemories.map(m => `
-                                <div class="bg-orange-50 rounded-2xl p-4 border border-orange-100">
-                                    <div class="flex items-center mb-2">
-                                        <div class="w-6 h-6 rounded-full bg-brand text-white bs-text-xs flex items-center justify-center mr-2">
-                                            ${m.childName[0]}
+                            ${dayMemories.map(m => {
+                                const memoryImageSrc = getMemoryImageSrc(m);
+                                return `
+                                    <div class="bg-orange-50 rounded-2xl p-4 border border-orange-100">
+                                        <div class="flex items-center mb-2">
+                                            <div class="w-6 h-6 rounded-full bg-brand text-white bs-text-xs flex items-center justify-center mr-2">
+                                                ${m.childName[0]}
+                                            </div>
+                                            <span class="bs-text-sm font-bold text-gray-700">${m.childName}</span>
                                         </div>
-                                        <span class="bs-text-sm font-bold text-gray-700">${m.childName}</span>
+                                        ${memoryImageSrc ? `<img src="${escapeAttribute(memoryImageSrc)}" class="w-full h-32 object-cover rounded-xl mb-2">` : ''}
+                                        <p class="text-gray-800">${m.content}</p>
                                     </div>
-                                    ${m.img ? `<img src="${resolveMediaUrl(m.img)}" class="w-full h-32 object-cover rounded-xl mb-2">` : ''}
-                                    <p class="text-gray-800">${m.content}</p>
-                                </div>
-                            `).join('')}
+                                `;
+                            }).join('')}
                         </div>
                     </div>
                 `;
             }
 
             if (state.showModal === 'videoPlayer') {
-                const hasPhotos = state.memories.some(m => m.img && m.month === today.getMonth() + 1 && m.year === today.getFullYear());
+                const hasPhotos = state.memories.some(m => getMemoryImageSrc(m) && m.month === today.getMonth() + 1 && m.year === today.getFullYear());
                 if (state.videoGenerating) {
                     modalContent = `
                         <div class="bg-gradient-to-b from-brand-dark to-black w-full max-w-md h-96 rounded-3xl flex flex-col items-center justify-center relative animate-fadeIn">
@@ -4019,12 +4034,14 @@
                         }
 
                         let imgUrl = null;
+                        let thumbnailUrl = null;
                         if (state.pendingMemoryType === 'photo' && state.pendingMemoryImage && state.backendMode === 'server') {
                             try {
                                 const blob = await fetch(state.pendingMemoryImage).then(r => r.blob());
                                 const file = new File([blob], 'memory.jpg', { type: blob.type });
                                 const uploaded = await uploadMediaFile(file);
                                 imgUrl = uploaded?.mediaUrl || state.pendingMemoryImage;
+                                thumbnailUrl = uploaded?.thumbnailUrl || null;
                             } catch (err) {
                                 console.warn('Media upload failed, using base64', err);
                                 imgUrl = state.pendingMemoryImage;
@@ -4040,7 +4057,10 @@
                             childName: state.userName || (state.role === 'child' ? '我' : '媽媽'),
                             type: state.pendingMemoryType,
                             content,
-                            img: imgUrl || (state.pendingMemoryType === 'photo' ? state.pendingMemoryImage : null)
+                            img: imgUrl || (state.pendingMemoryType === 'photo' ? state.pendingMemoryImage : null),
+                            imgUrl,
+                            imageUrl: imgUrl,
+                            thumbnailUrl
                         };
 
                         if (state.backendMode === 'server' && state.familyId) {

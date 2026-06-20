@@ -411,6 +411,12 @@ const mediaBaseUrl = process.env.MEDIA_BASE_URL || '/media';
 const mediaMaxSizeMB = Number(process.env.MEDIA_MAX_SIZE_MB || 60);
 const mediaMaxSizeBytes = mediaMaxSizeMB * 1024 * 1024;
 
+function getMemoryImageValue(memory, preferThumbnail = false) {
+  const primary = memory?.imgUrl || memory?.imageUrl || memory?.image_url || memory?.img || '';
+  const thumbnail = memory?.thumbnailUrl || memory?.thumbnail || memory?.thumbnail_url || '';
+  return preferThumbnail ? (thumbnail || primary) : (primary || thumbnail);
+}
+
 // 允許的 MIME 類型
 const ALLOWED_MIME_TYPES = {
   'image/jpeg': { ext: 'jpg', category: 'image', maxSize: 50 * 1024 * 1024 },
@@ -899,12 +905,19 @@ async function generateSummaryVideo(memories, year, month, familyId) {
       const imgPath = path.join(tmpDir, `img_${String(i).padStart(3, '0')}.jpg`);
       try {
         let imgData;
-        if (typeof mem.img !== 'string') continue;
-        if (mem.img.startsWith('data:')) {
-          const base64 = mem.img.split(',')[1];
+        const imageValue = getMemoryImageValue(mem);
+        if (typeof imageValue !== 'string' || !imageValue) continue;
+        if (imageValue.startsWith('data:')) {
+          const base64 = imageValue.split(',')[1];
           imgData = Buffer.from(base64, 'base64');
+        } else if (imageValue.startsWith('/')) {
+          const imagePathname = new URL(imageValue, 'http://localhost').pathname;
+          const filename = path.basename(imagePathname);
+          const localImagePath = path.join(mediaStoragePath, filename);
+          if (!fs.existsSync(localImagePath)) continue;
+          imgData = fs.readFileSync(localImagePath);
         } else {
-          const resp = await fetch(mem.img);
+          const resp = await fetch(imageValue);
           if (!resp.ok) continue;
           imgData = Buffer.from(await resp.arrayBuffer());
         }
@@ -1979,6 +1992,8 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       const now = new Date();
+      const imageUrl = cleanLargeText(body.imgUrl || body.imageUrl || body.img) || null;
+      const thumbnailUrl = cleanLargeText(body.thumbnailUrl || body.thumbnail) || null;
       const memory = {
         id: `${now.getTime()}_${Math.random().toString(36).slice(2, 8)}`,
         uid: cleanText(body.uid),
@@ -1989,10 +2004,13 @@ const server = http.createServer(async (req, res) => {
         childName: cleanText(body.childName, '家庭成員'),
         type: cleanText(body.type, 'text'),
         content: cleanText(body.content),
-        img: cleanLargeText(body.img) || null,
+        img: cleanLargeText(body.img) || imageUrl,
+        imgUrl: imageUrl,
+        imageUrl,
+        thumbnailUrl,
         createdAt: now.toISOString()
       };
-      if (!memory.content && !memory.img) {
+      if (!memory.content && !getMemoryImageValue(memory)) {
         sendJson(res, 400, { error: 'empty-content' });
         return;
       }
@@ -2018,7 +2036,7 @@ const server = http.createServer(async (req, res) => {
       const targetYear = Number(body.year) || new Date().getFullYear();
 
       const photoMemories = latestFamily.memories.filter(m =>
-        m.img && m.month === targetMonth && m.year === targetYear
+        getMemoryImageValue(m) && m.month === targetMonth && m.year === targetYear
       );
 
       if (photoMemories.length === 0) {
