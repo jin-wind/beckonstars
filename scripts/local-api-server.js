@@ -382,7 +382,7 @@ function toTraditional(arr) {
 const host = process.env.API_HOST || '0.0.0.0';
 const port = Number(process.env.API_PORT || 8787);
 const dbPath = process.env.API_DB_PATH || path.join(process.cwd(), 'data', 'server-db.json');
-const maxBodyBytes = Number(process.env.API_MAX_BODY_BYTES || 24_000_000);
+const maxBodyBytes = Number(process.env.API_MAX_BODY_BYTES || 80_000_000);
 const llmBaseUrl = (process.env.LLM_OPENAI_BASE_URL || 'https://fufu.iqach.top/v1').replace(/\/+$/, '');
 const llmApiKey = process.env.LLM_SUMMARY_API_KEY || process.env.OPENAI_API_KEY || '';
 const llmModel = process.env.LLM_SUMMARY_MODEL || process.env.OPENAI_SUMMARY_MODEL || 'mimo-v2.5';
@@ -408,14 +408,14 @@ const openrouterReferer = process.env.OPENROUTER_HTTP_REFERER || (process.env.OP
 // 媒體存儲配置
 const mediaStoragePath = process.env.MEDIA_STORAGE_PATH || path.join(process.cwd(), 'data', 'media');
 const mediaBaseUrl = process.env.MEDIA_BASE_URL || '/media';
-const mediaMaxSizeMB = Number(process.env.MEDIA_MAX_SIZE_MB || 20);
+const mediaMaxSizeMB = Number(process.env.MEDIA_MAX_SIZE_MB || 60);
 const mediaMaxSizeBytes = mediaMaxSizeMB * 1024 * 1024;
 
 // 允許的 MIME 類型
 const ALLOWED_MIME_TYPES = {
-  'image/jpeg': { ext: 'jpg', category: 'image', maxSize: 10 * 1024 * 1024 },
-  'image/png': { ext: 'png', category: 'image', maxSize: 10 * 1024 * 1024 },
-  'image/webp': { ext: 'webp', category: 'image', maxSize: 10 * 1024 * 1024 },
+  'image/jpeg': { ext: 'jpg', category: 'image', maxSize: 50 * 1024 * 1024 },
+  'image/png': { ext: 'png', category: 'image', maxSize: 50 * 1024 * 1024 },
+  'image/webp': { ext: 'webp', category: 'image', maxSize: 50 * 1024 * 1024 },
   'audio/mp4': { ext: 'm4a', category: 'audio', maxSize: 20 * 1024 * 1024 },
   'audio/mpeg': { ext: 'mp3', category: 'audio', maxSize: 20 * 1024 * 1024 },
   'audio/wav': { ext: 'wav', category: 'audio', maxSize: 20 * 1024 * 1024 }
