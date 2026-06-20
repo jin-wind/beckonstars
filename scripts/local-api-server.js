@@ -398,7 +398,7 @@ const azureSttRecognitionHost = (process.env.AZURE_STT_RECOGNITION_HOST || `${az
 
 // OpenRouter (AI 摘要)
 const openrouterApiKey = process.env.OPENROUTER_API_KEY || '';
-const openrouterModel = process.env.OPENROUTER_MODEL || 'moonshotai/kimi-k2.6:free';
+const openrouterModel = process.env.OPENROUTER_MODEL || 'cohere/north-mini-code:free';
 const openrouterModels = (process.env.OPENROUTER_FALLBACK_MODELS || openrouterModel)
   .split(',')
   .map(model => model.trim())
