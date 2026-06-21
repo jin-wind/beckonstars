@@ -1829,8 +1829,9 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      if (!message.transcript && message.audio) {
-        message.transcript = await transcribeAudioWithLlm(message.audio);
+      if (!message.transcript && (message.audio || message.audioUrl)) {
+        const audioData = message.audio || message.audioUrl;
+        message.transcript = await transcribeAudioWithLlm(audioData);
         if (message.transcript && (!message.content || message.content === '語音訊息')) {
           message.content = message.transcript;
         }
@@ -1860,12 +1861,13 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 404, { error: 'message-not-found' });
         return;
       }
-      if (!message.audio) {
+      if (!message.audio && !message.audioUrl) {
         sendJson(res, 400, { error: 'missing-audio' });
         return;
       }
 
-      const transcript = await transcribeAudioWithLlm(message.audio);
+      const audioData = message.audio || message.audioUrl;
+      const transcript = await transcribeAudioWithLlm(audioData);
       if (!transcript || transcript === '[聽不清]') {
         sendJson(res, 422, { error: 'empty-transcript', transcript: transcript || '' });
         return;
@@ -1959,10 +1961,11 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 201, { message, rewards: { dailyMessageFrame: rewardStatus } });
 
       // 背景自動轉譯語音訊息
-      if (message.type === 'audio' && message.audio && !message.transcript) {
+      if (message.type === 'audio' && (message.audio || message.audioUrl) && !message.transcript) {
         (async () => {
           try {
-            const transcript = await transcribeAudioWithLlm(message.audio);
+            const audioData = message.audio || message.audioUrl;
+            const transcript = await transcribeAudioWithLlm(audioData);
             if (transcript) {
               const db = await readDb();
               const family = getFamily(db, familyId);
