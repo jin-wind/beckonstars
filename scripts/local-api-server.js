@@ -1790,8 +1790,16 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'GET' && parts[3] === 'messages') {
+      // 重新讀取數據庫以獲取最新數據（包括背景轉譯的結果）
+      const latestDb = await readDb();
+      const latestFamily = getFamily(latestDb, familyId);
+      if (!latestFamily) {
+        sendJson(res, 404, { error: 'family-not-found' });
+        return;
+      }
+
       const authUser = getAuthUser(req);
-      const messages = family.messages.slice(-80);
+      const messages = latestFamily.messages.slice(-80);
       // 調試：記錄語音消息的 transcript 狀態
       const audioMessages = messages.filter(m => m.type === 'audio');
       if (audioMessages.length > 0) {
@@ -1803,7 +1811,7 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 200, {
         messages,
         rewards: {
-          dailyMessageFrame: buildDailyMessageRewardStatus(db, familyId, authUser?.userId || '')
+          dailyMessageFrame: buildDailyMessageRewardStatus(latestDb, familyId, authUser?.userId || '')
         }
       });
       return;
