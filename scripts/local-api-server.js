@@ -643,8 +643,68 @@ function convertAudioToWavBase64(audio) {
   }
 }
 
-function prepareAudioForLlm(audioDataUrl) {
-  const audio = parseAudioDataUrl(audioDataUrl);
+async function resolveAudioDataUrl(audioDataUrl) {
+  if (typeof audioDataUrl !== 'string' || !audioDataUrl.trim()) return null;
+
+  const trimmed = audioDataUrl.trim();
+
+  // Data URL: parse inline base64
+  if (trimmed.startsWith('data:')) {
+    return parseAudioDataUrl(trimmed);
+  }
+
+  // Absolute HTTP(S) URL: fetch the audio file
+  if (/^https?:\/\//i.test(trimmed)) {
+    try {
+      const response = await fetch(trimmed);
+      if (!response.ok) {
+        throw new Error(`fetch-audio-${response.status}`);
+      }
+      const buffer = Buffer.from(await response.arrayBuffer());
+      const contentType = response.headers.get('content-type') || '';
+      const urlPath = new URL(trimmed).pathname.toLowerCase();
+      let format = 'm4a';
+      if (urlPath.endsWith('.wav') || contentType.includes('wav')) format = 'wav';
+      else if (urlPath.endsWith('.mp3') || contentType.includes('mpeg')) format = 'mp3';
+      else if (urlPath.endsWith('.aac') || contentType.includes('aac')) format = 'aac';
+      else if (urlPath.endsWith('.m4a') || urlPath.endsWith('.mp4') || contentType.includes('mp4')) format = 'm4a';
+      return { data: buffer.toString('base64'), format };
+    } catch (err) {
+      console.warn('[audio] 下載音訊網址失敗:', trimmed, err.message);
+      return null;
+    }
+  }
+
+  // Local media URL served by this server: read directly from storage
+  if (trimmed.startsWith('/media/')) {
+    try {
+      const filename = path.basename(trimmed);
+      if (!filename || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+        throw new Error('invalid-filename');
+      }
+      const filePath = path.join(mediaStoragePath, filename);
+      if (!fs.existsSync(filePath)) {
+        throw new Error('file-not-found');
+      }
+      const buffer = fs.readFileSync(filePath);
+      const ext = path.extname(filePath).toLowerCase();
+      let format = 'm4a';
+      if (ext === '.wav') format = 'wav';
+      else if (ext === '.mp3') format = 'mp3';
+      else if (ext === '.aac') format = 'aac';
+      else if (ext === '.m4a' || ext === '.mp4') format = 'm4a';
+      return { data: buffer.toString('base64'), format };
+    } catch (err) {
+      console.warn('[audio] 讀取本地媒體檔案失敗:', trimmed, err.message);
+      return null;
+    }
+  }
+
+  return null;
+}
+
+async function prepareAudioForLlm(audioDataUrl) {
+  const audio = await resolveAudioDataUrl(audioDataUrl);
   if (!audio?.data) return null;
   if (audio.format === 'wav') return audio;
   return convertAudioToWavBase64(audio);
@@ -664,7 +724,7 @@ function sleep(ms) {
 }
 
 async function transcribeWithAzureStt(audioDataUrl) {
-  const audio = prepareAudioForLlm(audioDataUrl);
+  const audio = await prepareAudioForLlm(audioDataUrl);
   if (!audio?.data) return '';
 
   const audioBuffer = Buffer.from(audio.data, 'base64');
@@ -704,15 +764,18 @@ async function transcribeAudioWithLlm(audioDataUrl) {
   if (azureSttKey) {
     try {
       const transcript = await transcribeWithAzureStt(audioDataUrl);
-      console.log(`[azure-stt] ✅ 轉譯完成: ${transcript.slice(0, 50)}`);
-      return transcript;
+      if (transcript) {
+        console.log(`[azure-stt] ✅ 轉譯完成: ${transcript.slice(0, 50)}`);
+        return transcript;
+      }
+      console.warn('[azure-stt] Azure 轉譯結果為空或無法讀取音訊，嘗試 fallback LLM');
     } catch (error) {
       console.warn('[azure-stt] Azure 轉譯失敗，嘗試 fallback LLM', error.message || error);
     }
   }
 
   // Fallback：原有舊 LLM API
-  const audio = prepareAudioForLlm(audioDataUrl);
+  const audio = await prepareAudioForLlm(audioDataUrl);
   if (!audio?.data) return '';
 
   const response = await fetch(`${llmBaseUrl}/chat/completions`, {
