@@ -1795,9 +1795,9 @@ const server = http.createServer(async (req, res) => {
       // 調試：記錄語音消息的 transcript 狀態
       const audioMessages = messages.filter(m => m.type === 'audio');
       if (audioMessages.length > 0) {
-        console.log(`[debug] GET messages 返回 ${audioMessages.length} 條語音消息`);
+        console.log(`[debug] GET messages 返回 ${audioMessages.length} 條語音消息，總消息數: ${messages.length}`);
         audioMessages.forEach(m => {
-          console.log(`  - 消息 ${m.id}: transcript=${m.transcript ? `"${m.transcript.slice(0, 30)}..."` : '(empty)'}`);
+          console.log(`  - 消息 ${m.id}: transcript=${m.transcript ? `"${m.transcript.slice(0, 30)}..."` : '(empty)'}, content="${m.content?.slice(0, 20) || '(empty)'}"`);
         });
       }
       sendJson(res, 200, {
@@ -1964,22 +1964,29 @@ const server = http.createServer(async (req, res) => {
       if (message.type === 'audio' && (message.audio || message.audioUrl) && !message.transcript) {
         (async () => {
           try {
+            console.log(`[transcribe] 開始轉譯消息 ${message.id}`);
             const audioData = message.audio || message.audioUrl;
             const transcript = await transcribeAudioWithLlm(audioData);
+            console.log(`[transcribe] 轉譯結果: "${transcript?.slice(0, 50) || '(empty)'}"`);
             if (transcript) {
               const db = await readDb();
               const family = getFamily(db, familyId);
+              console.log(`[transcribe] 找到家庭: ${!!family}, 消息數: ${family?.messages?.length || 0}`);
               const msg = family?.messages?.find(m => m.id === message.id);
+              console.log(`[transcribe] 找到目標消息: ${!!msg}, ID: ${msg?.id}`);
               if (msg) {
                 msg.transcript = transcript;
                 if (!msg.content || msg.content === '語音訊息') msg.content = transcript;
                 msg.transcriptUpdatedAt = new Date().toISOString();
+                console.log(`[transcribe] 準備寫入數據庫，transcript: "${msg.transcript?.slice(0, 30)}"`);
                 await writeDb(db);
-                console.log(`[transcribe] ✅ 語音轉譯完成 [${familyId}] ${transcript.slice(0, 50)}`);
+                console.log(`[transcribe] ✅ 數據庫已更新，語音轉譯完成 [${familyId}] ${transcript.slice(0, 50)}`);
+              } else {
+                console.warn(`[transcribe] ⚠️ 未找到消息 ${message.id} 在家庭 ${familyId}`);
               }
             }
           } catch (err) {
-            console.warn('[transcribe] 語音自動轉譯失敗:', err.message);
+            console.error('[transcribe] 語音自動轉譯失敗:', err.message, err.stack);
           }
         })();
       }
