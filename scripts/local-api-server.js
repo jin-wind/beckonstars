@@ -1731,7 +1731,7 @@ const server = http.createServer(async (req, res) => {
         user.families.push(familyId);
       }
 
-      writeDb(db);
+      await writeDb(db);
       const memberCount = Object.keys(family.members).length;
       const isNew = family.members[authUser.userId].joinedAt === family.members[authUser.userId].lastSeenAt;
       console.log(`[data] 🔗 ${isNew ? '新成員加入' : '成員連線'} [${familyId}] ${memberName} (${memberRole}) - 共 ${memberCount} 位成員`);
@@ -1776,7 +1776,7 @@ const server = http.createServer(async (req, res) => {
         user.families = user.families.filter(f => f !== familyId);
       }
 
-      writeDb(db);
+      await writeDb(db);
       console.log(`[data] 🚪 成員退出 [${familyId}] ${user.name} - 剩餘 ${Object.keys(family.members).length} 位成員`);
       sendJson(res, 200, { success: true, message: '已退出家庭' });
       return;
@@ -1851,7 +1851,7 @@ const server = http.createServer(async (req, res) => {
         ? await summarizeWithLlm(sourceText, { type: 'voice' })
         : '呢段錄音暫時未有可總結的轉文字內容。';
       message.summaryUpdatedAt = new Date().toISOString();
-      writeDb(latestDb);
+      await writeDb(latestDb);
       sendJson(res, 200, { message });
       return;
     }
@@ -1887,7 +1887,7 @@ const server = http.createServer(async (req, res) => {
       }
       if (!message.aiSummary) message.aiSummary = '';
       message.transcriptUpdatedAt = new Date().toISOString();
-      writeDb(latestDb);
+      await writeDb(latestDb);
       sendJson(res, 200, { message });
       return;
     }
@@ -1919,7 +1919,7 @@ const server = http.createServer(async (req, res) => {
       }
       if (!message.aiSummary) message.aiSummary = '';
       message.transcriptUpdatedAt = new Date().toISOString();
-      writeDb(latestDb);
+      await writeDb(latestDb);
       sendJson(res, 200, { message });
       return;
     }
@@ -2043,7 +2043,7 @@ const server = http.createServer(async (req, res) => {
       }
       latestFamily.memories.push(memory);
       latestFamily.memories = latestFamily.memories.slice(-1000);
-      writeDb(latestDb);
+      await writeDb(latestDb);
       console.log(`[data] 📝 新回憶 [${familyId}] ${memory.childName}: ${memory.type === 'photo' ? '📷 圖片' : memory.content.slice(0, 50)}`);
       sendJson(res, 201, { memory });
       return;
