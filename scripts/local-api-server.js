@@ -1791,8 +1791,17 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'GET' && parts[3] === 'messages') {
       const authUser = getAuthUser(req);
+      const messages = family.messages.slice(-80);
+      // 調試：記錄語音消息的 transcript 狀態
+      const audioMessages = messages.filter(m => m.type === 'audio');
+      if (audioMessages.length > 0) {
+        console.log(`[debug] GET messages 返回 ${audioMessages.length} 條語音消息`);
+        audioMessages.forEach(m => {
+          console.log(`  - 消息 ${m.id}: transcript=${m.transcript ? `"${m.transcript.slice(0, 30)}..."` : '(empty)'}`);
+        });
+      }
       sendJson(res, 200, {
-        messages: family.messages.slice(-80),
+        messages,
         rewards: {
           dailyMessageFrame: buildDailyMessageRewardStatus(db, familyId, authUser?.userId || '')
         }

@@ -1802,6 +1802,16 @@
             const result = await serverApi(`/api/families/${encodeURIComponent(familyId)}/messages`);
             const rewardUpdate = updateDailyMessageRewardStatus(result?.rewards?.dailyMessageFrame);
             const incoming = (result.messages || []).map(message => normalizeCloudMessage(message.id, message));
+
+            // 調試：記錄語音消息的 transcript 狀態
+            const audioMessages = incoming.filter(m => m.type === 'audio');
+            if (audioMessages.length > 0) {
+                console.log(`[debug] 前端收到 ${audioMessages.length} 條語音消息`);
+                audioMessages.forEach(m => {
+                    console.log(`  - 消息 ${m.id}: transcript="${m.transcript || '(empty)'}"`);
+                });
+            }
+
             const knownIds = new Set(state.messages.map(message => String(message.id)));
             if (hasLoadedCloudMessages) {
                 incoming.forEach(message => {
@@ -5043,12 +5053,19 @@
             const deadline = Date.now() + timeoutMs;
             const targetId = String(messageId);
 
+            console.log(`[debug] 開始等待消息 ${targetId} 的 transcript，超時 ${timeoutMs}ms`);
+
             while (Date.now() < deadline) {
                 await refreshServerMessages(state.familyId);
                 const message = state.messages.find(item => String(item.id) === targetId);
-                if (message && predicate(message)) return message;
+                console.log(`[debug] 輪詢檢查消息 ${targetId}: transcript="${message?.transcript || '(not found or empty)'}"`);
+                if (message && predicate(message)) {
+                    console.log(`[debug] ✅ 找到 transcript: "${message.transcript}"`);
+                    return message;
+                }
                 await new Promise(resolve => setTimeout(resolve, intervalMs));
             }
+            console.warn(`[debug] ⚠️ 超時：未能在 ${timeoutMs}ms 內獲取消息 ${targetId} 的 transcript`);
             return null;
         }
 
