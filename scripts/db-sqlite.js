@@ -264,9 +264,20 @@ function updateMessage(messageId, updates) {
   const fields = [];
   const values = [];
 
-  if (updates.text !== undefined) { fields.push('text = ?'); values.push(updates.text); }
+  const text = updates.text !== undefined ? updates.text : updates.content;
+  const imageUrl = updates.imageUrl !== undefined ? updates.imageUrl : (updates.imgUrl !== undefined ? updates.imgUrl : updates.img);
+  const audioUrl = updates.audioUrl !== undefined ? updates.audioUrl : updates.audio;
+  const summary = updates.summary !== undefined ? updates.summary : updates.aiSummary;
+
+  if (text !== undefined) { fields.push('text = ?'); values.push(text); }
+  if (imageUrl !== undefined) { fields.push('image_url = ?'); values.push(imageUrl); }
+  if (audioUrl !== undefined) { fields.push('audio_url = ?'); values.push(audioUrl); }
   if (updates.transcript !== undefined) { fields.push('transcript = ?'); values.push(updates.transcript); }
-  if (updates.summary !== undefined) { fields.push('summary = ?'); values.push(updates.summary); }
+  if (summary !== undefined) { fields.push('summary = ?'); values.push(summary); }
+  if (updates.timestamp !== undefined || updates.createdAt !== undefined) {
+    fields.push('timestamp = ?');
+    values.push(updates.timestamp || updates.createdAt);
+  }
 
   // 同步更新 data JSON 欄位
   const row = db.prepare('SELECT data FROM messages WHERE message_id = ?').get(messageId);

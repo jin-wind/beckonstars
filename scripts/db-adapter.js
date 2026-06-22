@@ -138,14 +138,17 @@ function jsonToSqlite(jsonDb) {
           }
         }
 
-        // 添加新消息（檢查是否已存在）
+        // 添加新消息，並同步更新已存在消息的轉譯、摘要等欄位。
         if (family.messages && Array.isArray(family.messages)) {
           const existingMessages = new Set(
             db.prepare('SELECT message_id FROM messages WHERE family_id = ?').all(familyId).map(r => r.message_id)
           );
 
           for (const msg of family.messages) {
-            if (!existingMessages.has(msg.id)) {
+            if (!msg?.id) continue;
+            if (existingMessages.has(msg.id)) {
+              dbSqlite.updateMessage(msg.id, msg);
+            } else {
               dbSqlite.addMessage(familyId, msg);
             }
           }

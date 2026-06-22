@@ -2060,7 +2060,7 @@
                                 <i class="fa-solid fa-wand-magic-sparkles mr-1"></i>總結錄音
                             </button>
                         ` : ''}
-                        ${msg.type === 'audio' && msg.audio && !msg.transcript && state.backendMode === 'server' ? `
+                        ${msg.type === 'audio' && (msg.audio || msg.audioUrl) && !msg.transcript && state.backendMode === 'server' ? `
                             <button class="action-btn mt-2 bg-amber-50 border border-amber-100 text-amber-700 rounded-xl px-3 py-2 bs-text-sm font-bold disabled:opacity-60" data-action="transcribeVoice" data-message-id="${escapeAttribute(messageId)}" ${state.transcribingMessageId === messageId ? 'disabled' : ''}>
                                 <i class="fa-solid ${state.transcribingMessageId === messageId ? 'fa-spinner fa-spin' : 'fa-closed-captioning'} mr-1"></i>${state.transcribingMessageId === messageId ? 'AI 轉譯中' : 'AI 轉譯錄音'}
                             </button>
@@ -5024,7 +5024,7 @@
         async function transcribeVoiceMessage(messageId) {
             if (!messageId || state.backendMode !== 'server' || !state.familyId) return;
             const message = state.messages.find(item => String(item.id) === String(messageId));
-            if (!message?.audio) {
+            if (!message?.audio && !message?.audioUrl) {
                 showMessage('呢條語音沒有可轉譯的錄音。');
                 return;
             }

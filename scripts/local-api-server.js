@@ -523,6 +523,11 @@ async function atomicUpdateDb(asyncModifier) {
     .then(async () => {
       const db = await readDb();
       await asyncModifier(db);
+      if (USE_SQLITE) {
+        await dbAdapter.writeDb(db);
+        console.log('[db] atomic SQLite write done');
+        return;
+      }
       const payload = JSON.stringify(db, null, 2);
       const payloadSize = Buffer.byteLength(payload, 'utf8');
       const tmpPath = `${dbPath}.tmp`;
