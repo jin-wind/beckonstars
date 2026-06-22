@@ -486,6 +486,10 @@
             return resolveMediaUrl(message?.audioUrl || message?.audio || '');
         }
 
+        function getMemoryAudioSrc(memory) {
+            return resolveMediaUrl(memory?.audioUrl || memory?.audio || '');
+        }
+
         function createDefaultDailyMessageReward() {
             return {
                 count: 0,
@@ -3471,6 +3475,7 @@
                         <div class="space-y-4 max-h-[60vh] overflow-y-auto no-scrollbar">
                             ${dayMemories.map(m => {
                                 const memoryImageSrc = getMemoryImageSrc(m);
+                                const memoryAudioSrc = getMemoryAudioSrc(m);
                                 return `
                                     <div class="bg-orange-50 rounded-2xl p-4 border border-orange-100">
                                         <div class="flex items-center mb-2">
@@ -3480,7 +3485,7 @@
                                             <span class="bs-text-sm font-bold text-gray-700">${m.childName}</span>
                                         </div>
                                         ${memoryImageSrc ? `<img src="${escapeAttribute(memoryImageSrc)}" class="w-full h-32 object-cover rounded-xl mb-2">` : ''}
-                                        ${m.type === 'voice' && m.audioUrl ? `
+                                        ${m.type === 'voice' && memoryAudioSrc ? `
                                             <div class="bg-purple-50 border border-purple-100 rounded-xl p-3 mb-2">
                                                 <div class="flex items-center justify-between mb-2">
                                                     <div class="flex items-center">
@@ -3494,8 +3499,8 @@
                                                     </div>
                                                 </div>
                                                 <audio controls class="w-full" style="height: 32px;" preload="metadata">
-                                                    <source src="${escapeAttribute(m.audioUrl)}" type="audio/mp4">
-                                                    <source src="${escapeAttribute(m.audioUrl)}" type="audio/mpeg">
+                                                    <source src="${escapeAttribute(memoryAudioSrc)}" type="audio/mp4">
+                                                    <source src="${escapeAttribute(memoryAudioSrc)}" type="audio/mpeg">
                                                     您的瀏覽器不支援音頻播放。
                                                 </audio>
                                             </div>
