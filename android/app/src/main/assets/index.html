@@ -1803,9 +1803,10 @@
             const rewardUpdate = updateDailyMessageRewardStatus(result?.rewards?.dailyMessageFrame);
             const incoming = (result.messages || []).map(message => normalizeCloudMessage(message.id, message));
 
-            // 調試：記錄語音消息的 transcript 狀態
-            const audioMessages = incoming.filter(m => m.type === 'audio');
-            if (audioMessages.length > 0) {
+            // Opt-in diagnostic logging for voice transcript sync.
+            const debugVoiceMessages = localStorage.getItem('beckonDebugVoiceMessages') === 'true';
+            const audioMessages = debugVoiceMessages ? incoming.filter(m => m.type === 'audio') : [];
+            if (debugVoiceMessages && audioMessages.length > 0) {
                 console.log(`[debug] 前端收到 ${audioMessages.length} 條語音消息`);
                 audioMessages.forEach(m => {
                     console.log(`  - 消息 ${m.id}: transcript="${m.transcript || '(empty)'}"`);

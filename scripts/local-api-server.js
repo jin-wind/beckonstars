@@ -387,6 +387,7 @@ const llmBaseUrl = (process.env.LLM_OPENAI_BASE_URL || 'https://fufu.iqach.top/v
 const llmApiKey = process.env.LLM_SUMMARY_API_KEY || process.env.OPENAI_API_KEY || '';
 const llmModel = process.env.LLM_SUMMARY_MODEL || process.env.OPENAI_SUMMARY_MODEL || 'mimo-v2.5';
 const llmTranscribeModel = process.env.LLM_TRANSCRIBE_MODEL || process.env.LLM_AUDIO_MODEL || 'mimo-v2-omni';
+const debugVoiceMessages = ['1', 'true', 'yes'].includes(String(process.env.DEBUG_VOICE_MESSAGES || '').toLowerCase());
 
 // Azure Speech to Text REST API (short audio)
 const azureSttKey = process.env.AZURE_STT_KEY || process.env.AZURE_SPEECH_KEY || '';
@@ -1900,9 +1901,9 @@ const server = http.createServer(async (req, res) => {
 
       const authUser = getAuthUser(req);
       const messages = latestFamily.messages.slice(-80);
-      // 調試：記錄語音消息的 transcript 狀態
-      const audioMessages = messages.filter(m => m.type === 'audio');
-      if (audioMessages.length > 0) {
+      // Opt-in diagnostic logging for voice transcript sync.
+      const audioMessages = debugVoiceMessages ? messages.filter(m => m.type === 'audio') : [];
+      if (debugVoiceMessages && audioMessages.length > 0) {
         console.log(`[debug] GET messages 返回 ${audioMessages.length} 條語音消息，總消息數: ${messages.length}`);
         audioMessages.forEach(m => {
           console.log(`  - 消息 ${m.id}: transcript=${m.transcript ? `"${m.transcript.slice(0, 30)}..."` : '(empty)'}, content="${m.content?.slice(0, 20) || '(empty)'}"`);
