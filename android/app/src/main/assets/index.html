@@ -2156,6 +2156,20 @@
                 `;
             }
             attachEvents();
+            // Debug: Log memory audio elements
+            requestAnimationFrame(() => {
+                const audioElements = document.querySelectorAll('.bg-purple-50 audio');
+                audioElements.forEach((audio, idx) => {
+                    const src = audio.querySelector('source')?.src || '';
+                    console.log(`[audio-debug] Memory audio ${idx}:`, src.slice(0, 100));
+                    audio.addEventListener('error', (e) => {
+                        console.error('[audio-debug] 加載失敗:', src.slice(0, 100), audio.error);
+                    }, { once: true });
+                    audio.addEventListener('loadedmetadata', () => {
+                        console.log('[audio-debug] 加載成功:', src.slice(0, 100), 'duration:', audio.duration);
+                    }, { once: true });
+                });
+            });
             requestAnimationFrame(() => {
                 applyChatScrollAfterRender(previousChatSnapshot);
                 restoreChatInputFocusAfterRender();
