@@ -4095,6 +4095,11 @@
                             render();
                             return;
                         }
+                        if (state.pendingMemoryType === 'voice' && !state.pendingMemoryAudio && !content) {
+                            state.errorMsg = '請先錄製語音或寫低一些內容。';
+                            render();
+                            return;
+                        }
 
                         let imgUrl = null;
                         let thumbnailUrl = null;
@@ -4123,7 +4128,10 @@
                             img: imgUrl || (state.pendingMemoryType === 'photo' ? state.pendingMemoryImage : null),
                             imgUrl,
                             imageUrl: imgUrl,
-                            thumbnailUrl
+                            thumbnailUrl,
+                            audioUrl: state.pendingMemoryType === 'voice' ? state.pendingMemoryAudio : null,
+                            duration: state.pendingMemoryType === 'voice' ? state.pendingMemoryAudioDuration : 0,
+                            createdAt: today.toISOString()
                         };
 
                         if (state.backendMode === 'server' && state.familyId) {
