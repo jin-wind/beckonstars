@@ -2132,6 +2132,7 @@ const server = http.createServer(async (req, res) => {
       const now = new Date();
       const imageUrl = cleanLargeText(body.imgUrl || body.imageUrl || body.img) || null;
       const thumbnailUrl = cleanLargeText(body.thumbnailUrl || body.thumbnail) || null;
+      const audioUrl = cleanLargeText(body.audioUrl) || null;
       const memory = {
         id: `${now.getTime()}_${Math.random().toString(36).slice(2, 8)}`,
         uid: cleanText(body.uid),
@@ -2146,16 +2147,18 @@ const server = http.createServer(async (req, res) => {
         imgUrl: imageUrl,
         imageUrl,
         thumbnailUrl,
+        audioUrl,
+        duration: Number(body.duration) || 0,
         createdAt: now.toISOString()
       };
-      if (!memory.content && !getMemoryImageValue(memory)) {
+      if (!memory.content && !getMemoryImageValue(memory) && !memory.audioUrl) {
         sendJson(res, 400, { error: 'empty-content' });
         return;
       }
       latestFamily.memories.push(memory);
       latestFamily.memories = latestFamily.memories.slice(-1000);
       await writeDb(latestDb);
-      console.log(`[data] 📝 新回憶 [${familyId}] ${memory.childName}: ${memory.type === 'photo' ? '📷 圖片' : memory.content.slice(0, 50)}`);
+      console.log(`[data] 📝 新回憶 [${familyId}] ${memory.childName}: ${memory.type === 'photo' ? '📷 圖片' : memory.type === 'voice' ? '🎤 語音' : memory.content.slice(0, 50)}`);
       sendJson(res, 201, { memory });
       return;
     }
