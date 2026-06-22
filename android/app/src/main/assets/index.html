@@ -3401,6 +3401,32 @@
                                 </div>
                                 ${state.pendingMemoryImage ? `<img src="${state.pendingMemoryImage}" class="w-full h-40 object-cover rounded-2xl border border-blue-100 mt-2">` : ''}
                             ` : ''}
+                            ${state.pendingMemoryType === 'voice' ? `
+                                <div class="bg-purple-50 border-2 border-purple-100 rounded-2xl p-4 mb-3">
+                                    ${!state.pendingMemoryAudio ? `
+                                        <button type="button" class="action-btn w-full bg-purple-500 text-white rounded-2xl py-4 font-bold flex items-center justify-center" data-action="startMemoryVoiceRecording">
+                                            <i class="fa-solid fa-microphone bs-text-2xl mr-2"></i>
+                                            <span class="bs-text-lg">按住錄音</span>
+                                        </button>
+                                        <p class="text-purple-600 bs-text-xs text-center mt-2">點擊按鈕開始錄製語音回憶</p>
+                                    ` : `
+                                        <div class="flex items-center justify-between bg-white rounded-xl p-3">
+                                            <div class="flex items-center">
+                                                <div class="w-10 h-10 bg-purple-500 rounded-full flex items-center justify-center text-white mr-3">
+                                                    <i class="fa-solid fa-microphone"></i>
+                                                </div>
+                                                <div>
+                                                    <p class="font-bold text-gray-800 bs-text-base">語音錄製完成</p>
+                                                    <p class="text-gray-500 bs-text-sm">${state.pendingMemoryAudioDuration}秒</p>
+                                                </div>
+                                            </div>
+                                            <button type="button" class="action-btn w-8 h-8 bg-red-50 text-red-500 rounded-full flex items-center justify-center" data-action="deleteMemoryVoiceRecording">
+                                                <i class="fa-solid fa-trash-alt"></i>
+                                            </button>
+                                        </div>
+                                    `}
+                                </div>
+                            ` : ''}
                             ${state.errorMsg ? `<p class="text-red-500 bs-text-sm animate-shake">${state.errorMsg}</p>` : ''}
                         </div>
                         <button class="action-btn w-full py-3 bg-brand text-white font-bold rounded-xl shadow-md mb-3" data-action="saveMemory">儲存回憶</button>
@@ -5183,7 +5209,7 @@
                 const stylePrompts = {
                     'garden': 'A professional, high-resolution portrait photograph of the smiling [主體] (based on image_1.png) in a tranquil traditional Chinese garden at sunrise. The soft, golden sunlight filters through stylized bamboo stalks. The subject maintains the identical pose with hands joined in a downward triangle mudra and wears the same grey embroidered t-shirt (as seen in image_0.png).\n\nThe traditional Chinese text elements from image_0.png are integrated into the scene with perfect clarity, using elegant calligraphic fonts (like KaiTi) that match the color scheme but feel like curated signposts or scrolls hanging in the space:\n\nTop-left, a large horizontal red scroll: "早安"\n\nOn a hanging vertical red silk banner on the far left: "笑口常開"\n\nOn an inner red vertical banner to the left: "开心微微笑"\n\nOn a middle red vertical banner to the left: "甜美要大方"\n\nOn an inner red vertical banner to the right: "甜甜笑一笑"\n\nEngraved on a stylized golden plaque with a dark outline on the far right: "人人都喜愛"\n\nSoft bokeh of pink cherry blossoms and traditional stone architecture in the background. Peaceful, elegant, and spiritually uplifting atmosphere.',
 
-                    'explosion': 'A professional, hyper-realistic photo of the single smiling woman from image_0.png, maintaining the exact same serene expression and inverted triangle hand pose. She is wearing her identical floral grey t-shirt. The entire scene around her, however, is a chaotic action movie explosion. Huge fireballs are blooming behind her from a multi-car pileup, debris is flying, and smoke fills the air. She stands perfectly still and peaceful. All the Chinese text from image_0.png is precisely overlaid in its original positions, colors, and fonts, making the wholesome messages look ridiculous in the fiery chaos:\n\nTop-left (Large Red): "早安"\n\nLeft Side (Vertical Red): "笑口常開", "开心微微笑", "甜美要大方"\n\nRight Side (Vertical): "甜甜笑一笑" (Red), "人人都喜愛" (Yellow with black outline)',
+                    'explosion': 'A professional, hyper-realistic 3:4 vertical photograph of the exact smiling woman from image_0.png, strictly maintaining her precise serene, peaceful expression and identical inverted triangle (inverted heart) hand pose held at her chest. She wears her identical gray T-shirt with the detailed floral pattern seen in image_0.png. She stands perfectly still and calm, centered in the foreground. Directly behind her is a scene of utter, chaotic action movie destruction: a massive multi-car pileup is engulfed in giant, blooming fireballs of orange, red, and yellow, filling the air with black smoke and countless pieces of flying metal debris, tires, and glass. The depth of field keeps the woman sharp, while the explosion background has dynamic motion and kinetic energy. The entire scene is captured within a 3:4 vertical frame. High-definition details on the fabric, skin texture, and flying debris. Complex lighting combines ambient light with the intense glow of the explosions. All original Chinese text from image_0.png is precisely overlaid in its original positions, colors, and fonts, creating a ridiculous contrast: ​Top-left: Large, bold red text reads "早安". ​Left Side (Vertical Sequence, red text): Text reads, from top to bottom, "笑口常開", "开心微微笑", "甜美要大方". ​Right Side (Vertical Sequence): Text reads, from top to bottom, "甜甜笑一笑" (red text), followed by "人人都喜愛" (yellow text with a distinct black outline). ​The stark contrast between the wholesome messages and the fiery chaos is palpable and absurd.',
 
                     'studio': 'A high-resolution, full-body portrait photograph of a single person (the character, described below, but from a neutral gender template) standing against a plain, light-grey wall. The character has a sincere, pleasant, but slightly practiced smile. They are standing alone, facing forward, wearing the identical grey short-sleeve t-shirt with the green leaf and white flower patterns on the shoulders, and holding their hands joined at the waist, forming a downward-pointing triangle, exactly as seen in image_0.png. The pose is precise. The person\'s face is new (placeholder for image_1.png relative), but has the same expression.\n\nAll the Chinese text from image_0.png is precisely overlaid in its original positions and colors:\n\nTop-left (Large, Red, Horizontal): "早安"\n\nFar-left (Vertical, Red): "笑口常開"\n\nInner-left (Vertical, Red): "开心微微笑"\n\nMiddle-left (Vertical, Red): "甜美要大方"\n\nInner-right (Vertical, Red): "甜甜笑一笑"\n\nFar-right (Vertical, Yellow with dark outline): "人人都喜愛"\n\nThe scene is lit with bright, even studio light, giving it a slightly institutional feel. The background wall is otherwise bare, except for a small, out-of-focus brass plaque in the far distance reading \'OFFICIAL GREETING DEPT.\' to add to the forced-institutional humor. The entire image has a high-quality, sharp finish. This prompt is designed as a template to accept a specific person (male or female) in place of the character and to fit them into this exact visual, text-heavy frame. The character described is a neutral, pleasant individual.',
 
