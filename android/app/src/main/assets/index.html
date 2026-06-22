@@ -1914,6 +1914,7 @@
             const date = data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt ? new Date(data.createdAt) : new Date());
             const imageUrl = data.imgUrl || data.imageUrl || data.image_url || data.img || null;
             const thumbnailUrl = data.thumbnailUrl || data.thumbnail || data.thumbnail_url || null;
+            const audioUrl = data.audioUrl || data.audio_url || null;
             return {
                 id,
                 date: data.date || date.getDate(),
@@ -1927,7 +1928,9 @@
                 img: data.img || imageUrl,
                 imgUrl: imageUrl,
                 imageUrl,
-                thumbnailUrl
+                thumbnailUrl,
+                audioUrl,
+                duration: data.duration || 0
             };
         }
 
