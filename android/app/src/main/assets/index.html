@@ -205,6 +205,8 @@
             pendingMemoryType: 'text',
             pendingMemoryContent: '',
             pendingMemoryImage: '',
+            pendingMemoryAudio: null,           // base64 data URL for recorded audio
+            pendingMemoryAudioDuration: 0,      // duration in seconds
             voiceRecording: createIdleVoiceRecordingState(),
             transcribingMessageId: null,
             backendMode: 'server',
@@ -3949,6 +3951,8 @@
                         state.showModal = newBtn.getAttribute('data-modal');
                         state.pendingMemoryType = 'text';
                         state.pendingMemoryImage = '';
+                        state.pendingMemoryAudio = null;
+                        state.pendingMemoryAudioDuration = 0;
                         if (state.showModal === 'videoPlayer') {
                             state.videoUrl = null;
                             state.videoError = null;
@@ -4005,6 +4009,9 @@
                         state.dailyRewardCelebration = null;
                         state.selectedDate = null;
                         state.pendingMemoryContent = '';
+                        state.pendingMemoryImage = '';
+                        state.pendingMemoryAudio = null;
+                        state.pendingMemoryAudioDuration = 0;
                         state.videoUrl = null;
                         state.videoError = null;
                         state.videoGenerating = false;
@@ -4086,6 +4093,8 @@
                                 state.pendingMemoryType = 'text';
                                 state.pendingMemoryContent = '';
                                 state.pendingMemoryImage = '';
+                                state.pendingMemoryAudio = null;
+                                state.pendingMemoryAudioDuration = 0;
                                 render();
                                 setTimeout(() => showMessage('已儲存今日回憶到自架服務器，並獲得 10 積分。'), 100);
                             } catch (error) {
@@ -4103,6 +4112,8 @@
                         state.pendingMemoryType = 'text';
                         state.pendingMemoryContent = '';
                         state.pendingMemoryImage = '';
+                        state.pendingMemoryAudio = null;
+                        state.pendingMemoryAudioDuration = 0;
                         render();
                         setTimeout(() => showMessage('已儲存今日回憶，並獲得 10 積分。'), 100);
                     }
