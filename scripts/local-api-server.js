@@ -492,15 +492,47 @@ function writeDb(db) {
     return _writeLock;
   }
 
-  const payload = JSON.stringify(db, null, 2);
+  // 注意：payload 在進入鎖之前計算，因此調用者應確保 db 物件在 writeDb 回傳前不會被修改。
+  // 調試：記錄即将寫入的 payload 大小與一個簡單摘要。
+  let payload;
+  try {
+    payload = JSON.stringify(db, null, 2);
+  } catch (err) {
+    console.error('[db] JSON.stringify failed:', err.message);
+    return Promise.reject(err);
+  }
   const tmpPath = `${dbPath}.tmp`;
+  const payloadSize = Buffer.byteLength(payload, 'utf8');
   _writeLock = _writeLock
     .then(async () => {
+      console.log(`[db] writing ${payloadSize} bytes to ${dbPath}`);
       await fs.promises.writeFile(tmpPath, payload, 'utf8');
       await fs.promises.rename(tmpPath, dbPath);
+      console.log(`[db] write done: ${dbPath}`);
     })
     .catch(err => {
       console.error('[db] write failed:', err.message);
+      throw err;
+    });
+  return _writeLock;
+}
+
+// 原子性讀取-修改-寫入，用於需要避免讀寫競爭的場景。
+async function atomicUpdateDb(asyncModifier) {
+  _writeLock = _writeLock
+    .then(async () => {
+      const db = await readDb();
+      await asyncModifier(db);
+      const payload = JSON.stringify(db, null, 2);
+      const payloadSize = Buffer.byteLength(payload, 'utf8');
+      const tmpPath = `${dbPath}.tmp`;
+      console.log(`[db] atomic writing ${payloadSize} bytes to ${dbPath}`);
+      await fs.promises.writeFile(tmpPath, payload, 'utf8');
+      await fs.promises.rename(tmpPath, dbPath);
+      console.log(`[db] atomic write done: ${dbPath}`);
+    })
+    .catch(err => {
+      console.error('[db] atomic write failed:', err.message);
       throw err;
     });
   return _writeLock;
@@ -2040,20 +2072,30 @@ const server = http.createServer(async (req, res) => {
             const transcript = await transcribeAudioWithLlm(audioData);
             console.log(`[transcribe] 轉譯結果: "${transcript?.slice(0, 50) || '(empty)'}"`);
             if (transcript) {
-              const db = await readDb();
-              const family = getFamily(db, familyId);
-              console.log(`[transcribe] 找到家庭: ${!!family}, 消息數: ${family?.messages?.length || 0}`);
-              const msg = family?.messages?.find(m => m.id === message.id);
-              console.log(`[transcribe] 找到目標消息: ${!!msg}, ID: ${msg?.id}`);
-              if (msg) {
-                msg.transcript = transcript;
-                if (!msg.content || msg.content === '語音訊息') msg.content = transcript;
-                msg.transcriptUpdatedAt = new Date().toISOString();
-                console.log(`[transcribe] 準備寫入數據庫，transcript: "${msg.transcript?.slice(0, 30)}"`);
-                await writeDb(db);
-                console.log(`[transcribe] ✅ 數據庫已更新，語音轉譯完成 [${familyId}] ${transcript.slice(0, 50)}`);
-              } else {
-                console.warn(`[transcribe] ⚠️ 未找到消息 ${message.id} 在家庭 ${familyId}`);
+              await atomicUpdateDb(async (db) => {
+                const family = getFamily(db, familyId);
+                console.log(`[transcribe] 找到家庭: ${!!family}, 消息數: ${family?.messages?.length || 0}`);
+                const msg = family?.messages?.find(m => m.id === message.id);
+                console.log(`[transcribe] 找到目標消息: ${!!msg}, ID: ${msg?.id}`);
+                if (msg) {
+                  msg.transcript = transcript;
+                  if (!msg.content || msg.content === '語音訊息') msg.content = transcript;
+                  msg.transcriptUpdatedAt = new Date().toISOString();
+                  console.log(`[transcribe] 準備寫入數據庫，transcript: "${msg.transcript?.slice(0, 30)}"`);
+                } else {
+                  console.warn(`[transcribe] ⚠️ 未找到消息 ${message.id} 在家庭 ${familyId}`);
+                }
+              });
+              console.log(`[transcribe] ✅ 數據庫已更新，語音轉譯完成 [${familyId}] ${transcript.slice(0, 50)}`);
+
+              // 寫入後立即驗證
+              try {
+                const verifyDb = await readDb();
+                const verifyFamily = getFamily(verifyDb, familyId);
+                const verifyMsg = verifyFamily?.messages?.find(m => m.id === message.id);
+                console.log(`[transcribe] 寫入驗證: 消息 ${message.id} transcript="${verifyMsg?.transcript || '(empty)'}", content="${verifyMsg?.content?.slice(0, 30) || '(empty)'})"`);
+              } catch (verifyErr) {
+                console.error('[transcribe] 寫入驗證失敗:', verifyErr.message);
               }
             }
           } catch (err) {
