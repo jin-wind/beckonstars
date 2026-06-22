@@ -207,6 +207,7 @@
             pendingMemoryImage: '',
             pendingMemoryAudio: null,           // base64 data URL for recorded audio
             pendingMemoryAudioDuration: 0,      // duration in seconds
+            recordingForMemory: false,          // flag to distinguish memory recording from chat
             voiceRecording: createIdleVoiceRecordingState(),
             transcribingMessageId: null,
             backendMode: 'server',
@@ -4063,6 +4064,23 @@
                     else if (action === 'chooseMemoryCamera') {
                         const cameraInput = document.getElementById('memoryCameraInput');
                         cameraInput?.click();
+                    }
+                    else if (action === 'startMemoryVoiceRecording') {
+                        if (!isAndroidApk()) {
+                            showMessage('語音錄製功能僅在 Android APK 中可用。');
+                            return;
+                        }
+                        if (!window.BeckonStarsAndroid?.startVoiceRecording) {
+                            showMessage('您的 APK 版本不支援語音錄製。');
+                            return;
+                        }
+                        state.recordingForMemory = true;
+                        window.BeckonStarsAndroid.startVoiceRecording();
+                    }
+                    else if (action === 'deleteMemoryVoiceRecording') {
+                        state.pendingMemoryAudio = null;
+                        state.pendingMemoryAudioDuration = 0;
+                        render();
                     }
                     else if (action === 'saveMemory') {
                         const memoryContentInput = document.getElementById('memoryContentInput');
