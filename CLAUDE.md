@@ -154,6 +154,30 @@ Important front-end behavior:
 
 When changing front-end behavior, prefer following the existing single-file pattern unless the task explicitly includes a refactor. Verify changes in the APK path, not just a browser, when touching Android bridge interactions.
 
+### Voice recording for memories (added 2026-06-22)
+
+Memory voice recording reuses the existing `window.BeckonStarsAndroid.startVoiceRecording()` / `finishVoiceRecording()` / `handleAndroidVoiceRecording()` infrastructure used for chat voice messages.
+
+**Key implementation details:**
+
+- **State flags**: `state.recordingForMemory` (routing flag) and `state.isRecordingMemory` (UI state) distinguish memory recording from chat recording.
+- **Data fields**: Android callback returns `recording.audio` (base64 data URL) or `recording.audioUrl` (media API URL). Check both fields, NOT `recording.dataUrl`.
+- **Media upload**: In server mode, voice recordings are uploaded to `/api/media/upload` before saving the memory (like photos). This prevents 400 errors from large base64 payloads in POST body.
+- **UI performance**: Avoid calling `render()` immediately after recording state changes. Use `setTimeout(() => render(), 50-100)` to reduce UI jumps and stuttering during Android's recording lifecycle.
+- **Three UI states**: 
+  1. Not recording: purple "開始錄音" button
+  2. Recording: red pulsing "停止錄音" button with "正在錄製中..." text
+  3. Completed: preview card showing duration with delete button
+- **Modal lifecycle**: Reset `state.isRecordingMemory`, `state.recordingForMemory`, `state.pendingMemoryAudio`, and `state.pendingMemoryAudioDuration` when closing the addMemory modal.
+- **Callback routing**: The `handleAndroidVoiceRecording` callback checks `state.recordingForMemory` first and returns early for memory recordings, preventing interference with chat voice message logic.
+
+**Common pitfalls:**
+
+- ❌ Don't use `showMessage()` after recording completion in a modal context - it overwrites `state.showModal` and closes the current modal.
+- ❌ Don't check only `recording.dataUrl` - use `recording.audio || recording.audioUrl`.
+- ❌ Don't send base64 audio directly to server - upload via media API first (server mode).
+- ❌ Don't call `render()` synchronously during recording transitions - causes UI jumps.
+
 ## CI/release
 
 GitHub Actions builds debug APKs with JDK 17:
