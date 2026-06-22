@@ -5053,7 +5053,7 @@
                 state.pendingMemoryAudio = audioData;
                 state.pendingMemoryAudioDuration = Math.round((recording.durationMs || 0) / 1000);
                 render();
-                showMessage('錄音完成，可以儲存回憶了。');
+                // Don't show message - the UI change is enough feedback
                 return;
             }
 
