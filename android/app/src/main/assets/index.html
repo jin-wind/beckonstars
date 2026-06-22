@@ -3456,6 +3456,26 @@
                                             <span class="bs-text-sm font-bold text-gray-700">${m.childName}</span>
                                         </div>
                                         ${memoryImageSrc ? `<img src="${escapeAttribute(memoryImageSrc)}" class="w-full h-32 object-cover rounded-xl mb-2">` : ''}
+                                        ${m.type === 'voice' && m.audioUrl ? `
+                                            <div class="bg-purple-50 border border-purple-100 rounded-xl p-3 mb-2">
+                                                <div class="flex items-center justify-between mb-2">
+                                                    <div class="flex items-center">
+                                                        <div class="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center text-white mr-2">
+                                                            <i class="fa-solid fa-microphone bs-text-sm"></i>
+                                                        </div>
+                                                        <div>
+                                                            <p class="font-bold text-purple-700 bs-text-sm">語音回憶</p>
+                                                            <p class="text-purple-600 bs-text-xs">${m.duration || 0}秒</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <audio controls class="w-full" style="height: 32px;" preload="metadata">
+                                                    <source src="${escapeAttribute(m.audioUrl)}" type="audio/mp4">
+                                                    <source src="${escapeAttribute(m.audioUrl)}" type="audio/mpeg">
+                                                    您的瀏覽器不支援音頻播放。
+                                                </audio>
+                                            </div>
+                                        ` : ''}
                                         <p class="text-gray-800">${m.content}</p>
                                     </div>
                                 `;
