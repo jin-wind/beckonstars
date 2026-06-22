@@ -3479,11 +3479,14 @@
                                                         </div>
                                                     </div>
                                                 </div>
-                                                <audio controls class="w-full" style="height: 32px;" preload="metadata">
+                                                <audio controls class="w-full" style="height: 32px;" preload="metadata"
+                                                    onerror="console.error('[audio] 加載失敗:', this.src, this.error)"
+                                                    onloadedmetadata="console.log('[audio] 加載成功:', this.src, 'duration:', this.duration)">
                                                     <source src="${escapeAttribute(m.audioUrl)}" type="audio/mp4">
                                                     <source src="${escapeAttribute(m.audioUrl)}" type="audio/mpeg">
                                                     您的瀏覽器不支援音頻播放。
                                                 </audio>
+                                                <script>console.log('[audio] audioUrl:', ${JSON.stringify(m.audioUrl)}, 'type:', ${JSON.stringify(m.type)}, 'duration:', ${m.duration});</script>
                                             </div>
                                         ` : ''}
                                         <p class="text-gray-800">${m.content}</p>
