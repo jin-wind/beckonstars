@@ -4105,13 +4105,14 @@
                         state.recordingForMemory = true;
                         state.isRecordingMemory = true;
                         window.BeckonStarsAndroid.startVoiceRecording();
-                        render();
+                        // Don't render immediately to avoid UI jump
+                        setTimeout(() => render(), 50);
                     }
                     else if (action === 'stopMemoryVoiceRecording') {
                         if (window.BeckonStarsAndroid?.finishVoiceRecording) {
                             window.BeckonStarsAndroid.finishVoiceRecording(false);
                             state.isRecordingMemory = false;
-                            render();
+                            // Don't render immediately to avoid UI jump
                         }
                     }
                     else if (action === 'deleteMemoryVoiceRecording') {
@@ -4153,6 +4154,19 @@
                             }
                         }
 
+                        let audioUrl = null;
+                        if (state.pendingMemoryType === 'voice' && state.pendingMemoryAudio && state.backendMode === 'server') {
+                            try {
+                                const blob = await fetch(state.pendingMemoryAudio).then(r => r.blob());
+                                const file = new File([blob], 'memory.m4a', { type: 'audio/mp4' });
+                                const uploaded = await uploadMediaFile(file);
+                                audioUrl = uploaded?.mediaUrl || state.pendingMemoryAudio;
+                            } catch (err) {
+                                console.warn('Audio upload failed, using base64', err);
+                                audioUrl = state.pendingMemoryAudio;
+                            }
+                        }
+
                         const memoryData = {
                             uid: state.authUid || 'local',
                             date: today.getDate(),
@@ -4166,7 +4180,7 @@
                             imgUrl,
                             imageUrl: imgUrl,
                             thumbnailUrl,
-                            audioUrl: state.pendingMemoryType === 'voice' ? state.pendingMemoryAudio : null,
+                            audioUrl: audioUrl || (state.pendingMemoryType === 'voice' ? state.pendingMemoryAudio : null),
                             duration: state.pendingMemoryType === 'voice' ? state.pendingMemoryAudioDuration : 0,
                             createdAt: today.toISOString()
                         };
@@ -5052,8 +5066,8 @@
                 }
                 state.pendingMemoryAudio = audioData;
                 state.pendingMemoryAudioDuration = Math.round((recording.durationMs || 0) / 1000);
-                render();
-                // Don't show message - the UI change is enough feedback
+                // Delay render to avoid UI jump while Android is finishing up
+                setTimeout(() => render(), 100);
                 return;
             }
 
