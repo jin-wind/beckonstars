@@ -4996,6 +4996,20 @@
             }
             if (!recording || recording.cancelled) return;
 
+            // Handle memory recording separately
+            if (state.recordingForMemory) {
+                state.recordingForMemory = false;
+                if (!recording.dataUrl) {
+                    showMessage('錄音失敗，請重試。');
+                    return;
+                }
+                state.pendingMemoryAudio = recording.dataUrl;
+                state.pendingMemoryAudioDuration = Math.round((recording.durationMs || 0) / 1000);
+                render();
+                showMessage('錄音完成，可以儲存回憶了。');
+                return;
+            }
+
             const audio = recording.audio || '';
             const audioUrl = recording.audioUrl || '';
             const transcript = String(recording.transcript || '').trim();
