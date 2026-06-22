@@ -208,6 +208,7 @@
             pendingMemoryAudio: null,           // base64 data URL for recorded audio
             pendingMemoryAudioDuration: 0,      // duration in seconds
             recordingForMemory: false,          // flag to distinguish memory recording from chat
+            isRecordingMemory: false,           // flag to show recording in progress UI
             voiceRecording: createIdleVoiceRecordingState(),
             transcribingMessageId: null,
             backendMode: 'server',
@@ -3404,10 +3405,16 @@
                             ` : ''}
                             ${state.pendingMemoryType === 'voice' ? `
                                 <div class="bg-purple-50 border-2 border-purple-100 rounded-2xl p-4 mb-3">
-                                    ${!state.pendingMemoryAudio ? `
+                                    ${state.isRecordingMemory ? `
+                                        <button type="button" class="action-btn w-full bg-red-500 text-white rounded-2xl py-4 font-bold flex items-center justify-center animate-pulse" data-action="stopMemoryVoiceRecording">
+                                            <i class="fa-solid fa-stop bs-text-2xl mr-2"></i>
+                                            <span class="bs-text-lg">停止錄音</span>
+                                        </button>
+                                        <p class="text-red-600 bs-text-xs text-center mt-2">正在錄製中...</p>
+                                    ` : !state.pendingMemoryAudio ? `
                                         <button type="button" class="action-btn w-full bg-purple-500 text-white rounded-2xl py-4 font-bold flex items-center justify-center" data-action="startMemoryVoiceRecording">
                                             <i class="fa-solid fa-microphone bs-text-2xl mr-2"></i>
-                                            <span class="bs-text-lg">按住錄音</span>
+                                            <span class="bs-text-lg">開始錄音</span>
                                         </button>
                                         <p class="text-purple-600 bs-text-xs text-center mt-2">點擊按鈕開始錄製語音回憶</p>
                                     ` : `
@@ -4060,6 +4067,7 @@
                         state.pendingMemoryImage = '';
                         state.pendingMemoryAudio = null;
                         state.pendingMemoryAudioDuration = 0;
+                        state.isRecordingMemory = false;
                         state.videoUrl = null;
                         state.videoError = null;
                         state.videoGenerating = false;
@@ -4095,7 +4103,16 @@
                             return;
                         }
                         state.recordingForMemory = true;
+                        state.isRecordingMemory = true;
                         window.BeckonStarsAndroid.startVoiceRecording();
+                        render();
+                    }
+                    else if (action === 'stopMemoryVoiceRecording') {
+                        if (window.BeckonStarsAndroid?.finishVoiceRecording) {
+                            window.BeckonStarsAndroid.finishVoiceRecording(false);
+                            state.isRecordingMemory = false;
+                            render();
+                        }
                     }
                     else if (action === 'deleteMemoryVoiceRecording') {
                         state.pendingMemoryAudio = null;
@@ -5027,11 +5044,13 @@
             // Handle memory recording separately
             if (state.recordingForMemory) {
                 state.recordingForMemory = false;
-                if (!recording.dataUrl) {
+                state.isRecordingMemory = false;
+                const audioData = recording.audio || recording.audioUrl || '';
+                if (!audioData) {
                     showMessage('錄音失敗，請重試。');
                     return;
                 }
-                state.pendingMemoryAudio = recording.dataUrl;
+                state.pendingMemoryAudio = audioData;
                 state.pendingMemoryAudioDuration = Math.round((recording.durationMs || 0) / 1000);
                 render();
                 showMessage('錄音完成，可以儲存回憶了。');
