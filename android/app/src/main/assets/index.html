@@ -263,6 +263,18 @@
             '今日適宜分享一張靚靚風景相',
             '今日適宜同屋企人分享一件開心事 ✨'
         ];
+        const catholicDailyVerses = [
+            { chineses: '約', chapter: 3, verse: 16, reference: '若望福音 3:16', text: '天主竟這樣愛了世界，甚至賜下了自己的獨生子。' },
+            { chineses: '詩', chapter: 23, verse: 1, reference: '聖詠 23:1', text: '上主是我的牧者，我實在一無所缺。' },
+            { chineses: '羅', chapter: 12, verse: 12, reference: '羅馬書 12:12', text: '在望德中要喜樂，在困苦中要忍耐。' },
+            { chineses: '腓', chapter: 4, verse: 6, reference: '斐理伯書 4:6', text: '你們什麼也不要掛慮，只要懷著感恩祈禱。' },
+            { chineses: '賽', chapter: 41, verse: 10, reference: '依撒意亞 41:10', text: '不要害怕，因為我與你同在。' },
+            { chineses: '箴', chapter: 3, verse: 5, reference: '箴言 3:5', text: '你應全心信賴上主。' },
+            { chineses: '太', chapter: 5, verse: 9, reference: '瑪竇福音 5:9', text: '締造和平的人是有福的。' },
+            { chineses: '路', chapter: 1, verse: 38, reference: '路加福音 1:38', text: '願照你的話成就於我吧！' },
+            { chineses: '約', chapter: 20, verse: 28, reference: '若望福音 20:28', text: '我主！我天主！' },
+            { chineses: '林前', chapter: 13, verse: 13, reference: '格林多前書 13:13', text: '現今存在的，有信、望、愛；其中最大的是愛。' }
+        ];
         const initialState = JSON.parse(JSON.stringify(state));
         let unsubscribeMessages = null;
         let unsubscribeMemories = null;
@@ -291,6 +303,71 @@
             let hash = 0;
             for (let i = 0; i < seed.length; i++) hash = ((hash * 31) + seed.charCodeAt(i)) >>> 0;
             return familyEncouragementMessages[hash % familyEncouragementMessages.length];
+        }
+
+        function getDailyCatholicVerse(dateStr) {
+            const seed = String(dateStr || new Date().toISOString().slice(0, 10));
+            let hash = 0;
+            for (let i = 0; i < seed.length; i++) hash = ((hash * 31) + seed.charCodeAt(i)) >>> 0;
+            const verse = catholicDailyVerses[hash % catholicDailyVerses.length];
+            return {
+                ok: true,
+                translation: 'catholic-fallback',
+                versionName: '天主教金句',
+                reference: verse.reference,
+                text: verse.text,
+                source: '天主教金句（離線備援）'
+            };
+        }
+
+        function cleanBibleText(value) {
+            return String(value || '')
+                .replace(/<h[1-6][^>]*>[\s\S]*?<\/h[1-6]>/gi, ' ')
+                .replace(/<[^>]*>/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
+
+        async function fetchFhlCatholicVerse(dateStr) {
+            const fallback = getDailyCatholicVerse(dateStr);
+            const target = catholicDailyVerses.find(item => item.reference === fallback.reference) || catholicDailyVerses[0];
+            const params = new URLSearchParams({
+                chineses: target.chineses,
+                chap: String(target.chapter),
+                sec: String(target.verse),
+                version: 'ofm',
+                gb: '0'
+            });
+            const sourceUrl = `https://bible.fhl.net/json/qb.php?${params.toString()}`;
+            const response = await fetch(sourceUrl);
+            if (!response.ok) throw new Error(`fhl-ofm-${response.status}`);
+            const data = await response.json();
+            const record = Array.isArray(data.record) ? data.record[0] : null;
+            const text = cleanBibleText(record?.bible_text);
+            if (data.status !== 'success' || !record || !text) throw new Error('fhl-ofm-empty-verse');
+            return {
+                ok: true,
+                translation: data.version || 'ofm',
+                versionName: data.v_name || '思高譯本',
+                reference: target.reference,
+                text,
+                source: '信望愛站思高譯本',
+                sourceUrl
+            };
+        }
+
+        function formatSolarTermText(nextJieQi) {
+            if (!nextJieQi?.name) return '節氣資料準備中';
+            const days = Number(nextJieQi.daysUntil);
+            if (Number.isFinite(days) && days === 0) return `今日節氣：${nextJieQi.name}`;
+            if (Number.isFinite(days)) return `下個節氣：${nextJieQi.name}，還有 ${days} 日`;
+            return `下個節氣：${nextJieQi.name}`;
+        }
+
+        function formatLunarDateText(almanac) {
+            const lunar = almanac?.lunar;
+            if (!lunar) return '農曆資料準備中';
+            return `農曆${lunar.month || ''}${lunar.day || ''} · ${lunar.dayGanZhi || ''}日`.replace(/\s+·\s+日$/, '');
         }
 
         function createIdleVoiceRecordingState() {
@@ -1474,80 +1551,13 @@
             });
         }
 
-        function getDailyBibleVerseTarget(dateStr) {
-            const verses = [
-                { chineses: '約', bid: 43, chapter: 3, verse: 16, reference: '約翰福音 3:16' },
-                { chineses: '詩', bid: 19, chapter: 23, verse: 1, reference: '詩篇 23:1' },
-                { chineses: '羅', bid: 45, chapter: 12, verse: 12, reference: '羅馬書 12:12' },
-                { chineses: '腓', bid: 50, chapter: 4, verse: 6, reference: '腓立比書 4:6' },
-                { chineses: '賽', bid: 23, chapter: 41, verse: 10, reference: '以賽亞書 41:10' },
-                { chineses: '箴', bid: 20, chapter: 3, verse: 5, reference: '箴言 3:5' },
-                { chineses: '太', bid: 40, chapter: 5, verse: 9, reference: '馬太福音 5:9' }
-            ];
-            const seed = String(dateStr || new Date().toISOString().slice(0, 10));
-            let hash = 0;
-            for (let i = 0; i < seed.length; i++) hash = ((hash * 31) + seed.charCodeAt(i)) >>> 0;
-            return verses[hash % verses.length];
-        }
-
-        async function fetchFhlBibleVerse(dateStr) {
-            const target = getDailyBibleVerseTarget(dateStr);
-            const params = new URLSearchParams({
-                chineses: target.chineses,
-                chap: String(target.chapter),
-                sec: String(target.verse),
-                version: 'unv',
-                gb: '0'
-            });
-            const sourceUrl = `https://bible.fhl.net/json/qb.php?${params.toString()}`;
-            const response = await fetch(sourceUrl);
-            if (!response.ok) throw new Error(`fhl-${response.status}`);
-            const data = await response.json();
-            const record = data.record && data.record[0];
-            if (data.status !== 'success' || !record || !record.bible_text) throw new Error('fhl-empty-verse');
-            return {
-                ok: true,
-                translation: data.version || 'unv',
-                versionName: data.v_name || 'FHL和合本',
-                book: target.bid,
-                chapter: record.chap || target.chapter,
-                verse: record.sec || target.verse,
-                reference: `${target.reference}`,
-                text: String(record.bible_text || '').replace(/\s+/g, ' ').trim(),
-                source: '信望愛站聖經',
-                sourceUrl
-            };
-        }
-
-        async function fetchBollsLifeBibleVerse() {
-            const response = await fetch('https://bolls.life/get-random-verse/CUV/');
-            if (!response.ok) throw new Error(`bolls-${response.status}`);
-            const verse = await response.json();
-            return {
-                ok: true,
-                translation: verse.translation || 'CUV',
-                book: verse.book,
-                chapter: verse.chapter,
-                verse: verse.verse,
-                reference: `CUV ${verse.book}:${verse.chapter}:${verse.verse}`,
-                text: String(verse.text || '').replace(/\s+/g, ' ').trim(),
-                source: 'Bolls Life Bible API',
-                sourceUrl: 'https://bolls.life/get-random-verse/CUV/'
-            };
-        }
-
         async function fetchDailyBibleVerse(dateStr) {
             return fetchCachedDateResource(dateStr, bibleVerseCache, bibleVerseRequests, async () => {
                 try {
-                    return await fetchFhlBibleVerse(dateStr);
+                    return await fetchFhlCatholicVerse(dateStr);
                 } catch (e) {
-                    console.warn('FHL Bible verse fetch failed, falling back to Bolls Life', e);
-                    try {
-                        return await fetchBollsLifeBibleVerse();
-                    } catch (fallbackError) {
-                        console.warn('Bible verse fallback fetch failed', fallbackError);
-                        return { ok: false, error: 'bible-verse-unavailable', source: '信望愛站聖經' };
-                    }
+                    console.warn('FHL OFM Bible verse fetch failed, using offline Catholic fallback', e);
+                    return getDailyCatholicVerse(dateStr);
                 }
             });
         }
@@ -1560,11 +1570,13 @@
                 request.then(result => { if (result) updateCalendarContent(); });
                 return request;
             }
-            return Promise.resolve({
+            const request = fetchAlmanac(dateStr);
+            request.then(result => { if (result) updateCalendarContent(); });
+            return request.catch(() => ({
                 ok: true,
                 text: getDailyEncouragement(key),
                 source: 'family-encouragement'
-            });
+            }));
         }
 
         function prefetchDailyCardWindow(year = state.calendarYear, month = state.calendarMonth, day = state.calendarDay || today.getDate()) {
@@ -2552,15 +2564,16 @@
             const isToday = isCurrentMonth && displayDay === today.getDate();
             const dayMemories = memories.filter(m => m.date === displayDay && m.month === displayMonth);
             const dateKey = getDisplayedDateKey(displayYear, displayMonth, displayDay);
-            const bibleVerse = bibleVerseCache[dateKey] || null;
+            const bibleVerse = bibleVerseCache[dateKey] || (state.dailyCardMode === 'bible' ? getDailyCatholicVerse(dateKey) : null);
+            const almanac = almanacCache[dateKey] || null;
             const hasBibleVerse = bibleVerse && bibleVerse.ok;
 
             // 日曆副標題顯示
             let subDateDisplay = '';
             if (state.dailyCardMode === 'bible') {
-                subDateDisplay = `<p class="bs-text-xs text-gray-400 mt-1">${isToday ? '今日' : `${displayMonth}月${displayDay}日`} · 聖經金句</p>`;
+                subDateDisplay = `<p class="bs-text-xs text-gray-400 mt-1">${isToday ? '今日' : `${displayMonth}月${displayDay}日`} · 天主教金句</p>`;
             } else {
-                subDateDisplay = `<p class="bs-text-xs text-gray-400 mt-1">${isToday ? '今日' : `${displayMonth}月${displayDay}日`} · 家庭小提醒</p>`;
+                subDateDisplay = `<p class="bs-text-xs text-gray-400 mt-1">${isToday ? '今日' : `${displayMonth}月${displayDay}日`} · 家庭小提醒 · 黃曆</p>`;
             }
 
             let dailyCardHtml = '';
@@ -2569,24 +2582,42 @@
                     dailyCardHtml = `
                         <div class="bg-[#FFF8F0] border border-amber-200 rounded-xl p-4 pb-7 shadow-sm inline-block text-left relative max-w-full">
                             <div class="flex items-center gap-2 mb-2">
-                                <span class="bg-amber-100 text-amber-700 px-2 py-1 rounded bs-text-sm font-bold">${isToday ? '今日金句' : '金句'}</span>
+                                <span class="bg-amber-100 text-amber-700 px-2 py-1 rounded bs-text-sm font-bold">${isToday ? '今日天主教金句' : '天主教金句'}</span>
                                 <span class="text-gray-500 bs-text-xs font-medium">${escapeHtml(bibleVerse.reference || '')}</span>
                             </div>
                             <p class="text-gray-700 font-medium leading-relaxed">${escapeHtml(bibleVerse.text || '')}</p>
-                            <p class="absolute right-3 bottom-2 text-[3px] text-gray-400 tracking-wide uppercase">FROM ${escapeHtml(bibleVerse.source || '信望愛站聖經')}</p>
+                            <p class="absolute right-3 bottom-2 text-[3px] text-gray-400 tracking-wide uppercase">FROM ${escapeHtml(bibleVerse.source || '思高聖經')}</p>
                         </div>
                     `;
                 }
             } else {
                 const encouragement = getDailyEncouragement(dateKey);
-                dailyCardHtml = `
-                    <div class="bg-[#FFF8F0] border border-orange-200 rounded-xl p-4 shadow-sm inline-block text-left relative max-w-full">
-                        <div class="flex items-start gap-2">
-                            <span class="bg-orange-100 text-brand-dark px-2 py-1 rounded bs-text-sm font-bold shrink-0">${isToday ? '今日適宜' : '適宜'}</span>
-                            <span class="text-gray-700 font-medium leading-relaxed">${escapeHtml(encouragement.replace(/^今日適宜/, '').trim())}</span>
+                if (almanac?.ok) {
+                    const yiItems = Array.isArray(almanac.yi) && almanac.yi.length ? almanac.yi.slice(0, 3).join('、') : encouragement.replace(/^今日適宜/, '').trim();
+                    const jiItems = Array.isArray(almanac.ji) && almanac.ji.length ? almanac.ji.slice(0, 3).join('、') : '';
+                    dailyCardHtml = `
+                        <div class="bg-[#FFF8F0] border border-orange-200 rounded-xl p-4 shadow-sm inline-block text-left relative max-w-full">
+                            <div class="flex items-center gap-2 mb-3">
+                                <span class="bg-orange-100 text-brand-dark px-2 py-1 rounded bs-text-sm font-bold shrink-0">黃曆</span>
+                                <span class="text-gray-500 bs-text-xs font-medium">${escapeHtml(formatLunarDateText(almanac))}</span>
+                            </div>
+                            <div class="space-y-2 text-gray-700 font-medium leading-relaxed">
+                                <p><span class="text-emerald-700 font-bold">宜</span> ${escapeHtml(yiItems || '與家人相聚')}</p>
+                                ${jiItems ? `<p><span class="text-rose-700 font-bold">忌</span> ${escapeHtml(jiItems)}</p>` : ''}
+                                <p class="text-gray-600"><i class="fa-solid fa-sun text-amber-500 mr-1"></i>${escapeHtml(formatSolarTermText(almanac.nextJieQi))}</p>
+                            </div>
                         </div>
-                    </div>
-                `;
+                    `;
+                } else {
+                    dailyCardHtml = `
+                        <div class="bg-[#FFF8F0] border border-orange-200 rounded-xl p-4 shadow-sm inline-block text-left relative max-w-full">
+                            <div class="flex items-start gap-2">
+                                <span class="bg-orange-100 text-brand-dark px-2 py-1 rounded bs-text-sm font-bold shrink-0">${isToday ? '今日適宜' : '適宜'}</span>
+                                <span class="text-gray-700 font-medium leading-relaxed">${escapeHtml(encouragement.replace(/^今日適宜/, '').trim())}</span>
+                            </div>
+                        </div>
+                    `;
+                }
             }
 
             return `
@@ -2990,7 +3021,7 @@
                     <div class="bg-white rounded-3xl shadow-sm p-5 flex items-center justify-between">
                         <div>
                             <p class="font-bold text-gray-800 bs-text-lg">手撕日曆內容</p>
-                            <p class="bs-text-sm text-gray-500">${usesBibleVerse ? '顯示聖經金句' : '顯示家庭小提醒'}</p>
+                            <p class="bs-text-sm text-gray-500">${usesBibleVerse ? '顯示天主教金句' : '顯示家庭小提醒與黃曆節氣'}</p>
                         </div>
                         <button class="action-btn relative w-14 h-8 rounded-full transition-colors" data-action="toggleDailyCardMode" aria-label="切換手撕日曆內容"
                             style="background: ${usesBibleVerse ? '#F59E0B' : '#d1d5db'}">
@@ -3895,9 +3926,9 @@
                         localStorage.setItem(DAILY_CARD_MODE_KEY, state.dailyCardMode);
                         prefetchDailyCardWindow();
                         if (state.dailyCardMode === 'bible') {
-                            showMessage('手撕日曆已切換為聖經金句。');
+                            showMessage('手撕日曆已切換為天主教金句。');
                         } else {
-                            showMessage('手撕日曆已切換為家庭小提醒。');
+                            showMessage('手撕日曆已切換為家庭小提醒與黃曆節氣。');
                         }
                         render();
                     }

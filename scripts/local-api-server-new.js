@@ -93,6 +93,16 @@ function toTraditional(arr) {
   return arr.map(item => SIMP_TO_TRAD[item] || item);
 }
 
+function formatSolarDate(solar) {
+  return `${solar.getYear()}-${String(solar.getMonth()).padStart(2, '0')}-${String(solar.getDay()).padStart(2, '0')}`;
+}
+
+function getDaysBetweenSolar(fromDate, toSolar) {
+  const fromUtc = Date.UTC(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate());
+  const toUtc = Date.UTC(toSolar.getYear(), toSolar.getMonth() - 1, toSolar.getDay());
+  return Math.max(0, Math.round((toUtc - fromUtc) / 86400000));
+}
+
 const BIBLE_BOOK_NAMES = [
   '', '創世記', '出埃及記', '利未記', '民數記', '申命記', '約書亞記', '士師記', '路得記', '撒母耳記上', '撒母耳記下',
   '列王紀上', '列王紀下', '歷代志上', '歷代志下', '以斯拉記', '尼希米記', '以斯帖記', '約伯記', '詩篇', '箴言',
@@ -284,61 +294,76 @@ function cleanTranscript(value, fallback = '') {
   return value.trim().slice(0, 4000);
 }
 
-function normalizeBibleVerseText(value) {
-  return cleanText(value, '').replace(/\s+/g, ' ').trim();
-}
-
 function seededIndex(seed, length) {
   if (!length) return 0;
   const hash = crypto.createHash('sha256').update(String(seed)).digest();
   return hash.readUInt32BE(0) % length;
 }
 
-const fallbackBibleVerses = [
-  { book: 43, chapter: 3, verse: 16, reference: '約翰福音 3:16' },
-  { book: 19, chapter: 23, verse: 1, reference: '詩篇 23:1' },
-  { book: 45, chapter: 12, verse: 12, reference: '羅馬書 12:12' },
-  { book: 50, chapter: 4, verse: 6, reference: '腓立比書 4:6' },
-  { book: 23, chapter: 41, verse: 10, reference: '以賽亞書 41:10' },
-  { book: 20, chapter: 3, verse: 5, reference: '箴言 3:5' },
-  { book: 40, chapter: 5, verse: 9, reference: '馬太福音 5:9' }
+const catholicDailyVerses = [
+  { chineses: '約', chapter: 3, verse: 16, reference: '若望福音 3:16', text: '天主竟這樣愛了世界，甚至賜下了自己的獨生子。' },
+  { chineses: '詩', chapter: 23, verse: 1, reference: '聖詠 23:1', text: '上主是我的牧者，我實在一無所缺。' },
+  { chineses: '羅', chapter: 12, verse: 12, reference: '羅馬書 12:12', text: '在望德中要喜樂，在困苦中要忍耐。' },
+  { chineses: '腓', chapter: 4, verse: 6, reference: '斐理伯書 4:6', text: '你們什麼也不要掛慮，只要懷著感恩祈禱。' },
+  { chineses: '賽', chapter: 41, verse: 10, reference: '依撒意亞 41:10', text: '不要害怕，因為我與你同在。' },
+  { chineses: '箴', chapter: 3, verse: 5, reference: '箴言 3:5', text: '你應全心信賴上主。' },
+  { chineses: '太', chapter: 5, verse: 9, reference: '瑪竇福音 5:9', text: '締造和平的人是有福的。' },
+  { chineses: '路', chapter: 1, verse: 38, reference: '路加福音 1:38', text: '願照你的話成就於我吧！' },
+  { chineses: '約', chapter: 20, verse: 28, reference: '若望福音 20:28', text: '我主！我天主！' },
+  { chineses: '林前', chapter: 13, verse: 13, reference: '格林多前書 13:13', text: '現今存在的，有信、望、愛；其中最大的是愛。' }
 ];
 
-async function fetchBibleVerse(dateSeed = '') {
-  const source = 'Bolls Life Bible API';
-  const sourceUrl = 'https://bolls.life/get-random-verse/CUV/';
-  const primaryResponse = await fetch(sourceUrl);
-  if (primaryResponse.ok) {
-    const verse = await primaryResponse.json();
-    return {
-      ok: true,
-      translation: verse.translation || 'CUV',
-      book: verse.book,
-      chapter: verse.chapter,
-      verse: verse.verse,
-      reference: formatBibleReference(verse.book, verse.chapter, verse.verse),
-      text: normalizeBibleVerseText(verse.text),
-      source,
-      sourceUrl
-    };
-  }
-
-  const fallback = fallbackBibleVerses[seededIndex(dateSeed || new Date().toISOString().slice(0, 10), fallbackBibleVerses.length)];
-  const fallbackUrl = `https://bolls.life/get-verse/CUV/${fallback.book}/${fallback.chapter}/${fallback.verse}/`;
-  const fallbackResponse = await fetch(fallbackUrl);
-  if (!fallbackResponse.ok) throw new Error(`bible-api-${primaryResponse.status}-${fallbackResponse.status}`);
-  const verse = await fallbackResponse.json();
+function getOfflineCatholicVerse(dateSeed = '') {
+  const verse = catholicDailyVerses[seededIndex(dateSeed || new Date().toISOString().slice(0, 10), catholicDailyVerses.length)];
   return {
     ok: true,
-    translation: 'CUV',
-    book: fallback.book,
-    chapter: fallback.chapter,
-    verse: fallback.verse,
-    reference: fallback.reference,
-    text: normalizeBibleVerseText(verse.text),
-    source,
-    sourceUrl: fallbackUrl
+    translation: 'catholic-fallback',
+    versionName: '天主教金句',
+    reference: verse.reference,
+    text: verse.text,
+    source: '天主教金句（離線備援）'
   };
+}
+
+function cleanBibleText(value) {
+  return String(value || '')
+    .replace(/<h[1-6][^>]*>[\s\S]*?<\/h[1-6]>/gi, ' ')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+async function fetchBibleVerse(dateSeed = '') {
+  const fallback = getOfflineCatholicVerse(dateSeed);
+  const target = catholicDailyVerses.find(item => item.reference === fallback.reference) || catholicDailyVerses[0];
+  const params = new URLSearchParams({
+    chineses: target.chineses,
+    chap: String(target.chapter),
+    sec: String(target.verse),
+    version: 'ofm',
+    gb: '0'
+  });
+  const sourceUrl = `https://bible.fhl.net/json/qb.php?${params.toString()}`;
+  try {
+    const response = await fetch(sourceUrl);
+    if (!response.ok) throw new Error(`fhl-ofm-${response.status}`);
+    const data = await response.json();
+    const record = Array.isArray(data.record) ? data.record[0] : null;
+    const text = cleanBibleText(record?.bible_text);
+    if (data.status !== 'success' || !record || !text) throw new Error('fhl-ofm-empty-verse');
+    return {
+      ok: true,
+      translation: data.version || 'ofm',
+      versionName: data.v_name || '思高譯本',
+      reference: target.reference,
+      text,
+      source: '信望愛站思高譯本',
+      sourceUrl
+    };
+  } catch (error) {
+    console.warn('[bible] FHL OFM fetch failed, using offline fallback:', error.message);
+    return fallback;
+  }
 }
 
 function fallbackSummary(text, summaryType = 'voice') {
@@ -1298,6 +1323,8 @@ const server = http.createServer(async (req, res) => {
       const xiuLuck = lunar.getXiuLuck();
       const pw = lunar.getPengZuGan();
       const pzZhi = lunar.getPengZuZhi();
+      const nextJieQi = lunar.getNextJieQi(true);
+      const nextJieQiSolar = nextJieQi?.getSolar?.();
       sendJson(res, 200, {
         ok: true,
         solar: { year: solar.getYear(), month: solar.getMonth(), day: solar.getDay(), weekDay: solar.getWeekInChinese() },
@@ -1311,6 +1338,11 @@ const server = http.createServer(async (req, res) => {
           xiu, xiuLuck,
           pengZu: `${pw}${pzZhi}`
         },
+        nextJieQi: nextJieQi && nextJieQiSolar ? {
+          name: nextJieQi.getName(),
+          date: formatSolarDate(nextJieQiSolar),
+          daysUntil: getDaysBetweenSolar(d, nextJieQiSolar)
+        } : null,
         yi: yiList,
         ji: jiList,
         yiDisplay: yiList.slice(0, 5).join('、'),
