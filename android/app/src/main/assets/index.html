@@ -5304,37 +5304,16 @@
 
         // --- AI 圖片生成 ---
         async function requestSingleAIImage(prompt, refImage) {
-            const response = await fetch('http://144.79.170.102:7860/v1/chat/completions', {
+            const result = await serverApi('/api/ai-image/generate', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': 'Bearer sk-michael'
-                },
                 body: JSON.stringify({
-                    model: 'gemini-3-flash',
-                    messages: [{
-                        role: 'user',
-                        content: [
-                            { type: 'text', text: prompt },
-                            { type: 'image_url', image_url: { url: refImage } }
-                        ]
-                    }],
-                    stream: false
+                    prompt,
+                    referenceImage: refImage,
+                    count: 1
                 })
             });
 
-            if (!response.ok) {
-                const errorText = await response.text();
-                const error = new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`);
-                error.status = response.status;
-                throw error;
-            }
-
-            const result = await response.json();
-            if (result.error) throw new Error(result.error.message || result.error);
-
-            const content = result.choices?.[0]?.message?.content || '';
-            const images = extractAIImageUrls(content);
+            const images = Array.isArray(result?.images) ? result.images.filter(url => isRemoteUrl(url) || isImageDataUrl(url)) : [];
             if (images.length === 0) throw new Error('響應中未找到圖片數據');
             return images[0];
         }
@@ -5421,6 +5400,8 @@
                     errorMsg = '服務器認證失敗，請聯系管理員更新賬號憑證';
                 } else if (error.message?.includes('沒有可用賬號')) {
                     errorMsg = '服務器賬號憑證已過期，請聯系管理員重新登錄 Google Flow';
+                } else if (error.serverMessage) {
+                    errorMsg = error.serverMessage;
                 } else if (error.message) {
                     errorMsg = error.message;
                 }

@@ -488,6 +488,18 @@ const openrouterModels = (process.env.OPENROUTER_FALLBACK_MODELS || openrouterMo
   .filter(Boolean);
 const openrouterReferer = process.env.OPENROUTER_HTTP_REFERER || (process.env.OPENROUTER_SITE_URL || 'https://beckonstars.app');
 
+// AI 圖片生成：新供應商為主，舊主服務器保留作 fallback
+const aiImageProvider = (process.env.AI_IMAGE_PROVIDER || 'kklt').trim().toLowerCase();
+const aiImageFallbackProvider = (process.env.AI_IMAGE_FALLBACK_PROVIDER || (aiImageProvider === 'legacy' ? 'kklt' : 'legacy')).trim().toLowerCase();
+const aiImageFallbackEnabled = !['0', 'false', 'no', 'off'].includes(String(process.env.AI_IMAGE_ENABLE_FALLBACK || 'true').trim().toLowerCase());
+const drawApiBaseUrl = (process.env.DRAW_API_BASE_URL || 'https://tupian.kklt.lol').replace(/\/+$/, '');
+const drawApiKey = process.env.DRAW_API_KEY || '';
+const drawImageSize = process.env.DRAW_IMAGE_SIZE || '3:4';
+const drawImageResolution = process.env.DRAW_IMAGE_RESOLUTION || '2K';
+const legacyImageApiUrl = process.env.LEGACY_IMAGE_API_URL || 'http://144.79.170.102:7860/v1/chat/completions';
+const legacyImageApiKey = process.env.LEGACY_IMAGE_API_KEY || '';
+const legacyImageModel = process.env.LEGACY_IMAGE_MODEL || 'gemini-3-flash';
+
 // 媒體存儲配置
 const mediaStoragePath = process.env.MEDIA_STORAGE_PATH || path.join(process.cwd(), 'data', 'media');
 const mediaBaseUrl = process.env.MEDIA_BASE_URL || '/media';
@@ -695,6 +707,272 @@ function cleanText(value, fallback = '') {
 function cleanLargeText(value, fallback = '') {
   if (typeof value !== 'string') return fallback;
   return value.trim().slice(0, 18_000_000);
+}
+
+function clampNumber(value, fallback, min, max) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(min, Math.min(max, Math.floor(number)));
+}
+
+function isRemoteUrl(value) {
+  const url = String(value || '').trim();
+  return url.startsWith('http://') || url.startsWith('https://');
+}
+
+function isImageDataUrl(value) {
+  return String(value || '').trim().startsWith('data:image/');
+}
+
+function imageMimeToExtension(mime) {
+  const normalized = String(mime || '').toLowerCase();
+  if (normalized.includes('png')) return 'png';
+  if (normalized.includes('webp')) return 'webp';
+  if (normalized.includes('gif')) return 'gif';
+  return 'jpg';
+}
+
+function extractImageUrlsFromText(content) {
+  const text = String(content || '');
+  const images = [];
+  const seen = new Set();
+  const addImage = url => {
+    const value = String(url || '').trim();
+    if (!value || seen.has(value)) return;
+    if (!isRemoteUrl(value) && !isImageDataUrl(value)) return;
+    seen.add(value);
+    images.push(value);
+  };
+
+  const markdownImageRegex = /!\[[^\]]*]\((https?:\/\/[^)\s]+|data:image\/[^)]+)\)/g;
+  let match;
+  while ((match = markdownImageRegex.exec(text)) !== null) {
+    addImage(match[1]);
+  }
+
+  const directUrlRegex = /(https?:\/\/[^\s)"']+|data:image\/[A-Za-z0-9.+-]+;base64,[A-Za-z0-9+/=]+)/g;
+  while ((match = directUrlRegex.exec(text)) !== null) {
+    addImage(match[1]);
+  }
+
+  return images;
+}
+
+function extractGeneratedImageUrls(payload) {
+  const images = [];
+  const seen = new Set();
+  const addImage = value => {
+    for (const imageUrl of extractImageUrlsFromText(value)) {
+      if (!seen.has(imageUrl)) {
+        seen.add(imageUrl);
+        images.push(imageUrl);
+      }
+    }
+  };
+
+  const visit = (value, depth = 0) => {
+    if (value == null || depth > 8) return;
+    if (typeof value === 'string') {
+      addImage(value);
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item, depth + 1);
+      return;
+    }
+    if (typeof value !== 'object') return;
+
+    for (const key of ['url', 'image_url', 'imageUrl', 'src', 'uri', 'output', 'result']) {
+      if (typeof value[key] === 'string') addImage(value[key]);
+    }
+    if (typeof value.b64_json === 'string') addImage(`data:image/png;base64,${value.b64_json}`);
+
+    for (const item of Object.values(value)) {
+      visit(item, depth + 1);
+    }
+  };
+
+  visit(payload);
+  return images;
+}
+
+async function readImageApiPayload(response) {
+  const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+  if (contentType.includes('application/json')) {
+    return response.json();
+  }
+  return response.text();
+}
+
+async function resolveImageInput(imageValue) {
+  const image = cleanLargeText(imageValue);
+  if (!image) return null;
+
+  if (isImageDataUrl(image)) {
+    const match = image.match(/^data:(image\/[A-Za-z0-9.+-]+);base64,(.*)$/s);
+    if (!match) throw new Error('invalid-reference-image');
+    return {
+      buffer: Buffer.from(match[2], 'base64'),
+      mime: match[1].toLowerCase()
+    };
+  }
+
+  if (isRemoteUrl(image)) {
+    const response = await fetch(image);
+    if (!response.ok) throw new Error(`reference-image-fetch-${response.status}`);
+    const mime = String(response.headers.get('content-type') || 'image/jpeg').split(';')[0].toLowerCase();
+    if (!mime.startsWith('image/')) throw new Error('reference-image-not-image');
+    return {
+      buffer: Buffer.from(await response.arrayBuffer()),
+      mime
+    };
+  }
+
+  throw new Error('invalid-reference-image');
+}
+
+function createProviderError(provider, response, payload) {
+  const detail = typeof payload === 'string'
+    ? payload.slice(0, 500)
+    : JSON.stringify(payload || {}).slice(0, 500);
+  const error = new Error(`${provider}-${response.status}${detail ? `: ${detail}` : ''}`);
+  error.status = response.status;
+  error.code = `${provider}-failed`;
+  return error;
+}
+
+async function callKkltImageApi({ prompt, referenceImage, count, size, resolution }) {
+  if (!drawApiKey) {
+    const error = new Error('DRAW_API_KEY 未配置');
+    error.status = 503;
+    error.code = 'draw-key-missing';
+    throw error;
+  }
+
+  const requestCount = clampNumber(count, 1, 1, 5);
+  const requestSize = cleanText(size, drawImageSize) || drawImageSize;
+  const requestResolution = cleanText(resolution, drawImageResolution);
+  const headers = { 'X-Draw-Key': drawApiKey };
+  let response;
+
+  if (referenceImage) {
+    const image = await resolveImageInput(referenceImage);
+    if (!image?.buffer?.length) throw new Error('invalid-reference-image');
+
+    const form = new FormData();
+    const blob = new Blob([image.buffer], { type: image.mime });
+    form.append('image', blob, `reference.${imageMimeToExtension(image.mime)}`);
+    form.append('prompt', prompt);
+    form.append('count', String(requestCount));
+    form.append('size', requestSize);
+    if (requestResolution) form.append('resolution', requestResolution);
+
+    response = await fetch(`${drawApiBaseUrl}/api/draw/edits`, {
+      method: 'POST',
+      headers,
+      body: form
+    });
+  } else {
+    response = await fetch(`${drawApiBaseUrl}/api/draw/generations`, {
+      method: 'POST',
+      headers: {
+        ...headers,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        prompt,
+        count: requestCount,
+        size: requestSize,
+        ...(requestResolution ? { resolution: requestResolution } : {})
+      })
+    });
+  }
+
+  const payload = await readImageApiPayload(response);
+  if (!response.ok) throw createProviderError('kklt', response, payload);
+
+  const images = extractGeneratedImageUrls(payload).slice(0, requestCount);
+  if (images.length === 0) {
+    const error = new Error('新圖片 API 響應中未找到圖片數據');
+    error.status = 502;
+    error.code = 'kklt-empty-images';
+    throw error;
+  }
+
+  return { provider: 'kklt', images };
+}
+
+async function callLegacyImageApi({ prompt, referenceImage }) {
+  if (!legacyImageApiKey) {
+    const error = new Error('LEGACY_IMAGE_API_KEY 未配置');
+    error.status = 503;
+    error.code = 'legacy-key-missing';
+    throw error;
+  }
+
+  const content = [
+    { type: 'text', text: prompt }
+  ];
+  if (referenceImage) {
+    content.push({ type: 'image_url', image_url: { url: referenceImage } });
+  }
+
+  const response = await fetch(legacyImageApiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${legacyImageApiKey}`
+    },
+    body: JSON.stringify({
+      model: legacyImageModel,
+      messages: [{ role: 'user', content }],
+      stream: false
+    })
+  });
+
+  const payload = await readImageApiPayload(response);
+  if (!response.ok) throw createProviderError('legacy', response, payload);
+
+  const images = extractGeneratedImageUrls(payload).slice(0, 1);
+  if (images.length === 0) {
+    const error = new Error('備用圖片 API 響應中未找到圖片數據');
+    error.status = 502;
+    error.code = 'legacy-empty-images';
+    throw error;
+  }
+
+  return { provider: 'legacy', images };
+}
+
+async function callImageProvider(provider, options) {
+  if (provider === 'legacy') return callLegacyImageApi(options);
+  if (provider === 'kklt' || provider === 'draw') return callKkltImageApi(options);
+
+  const error = new Error(`未知圖片供應商: ${provider}`);
+  error.status = 500;
+  error.code = 'unknown-image-provider';
+  throw error;
+}
+
+async function generateAiImages(options) {
+  const primaryProvider = aiImageProvider || 'kklt';
+  try {
+    const result = await callImageProvider(primaryProvider, options);
+    return { ...result, fallbackUsed: false };
+  } catch (primaryError) {
+    const fallbackProvider = aiImageFallbackProvider || '';
+    if (!aiImageFallbackEnabled || !fallbackProvider || fallbackProvider === primaryProvider) {
+      throw primaryError;
+    }
+
+    console.warn(`[ai-image] ${primaryProvider} failed, trying ${fallbackProvider}:`, primaryError.message || primaryError);
+    const fallbackResult = await callImageProvider(fallbackProvider, options);
+    return {
+      ...fallbackResult,
+      fallbackUsed: true,
+      primaryError: primaryError.message || String(primaryError)
+    };
+  }
 }
 
 function cleanTranscript(value, fallback = '') {
@@ -1463,6 +1741,46 @@ const server = http.createServer(async (req, res) => {
         time: new Date().toISOString(),
         logs: serverLogEntries.slice(-limit)
       });
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/api/ai-image/generate') {
+      const authUser = getAuthUser(req);
+      if (!authUser) {
+        sendJson(res, 401, { error: 'unauthorized', message: '請先登入' });
+        return;
+      }
+
+      try {
+        const body = await readBody(req);
+        const prompt = cleanLargeText(body.prompt);
+        if (!prompt) {
+          sendJson(res, 400, { error: 'missing-prompt', message: '缺少圖片生成提示詞' });
+          return;
+        }
+
+        const result = await generateAiImages({
+          prompt,
+          referenceImage: cleanLargeText(body.referenceImage || body.refImage || body.image),
+          count: body.count,
+          size: body.size || drawImageSize,
+          resolution: body.resolution || drawImageResolution
+        });
+
+        console.log(`[ai-image] ✅ ${authUser.email} provider=${result.provider}${result.fallbackUsed ? ' fallback=true' : ''} images=${result.images.length}`);
+        sendJson(res, 200, {
+          ok: true,
+          images: result.images,
+          provider: result.provider,
+          fallbackUsed: result.fallbackUsed
+        });
+      } catch (error) {
+        console.error('[ai-image] generation failed:', error.message || error);
+        sendJson(res, error.status || 502, {
+          error: error.code || 'ai-image-failed',
+          message: error.message || '圖片生成失敗'
+        });
+      }
       return;
     }
 
@@ -2332,6 +2650,7 @@ server.listen(port, host, async () => {
 
   console.log(`\n🤖 OpenRouter 摘要: ${openrouterApiKey ? openrouterModels.join(', ') : '未配置'}`);
   console.log(`🤖 備用 LLM 摘要: ${llmApiKey ? `${llmBaseUrl} (${llmModel})` : '未配置'}`);
+  console.log(`🖼️ AI 圖片: ${aiImageProvider}${aiImageFallbackEnabled ? ` → ${aiImageFallbackProvider}` : ''} (${aiImageProvider === 'legacy' ? legacyImageModel : drawApiBaseUrl})`);
   console.log(`🎤 Azure STT: ${azureSttKey ? `https://${azureSttRecognitionHost} (${azureSttLanguage})` : '未配置'}`);
   console.log(`🎤 LLM 轉譯: ${llmTranscribeModel}`);
   console.log(`💾 資料庫: ${dbPath}`);
