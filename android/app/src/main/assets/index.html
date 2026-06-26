@@ -3763,7 +3763,7 @@
                         const qr = qrcode(0, 'M');
                         qr.addData(qrUrl);
                         qr.make();
-                        qrSvg = qr.createSvgTag(5, 0);
+                        qrSvg = qr.createSvgTag(4, 8);
                     } catch (e) {
                         qrSvg = '<p class="text-red-500">QR碼生成失敗</p>';
                     }
@@ -3771,8 +3771,8 @@
                 modalContent = `
                     <div class="bg-white w-[85%] max-w-sm rounded-3xl p-6 text-center shadow-2xl animate-fadeIn">
                         <h3 class="bs-text-lg font-bold text-gray-800 mb-4">圖片QR碼</h3>
-                        <div class="bg-white p-4 rounded-2xl border border-gray-200 inline-block mb-4">
-                            ${qrSvg}
+                        <div class="bg-white p-4 rounded-2xl border border-gray-200 inline-block mb-4 max-w-full overflow-hidden">
+                            ${qrSvg.replace(/width="\d+(?:px)?"/, 'width="100%"').replace(/height="\d+(?:px)?"/, 'height="100%"').replace(/<svg /, '<svg style="max-width:220px;max-height:220px;display:block;margin:0 auto;" ')}
                         </div>
                         <p class="text-gray-500 bs-text-xs mb-4">掃描QR碼可查看或下載圖片</p>
                         <button class="action-btn w-full py-3 bg-gray-100 text-gray-600 font-bold rounded-xl hover:bg-gray-200 transition-colors" data-action="closeModal">關閉</button>
