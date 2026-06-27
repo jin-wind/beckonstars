@@ -965,7 +965,7 @@ async function generateAiImages(options) {
       throw primaryError;
     }
 
-    console.warn(`[ai-image] ${primaryProvider} failed, trying ${fallbackProvider}:`, primaryError.message || primaryError);
+    console.warn(`[ai-image] ⚠️ ${primaryProvider} 失敗，回退到 ${fallbackProvider}${fallbackProvider === 'legacy' ? ' (Gemini)' : ''}:`, primaryError.message || primaryError);
     const fallbackResult = await callImageProvider(fallbackProvider, options);
     return {
       ...fallbackResult,
@@ -1729,7 +1729,12 @@ const server = http.createServer(async (req, res) => {
         name: 'beckon-stars-local-api',
         time: new Date().toISOString(),
         auth: true,
-        googleAuth: Boolean(GOOGLE_CLIENT_ID)
+        googleAuth: Boolean(GOOGLE_CLIENT_ID),
+        aiImage: {
+          provider: aiImageProvider,
+          fallback: aiImageFallbackEnabled ? aiImageFallbackProvider : null,
+          drawApiConfigured: Boolean(drawApiKey)
+        }
       });
       return;
     }
@@ -2651,6 +2656,10 @@ server.listen(port, host, async () => {
   console.log(`\n🤖 OpenRouter 摘要: ${openrouterApiKey ? openrouterModels.join(', ') : '未配置'}`);
   console.log(`🤖 備用 LLM 摘要: ${llmApiKey ? `${llmBaseUrl} (${llmModel})` : '未配置'}`);
   console.log(`🖼️ AI 圖片: ${aiImageProvider}${aiImageFallbackEnabled ? ` → ${aiImageFallbackProvider}` : ''} (${aiImageProvider === 'legacy' ? legacyImageModel : drawApiBaseUrl})`);
+  if (aiImageProvider === 'kklt' && !drawApiKey) {
+    console.warn(`   ⚠️ DRAW_API_KEY 未配置！kklt 供應商將失敗，回退到 ${aiImageFallbackProvider}。`);
+    console.warn(`   ⚠️ 請在 .env 設置 DRAW_API_KEY 以使用 tupian.kklt.lol。`);
+  }
   console.log(`🎤 Azure STT: ${azureSttKey ? `https://${azureSttRecognitionHost} (${azureSttLanguage})` : '未配置'}`);
   console.log(`🎤 LLM 轉譯: ${llmTranscribeModel}`);
   console.log(`💾 資料庫: ${dbPath}`);
