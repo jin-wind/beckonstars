@@ -488,17 +488,12 @@ const openrouterModels = (process.env.OPENROUTER_FALLBACK_MODELS || openrouterMo
   .filter(Boolean);
 const openrouterReferer = process.env.OPENROUTER_HTTP_REFERER || (process.env.OPENROUTER_SITE_URL || 'https://beckonstars.app');
 
-// AI 圖片生成：新供應商為主，舊主服務器保留作 fallback
+// AI 圖片生成：只使用 kklt/tupian.kklt.lol；舊 Gemini 圖片服務不再作 fallback
 const aiImageProvider = (process.env.AI_IMAGE_PROVIDER || 'kklt').trim().toLowerCase();
-const aiImageFallbackProvider = (process.env.AI_IMAGE_FALLBACK_PROVIDER || (aiImageProvider === 'legacy' ? 'kklt' : 'legacy')).trim().toLowerCase();
-const aiImageFallbackEnabled = !['0', 'false', 'no', 'off'].includes(String(process.env.AI_IMAGE_ENABLE_FALLBACK || 'true').trim().toLowerCase());
 const drawApiBaseUrl = (process.env.DRAW_API_BASE_URL || 'https://tupian.kklt.lol').replace(/\/+$/, '');
 const drawApiKey = process.env.DRAW_API_KEY || '';
 const drawImageSize = process.env.DRAW_IMAGE_SIZE || '3:4';
 const drawImageResolution = process.env.DRAW_IMAGE_RESOLUTION || '2K';
-const legacyImageApiUrl = process.env.LEGACY_IMAGE_API_URL || 'http://144.79.170.102:7860/v1/chat/completions';
-const legacyImageApiKey = process.env.LEGACY_IMAGE_API_KEY || '';
-const legacyImageModel = process.env.LEGACY_IMAGE_MODEL || 'gemini-3-flash';
 
 // 媒體存儲配置
 const mediaStoragePath = process.env.MEDIA_STORAGE_PATH || path.join(process.cwd(), 'data', 'media');
@@ -902,50 +897,7 @@ async function callKkltImageApi({ prompt, referenceImage, count, size, resolutio
   return { provider: 'kklt', images };
 }
 
-async function callLegacyImageApi({ prompt, referenceImage }) {
-  if (!legacyImageApiKey) {
-    const error = new Error('LEGACY_IMAGE_API_KEY 未配置');
-    error.status = 503;
-    error.code = 'legacy-key-missing';
-    throw error;
-  }
-
-  const content = [
-    { type: 'text', text: prompt }
-  ];
-  if (referenceImage) {
-    content.push({ type: 'image_url', image_url: { url: referenceImage } });
-  }
-
-  const response = await fetch(legacyImageApiUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${legacyImageApiKey}`
-    },
-    body: JSON.stringify({
-      model: legacyImageModel,
-      messages: [{ role: 'user', content }],
-      stream: false
-    })
-  });
-
-  const payload = await readImageApiPayload(response);
-  if (!response.ok) throw createProviderError('legacy', response, payload);
-
-  const images = extractGeneratedImageUrls(payload).slice(0, 1);
-  if (images.length === 0) {
-    const error = new Error('備用圖片 API 響應中未找到圖片數據');
-    error.status = 502;
-    error.code = 'legacy-empty-images';
-    throw error;
-  }
-
-  return { provider: 'legacy', images };
-}
-
 async function callImageProvider(provider, options) {
-  if (provider === 'legacy') return callLegacyImageApi(options);
   if (provider === 'kklt' || provider === 'draw') return callKkltImageApi(options);
 
   const error = new Error(`未知圖片供應商: ${provider}`);
@@ -956,23 +908,8 @@ async function callImageProvider(provider, options) {
 
 async function generateAiImages(options) {
   const primaryProvider = aiImageProvider || 'kklt';
-  try {
-    const result = await callImageProvider(primaryProvider, options);
-    return { ...result, fallbackUsed: false };
-  } catch (primaryError) {
-    const fallbackProvider = aiImageFallbackProvider || '';
-    if (!aiImageFallbackEnabled || !fallbackProvider || fallbackProvider === primaryProvider) {
-      throw primaryError;
-    }
-
-    console.warn(`[ai-image] ⚠️ ${primaryProvider} 失敗，回退到 ${fallbackProvider}${fallbackProvider === 'legacy' ? ' (Gemini)' : ''}:`, primaryError.message || primaryError);
-    const fallbackResult = await callImageProvider(fallbackProvider, options);
-    return {
-      ...fallbackResult,
-      fallbackUsed: true,
-      primaryError: primaryError.message || String(primaryError)
-    };
-  }
+  const result = await callImageProvider(primaryProvider, options);
+  return { ...result, fallbackUsed: false };
 }
 
 function cleanTranscript(value, fallback = '') {
@@ -1732,7 +1669,7 @@ const server = http.createServer(async (req, res) => {
         googleAuth: Boolean(GOOGLE_CLIENT_ID),
         aiImage: {
           provider: aiImageProvider,
-          fallback: aiImageFallbackEnabled ? aiImageFallbackProvider : null,
+          fallback: null,
           drawApiConfigured: Boolean(drawApiKey)
         }
       });
@@ -2655,9 +2592,9 @@ server.listen(port, host, async () => {
 
   console.log(`\n🤖 OpenRouter 摘要: ${openrouterApiKey ? openrouterModels.join(', ') : '未配置'}`);
   console.log(`🤖 備用 LLM 摘要: ${llmApiKey ? `${llmBaseUrl} (${llmModel})` : '未配置'}`);
-  console.log(`🖼️ AI 圖片: ${aiImageProvider}${aiImageFallbackEnabled ? ` → ${aiImageFallbackProvider}` : ''} (${aiImageProvider === 'legacy' ? legacyImageModel : drawApiBaseUrl})`);
+  console.log(`🖼️ AI 圖片: ${aiImageProvider} (${drawApiBaseUrl})`);
   if (aiImageProvider === 'kklt' && !drawApiKey) {
-    console.warn(`   ⚠️ DRAW_API_KEY 未配置！kklt 供應商將失敗，回退到 ${aiImageFallbackProvider}。`);
+    console.warn(`   ⚠️ DRAW_API_KEY 未配置！kklt 圖片生成將失敗，不會回退到舊 Gemini 服務。`);
     console.warn(`   ⚠️ 請在 .env 設置 DRAW_API_KEY 以使用 tupian.kklt.lol。`);
   }
   console.log(`🎤 Azure STT: ${azureSttKey ? `https://${azureSttRecognitionHost} (${azureSttLanguage})` : '未配置'}`);
