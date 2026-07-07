@@ -1,13 +1,13 @@
 {
   "name": "星喚 Beckon Stars",
   "short_name": "星喚",
-  "description": "家庭日曆、聊天與回憶同步示範 App",
+  "description": "家庭日曆、語音對話與回憶同步，陪家人慢慢保持聯絡。",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#FFF8F0",
-  "theme_color": "#FF944D",
+  "background_color": "#F7F3EA",
+  "theme_color": "#2F7F7A",
   "lang": "zh-HK",
   "icons": [
     {

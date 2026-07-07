@@ -89,6 +89,10 @@
         .care-accent { color: var(--care-coral); }
         .care-muted { color: var(--care-muted); }
         .care-divider { border-color: var(--care-line); }
+        .senior-mode .action-btn { min-height: var(--btn-min-h); }
+        .senior-mode .care-card,
+        .senior-mode .care-card-flat { border-width: 2px; }
+        .senior-mode .senior-home-action { min-height: 96px; }
         
         /* 動畫 */
         @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
@@ -272,7 +276,7 @@
 
             rewards: [
                 { id: 1, title: 'TMCSS超級市場 $50 優惠券', points: 500, icon: 'fa-shopping-cart', color: 'bg-blue-100 text-blue-600' },
-                { id: 2, title: 'TMCSS茶樓 點心八折券', points: 300, icon: 'fa-mug-hot', color: 'bg-orange-100 text-orange-600' },
+                { id: 2, title: 'TMCSS茶樓 點心八折券', points: 300, icon: 'fa-mug-hot', color: 'bg-[#F4E7D1] text-[#9A6C24]' },
                 { id: 3, title: 'TMCSS康樂設施 免費租借一次', points: 200, icon: 'fa-table-tennis', color: 'bg-green-100 text-green-600' }
             ]
         };
@@ -688,7 +692,7 @@
             const coreClass = options.coreClass || 'bg-[#E4EEE9] text-[#2F5F58] font-bold bs-text-xl';
             const extraClass = options.extraClass || '';
             const frameUrl = options.frameUrl || getAvatarFrameForUser(options.userId);
-            const value = avatar || '👤';
+            const value = avatar || '星';
             const isImage = typeof value === 'string' && (value.startsWith('data:') || value.startsWith('http') || value.startsWith('/'));
             const imageSrc = isImage ? resolveMediaUrl(value) : '';
             const content = isImage
@@ -878,7 +882,7 @@
             if (!audioSource) {
                 return `
                     <div class="flex items-center gap-3 min-w-48">
-                        <div class="w-9 h-9 rounded-full ${isMe ? 'bg-white/20' : 'bg-orange-100'} flex items-center justify-center">
+                        <div class="w-9 h-9 rounded-full ${isMe ? 'bg-white/20' : 'bg-[#E4EEE9]'} flex items-center justify-center">
                             <i class="fa-solid fa-microphone ${isMe ? 'text-white' : 'text-brand'}"></i>
                         </div>
                         <p class="bs-text-sm opacity-80">錄音檔未同步</p>
@@ -1350,7 +1354,7 @@
             state.currentUser = result.user;
             state.authUid = result.user.userId;
             state.userName = result.user.name;
-            state.userAvatar = result.user.picture || '👤';
+            state.userAvatar = result.user.picture || '星';
 
             localStorage.setItem('beckon-stars-auth-token', result.token);
             localStorage.setItem('beckon-stars-user', JSON.stringify(result.user));
@@ -1459,7 +1463,7 @@
                     state.currentUser = JSON.parse(userJson);
                     state.authUid = state.currentUser.userId;
                     state.userName = state.currentUser.name;
-                    state.userAvatar = state.currentUser.picture || '👤';
+                    state.userAvatar = state.currentUser.picture || '星';
                     return true;
                 } catch (e) {
                     console.warn('[auth] Failed to restore auth state:', e);
@@ -2286,7 +2290,7 @@
                             </div>
                             <p class="bs-text-sm care-muted font-bold">Beckon Stars</p>
                             <h1 class="bs-text-4xl font-bold text-[#263238] mt-1">星喚</h1>
-                            <p class="bs-text-base care-muted mt-3 leading-relaxed">家庭日曆、溫馨對話與回憶同步，陪家人慢慢保持聯絡。</p>
+                            <p class="bs-text-base care-muted mt-3 leading-relaxed">家庭日曆、語音對話與回憶同步，陪家人慢慢保持聯絡。</p>
                         </div>
 
                         <div class="care-card p-4 mb-4">
@@ -2301,7 +2305,7 @@
                                 </div>
                                 <div class="bg-[#F6E6DF] rounded-lg p-3">
                                     <i class="fa-solid fa-box-archive text-[#D98273]"></i>
-                                    <p class="bs-text-xs font-bold mt-1">回憶匣</p>
+                                    <p class="bs-text-xs font-bold mt-1">回憶同步</p>
                                 </div>
                             </div>
                         </div>
@@ -2514,7 +2518,13 @@
         // --- 主應用程式視圖 ---
 
         function renderHeader() {
-            const titles = {
+            const titles = state.seniorMode ? {
+                home: '今日',
+                chat: '和家人說話',
+                memories: '家庭日曆',
+                creative: '做問候圖',
+                profile: '設定'
+            } : {
                 home: '今日家人近況',
                 chat: '溫馨對話',
                 memories: '回憶匣',
@@ -2546,7 +2556,13 @@
         }
 
         function renderBottomNav() {
-            const tabs = [
+            const tabs = state.seniorMode ? [
+                { id: 'home', icon: 'fa-house', label: '今日' },
+                { id: 'chat', icon: 'fa-microphone-lines', label: '說話' },
+                { id: 'memories', icon: 'fa-calendar-days', label: '日曆' },
+                { id: 'creative', icon: 'fa-image', label: '問候' },
+                { id: 'profile', icon: 'fa-gear', label: '設定' }
+            ] : [
                 { id: 'home', icon: 'fa-house', label: '今日' },
                 { id: 'chat', icon: 'fa-comments', label: '對話' },
                 { id: 'memories', icon: 'fa-box-archive', label: '回憶' },
@@ -2559,9 +2575,9 @@
                     ${tabs.map(tab => {
                         const active = state.currentTab === tab.id;
                         return `
-                            <button class="action-btn min-h-[58px] rounded-lg flex flex-col items-center justify-center gap-1 transition-colors ${active ? 'bg-[#E4EEE9] text-[#2F7F7A]' : 'text-[#81908A]'}" data-action="switchTab" data-tab="${tab.id}">
-                                <i class="fa-solid ${tab.icon} bs-text-lg"></i>
-                                <span class="bs-text-xs font-bold">${tab.label}</span>
+                            <button class="action-btn ${state.seniorMode ? 'min-h-[72px]' : 'min-h-[58px]'} rounded-lg flex flex-col items-center justify-center gap-1 transition-colors ${active ? 'bg-[#E4EEE9] text-[#2F7F7A]' : 'text-[#81908A]'}" data-action="switchTab" data-tab="${tab.id}">
+                                <i class="fa-solid ${tab.icon} ${state.seniorMode ? 'bs-text-xl' : 'bs-text-lg'}"></i>
+                                <span class="${state.seniorMode ? 'bs-text-sm' : 'bs-text-xs'} font-bold">${tab.label}</span>
                             </button>
                         `;
                     }).join('')}
@@ -2569,7 +2585,90 @@
             `;
         }
 
+        function renderSeniorHome() {
+            const todayMemories = getTodayMemories();
+            const latestMessage = [...(state.messages || [])].slice(-1)[0];
+            const reward = state.dailyMessageReward || {};
+            const threshold = Number(reward.threshold || 20);
+            const count = Math.min(Number(reward.count ?? state.dailyMessages ?? 0), threshold);
+            const todayLabel = `${today.getFullYear()}年 ${today.getMonth() + 1}月${today.getDate()}日`;
+
+            return `
+                <div class="px-5 py-5 space-y-4">
+                    <section class="care-card p-5">
+                        <p class="bs-text-sm care-muted font-bold">${todayLabel}</p>
+                        <h1 class="bs-text-3xl font-bold text-[#263238] mt-2">今日想和家人做甚麼？</h1>
+                        <div class="grid grid-cols-1 gap-3 mt-5">
+                            <button class="action-btn senior-home-action care-primary rounded-lg p-5 text-left shadow-md" data-action="switchTab" data-tab="chat">
+                                <div class="flex items-center gap-4">
+                                    <span class="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                                        <i class="fa-solid fa-microphone-lines bs-text-2xl"></i>
+                                    </span>
+                                    <div>
+                                        <p class="bs-text-2xl font-bold">和家人說話</p>
+                                        <p class="bs-text-sm text-white/80 mt-1">打字或按住錄音</p>
+                                    </div>
+                                </div>
+                            </button>
+                            <button class="action-btn senior-home-action bg-[#E8EFF2] text-[#2F4654] rounded-lg p-5 text-left border border-[#D4E0E6]" data-action="sendCareSignal">
+                                <div class="flex items-center gap-4">
+                                    <span class="w-14 h-14 rounded-full bg-white flex items-center justify-center shrink-0">
+                                        <i class="fa-solid fa-phone-volume bs-text-2xl text-[#476B83]"></i>
+                                    </span>
+                                    <div>
+                                        <p class="bs-text-2xl font-bold">叫家人回覆</p>
+                                        <p class="bs-text-sm care-muted mt-1">送出一句簡短訊息</p>
+                                    </div>
+                                </div>
+                            </button>
+                            <div class="grid grid-cols-2 gap-3">
+                                <button class="action-btn senior-home-action care-secondary rounded-lg p-4 text-left" data-action="switchTab" data-tab="memories">
+                                    <i class="fa-solid fa-calendar-days bs-text-2xl text-[#2F7F7A] mb-3"></i>
+                                    <p class="bs-text-xl font-bold">看日曆</p>
+                                </button>
+                                <button class="action-btn senior-home-action bg-[#F6E6DF] text-[#7A443A] rounded-lg p-4 text-left" data-action="openModal" data-modal="addMemory">
+                                    <i class="fa-solid fa-plus bs-text-2xl mb-3"></i>
+                                    <p class="bs-text-xl font-bold">記錄回憶</p>
+                                </button>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="grid grid-cols-2 gap-3">
+                        <div class="care-card-flat p-4">
+                            <p class="bs-text-sm care-muted font-bold">今日回憶</p>
+                            <p class="bs-text-3xl font-bold text-[#2F7F7A] mt-1">${todayMemories.length}</p>
+                        </div>
+                        <div class="care-card-flat p-4">
+                            <p class="bs-text-sm care-muted font-bold">今日互動</p>
+                            <p class="bs-text-3xl font-bold text-[#D7A84A] mt-1">${count}/${threshold}</p>
+                        </div>
+                    </section>
+
+                    <section class="care-card p-4">
+                        <div class="flex items-center justify-between gap-3 mb-3">
+                            <h3 class="bs-text-xl font-bold text-[#263238]">最新訊息</h3>
+                            <button class="action-btn care-chip px-4 py-2 bs-text-sm font-bold" data-action="switchTab" data-tab="chat">查看</button>
+                        </div>
+                        ${latestMessage ? `
+                            <div class="flex items-start gap-3">
+                                ${renderAvatar((latestMessage.senderName || '家')[0], { sizeClass: 'w-12 h-12', coreClass: 'bg-[#E4EEE9] text-[#2F5F58] font-bold bs-text-xl' })}
+                                <div class="min-w-0 flex-1">
+                                    <p class="bs-text-base font-bold text-[#263238]">${escapeHtml(latestMessage.senderName || '家庭成員')}</p>
+                                    <p class="bs-text-lg care-muted truncate">${escapeHtml(latestMessage.transcript || latestMessage.content || '傳來一則新訊息')}</p>
+                                </div>
+                            </div>
+                        ` : `
+                            <p class="bs-text-lg care-muted">還未有訊息。</p>
+                        `}
+                    </section>
+                </div>
+            `;
+        }
+
         function renderHome() {
+            if (state.seniorMode) return renderSeniorHome();
+
             const visibleMemories = getVisibleMemories();
             const todayMemories = getTodayMemories();
             const latestMessage = [...(state.messages || [])].slice(-1)[0];
@@ -2800,7 +2899,7 @@
             if (state.dailyCardMode === 'bible') {
                 if (hasBibleVerse) {
                     dailyCardHtml = `
-                        <div class="bg-[#FFF8F0] border border-amber-200 rounded-xl p-4 pb-7 shadow-sm inline-block text-left relative max-w-full">
+                        <div class="bg-[#FFFDF8] border care-divider rounded-xl p-4 pb-7 shadow-sm inline-block text-left relative max-w-full">
                             <div class="flex items-center gap-2 mb-2">
                                 <span class="bg-amber-100 text-amber-700 px-2 py-1 rounded bs-text-sm font-bold">${isToday ? '今日金句' : '金句'}</span>
                                 <span class="text-gray-500 bs-text-xs font-medium">${escapeHtml(bibleVerse.reference || '')}</span>
@@ -2813,9 +2912,9 @@
             } else {
                 const encouragement = getDailyEncouragement(dateKey);
                 dailyCardHtml = `
-                    <div class="bg-[#FFF8F0] border border-orange-200 rounded-xl p-4 shadow-sm inline-block text-left relative max-w-full">
+                    <div class="bg-[#FFFDF8] border care-divider rounded-xl p-4 shadow-sm inline-block text-left relative max-w-full">
                         <div class="flex items-start gap-2">
-                            <span class="bg-orange-100 text-brand-dark px-2 py-1 rounded bs-text-sm font-bold shrink-0">${isToday ? '今日適宜' : '適宜'}</span>
+                            <span class="bg-[#E4EEE9] text-[#2F5F58] px-2 py-1 rounded bs-text-sm font-bold shrink-0">${isToday ? '今日適宜' : '適宜'}</span>
                             <span class="text-gray-700 font-medium leading-relaxed">${escapeHtml(encouragement.replace(/^今日適宜/, '').trim())}</span>
                         </div>
                     </div>
@@ -2830,14 +2929,14 @@
                     <div class="mt-4">${dailyCardHtml}</div>
                 </div>
                 ${dayMemories.length > 0 ? `
-                    <div class="bg-orange-50 p-4 border-t border-orange-100">
+                    <div class="bg-[#F8F6EF] p-4 border-t care-divider">
                         <p class="bs-text-sm font-bold text-brand-dark mb-2"><i class="fa-solid fa-heart"></i> ${displayDay}日已有 ${dayMemories.length} 個回憶</p>
                         <div class="flex gap-2 overflow-x-auto no-scrollbar">
                             ${dayMemories.map(m => {
                                 const memoryImageSrc = getMemoryImageSrc(m, true);
                                 const memoryAudioSrc = getMemoryAudioSrc(m);
                                 return `
-                                    <div class="w-12 h-12 rounded-lg flex-shrink-0 flex items-center justify-center overflow-hidden ${memoryImageSrc ? '' : memoryAudioSrc ? 'bg-gradient-to-br from-purple-100 to-purple-50 border border-purple-200' : 'bg-white border border-orange-200'}">
+                                    <div class="w-12 h-12 rounded-lg flex-shrink-0 flex items-center justify-center overflow-hidden ${memoryImageSrc ? '' : memoryAudioSrc ? 'bg-[#E8EFF2] border border-[#C9D8CF]' : 'bg-white border care-divider'}">
                                         ${memoryImageSrc ? `<img src="${escapeAttribute(memoryImageSrc)}" class="w-full h-full object-cover">` : memoryAudioSrc ? `
                                             <div class="flex items-end justify-center gap-0.5 h-6">
                                                 <div class="w-1 bg-purple-400 rounded-full" style="height: 40%;"></div>
@@ -2903,7 +3002,7 @@
                 const hasMemory = dayMemories.length > 0;
                 gridHtml += `
                     <div class="aspect-square flex items-center justify-center p-1 relative">
-                        <button class="action-btn w-full h-full rounded-xl flex items-center justify-center font-medium bs-text-lg transition-all ${isToday ? 'bg-brand text-white shadow-md' : 'bg-gray-50 text-gray-700 hover:bg-orange-100'} ${hasMemory && !isToday ? 'border-2 border-brand-light' : ''}"
+                        <button class="action-btn w-full h-full rounded-xl flex items-center justify-center font-medium bs-text-lg transition-all ${isToday ? 'bg-brand text-white shadow-md' : 'bg-gray-50 text-gray-700 hover:bg-[#E4EEE9]'} ${hasMemory && !isToday ? 'border-2 border-brand-light' : ''}"
                                 ${hasMemory ? `data-action="viewMemories" data-date="${i}" data-month="${calMonth}"` : ''}>
                             ${i}
                         </button>
@@ -2945,14 +3044,14 @@
                         </div>
                     </div>
 
-                    <button class="action-btn w-full bg-gradient-to-r from-orange-400 to-brand-dark text-white rounded-xl p-4 flex items-center justify-between shadow-md mt-4" data-action="openModal" data-modal="videoPlayer">
+                    <button class="action-btn w-full care-primary text-white rounded-xl p-4 flex items-center justify-between shadow-md mt-4" data-action="openModal" data-modal="videoPlayer">
                         <div class="flex items-center">
                             <div class="w-10 h-10 bg-white/30 rounded-full flex items-center justify-center mr-3 backdrop-blur-sm">
                                 <i class="fa-solid fa-play text-white"></i>
                             </div>
                             <div class="text-left">
                                 <p class="font-bold bs-text-lg">本月回憶影片</p>
-                                <p class="bs-text-xs text-orange-100">為您集合這個月的溫暖時刻</p>
+                                <p class="bs-text-xs text-white/75">為您集合這個月的溫暖時刻</p>
                             </div>
                         </div>
                         <i class="fa-solid fa-chevron-right text-white/70"></i>
@@ -3046,6 +3145,16 @@
                                 <i class="fa-solid ${state.summarizingChat ? 'fa-spinner fa-spin' : 'fa-wand-magic-sparkles'} mr-1"></i>${state.summarizingChat ? '整理中' : '整理'}
                             </button>
                         </div>
+                        ${state.seniorMode ? `
+                        <div class="grid grid-cols-2 gap-2 mt-3">
+                            <button class="action-btn care-primary rounded-lg py-3 px-3 font-bold" data-action="sendCareSignal">
+                                <i class="fa-solid fa-phone-volume mr-2"></i>叫家人回覆
+                            </button>
+                            <button class="action-btn care-secondary rounded-lg py-3 px-3 font-bold" data-action="switchTab" data-tab="creative">
+                                <i class="fa-solid fa-image mr-2"></i>做問候圖
+                            </button>
+                        </div>
+                        ` : ''}
                     </div>
                     <div id="chatMessages" class="flex-1 min-h-0 px-4 pt-3 pb-3 space-y-5 overflow-y-auto no-scrollbar">
                         ${renderChatMessages()}
@@ -3357,7 +3466,7 @@
                         <div class="p-4 flex items-center justify-between">
                             <div>
                                 <p class="font-bold text-[#263238]">長者模式</p>
-                                <p class="bs-text-sm care-muted">放大字體，方便閱讀</p>
+                                <p class="bs-text-sm care-muted">大字體、大按鈕、簡化首頁</p>
                             </div>
                             <button class="action-btn relative w-14 h-8 rounded-full transition-colors" data-action="toggleSeniorMode" style="background: ${state.seniorMode ? '#2F7F7A' : '#d1d5db'}">
                                 <span class="absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow transition-transform" style="transform: translateX(${state.seniorMode ? '24px' : '0'})"></span>
@@ -3421,150 +3530,7 @@
 
         // --- AI 圖片生成視圖 ---
         function renderAIImageGen() {
-            const styles = [
-                { id: 'random', name: '隨機風格', icon: 'fa-shuffle' },
-                { id: 'garden', name: '懷舊膠片', icon: 'fa-film', prompt: 'e2.txt' },
-                { id: 'explosion', name: '爆炸動作', icon: 'fa-fire', prompt: 'e4.txt' },
-                { id: 'studio', name: '影樓風格', icon: 'fa-building', prompt: 'e1.txt' },
-                { id: 'vintage', name: '復古照片', icon: 'fa-camera-retro', prompt: 'e3.txt' },
-                { id: 'lotus', name: '荷花問候', icon: 'fa-leaf', prompt: 'e5.txt' },
-                { id: 'premium', name: '高級影樓', icon: 'fa-gem', prompt: 'e6.txt' },
-                { id: 'corporate', name: '商務肖像', icon: 'fa-user-tie', prompt: 'e7.txt' },
-                { id: 'korean', name: '韓系早安海報', icon: 'fa-sun', prompt: 'e8.txt' }
-            ];
-
-            return `
-                <div class="flex flex-col h-full bg-[#FFF8F0]">
-                    <!-- 頂部標題欄 -->
-                    <div class="shrink-0 bg-white border-b border-gray-100 px-4 py-3 flex items-center gap-3">
-                        <button class="action-btn w-10 h-10 flex items-center justify-center text-gray-600 hover:bg-gray-50 rounded-full transition-colors" data-action="closeAIImageGen">
-                            <i class="fa-solid fa-arrow-left bs-text-lg"></i>
-                        </button>
-                        <h1 class="bs-text-xl font-bold text-gray-800">AI 圖片生成</h1>
-                    </div>
-
-                    <!-- 主內容區 -->
-                    <div class="flex-1 overflow-y-auto no-scrollbar p-4 space-y-4">
-                        <!-- 上傳參考圖片 -->
-                        <div class="bg-white rounded-3xl shadow-sm p-6">
-                            <h3 class="bs-text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                                <i class="fa-solid fa-image text-brand"></i>參考圖片
-                            </h3>
-
-                            ${state.aiImageRefImage ? `
-                                <div class="relative rounded-2xl overflow-hidden bg-gray-100 mb-4">
-                                    <img src="${state.aiImageRefImage}" class="w-full h-auto" alt="參考圖片">
-                                    <button class="action-btn absolute top-2 right-2 w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-red-600 transition-colors" data-action="removeRefImage">
-                                        <i class="fa-solid fa-xmark"></i>
-                                    </button>
-                                </div>
-                            ` : `
-                                <div class="border-2 border-dashed border-gray-300 rounded-2xl p-8 text-center">
-                                    <i class="fa-solid fa-cloud-arrow-up bs-text-4xl text-gray-400 mb-3"></i>
-                                    <p class="bs-text-sm text-gray-600 mb-4">上傳或拍攝圖片</p>
-                                    <div class="flex gap-3 justify-center">
-                                        <button class="action-btn px-4 py-2 bg-brand text-white rounded-xl bs-text-sm font-bold shadow-md hover:bg-brand-dark transition-colors" data-action="uploadRefImage">
-                                            <i class="fa-solid fa-upload mr-1"></i>上傳圖片
-                                        </button>
-                                        <button class="action-btn px-4 py-2 bg-gray-600 text-white rounded-xl bs-text-sm font-bold shadow-md hover:bg-gray-700 transition-colors" data-action="captureRefImage">
-                                            <i class="fa-solid fa-camera mr-1"></i>拍照
-                                        </button>
-                                    </div>
-                                </div>
-                            `}
-                        </div>
-
-                        <!-- 選擇風格 -->
-                        <div class="bg-white rounded-3xl shadow-sm p-6">
-                            <h3 class="bs-text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                                <i class="fa-solid fa-palette text-brand"></i>選擇風格
-                            </h3>
-                            <div class="grid grid-cols-2 gap-3">
-                                ${styles.map(style => `
-                                    <button class="action-btn p-4 rounded-2xl border-2 transition-all ${state.aiImageStyle === style.id ? 'border-brand bg-orange-50' : 'border-gray-200 bg-white hover:border-gray-300'}" data-action="selectStyle" data-style="${style.id}">
-                                        <i class="fa-solid ${style.icon} bs-text-2xl ${state.aiImageStyle === style.id ? 'text-brand' : 'text-gray-400'} mb-2"></i>
-                                        <p class="bs-text-sm font-bold ${state.aiImageStyle === style.id ? 'text-brand' : 'text-gray-700'}">${style.name}</p>
-                                    </button>
-                                `).join('')}
-                            </div>
-                        </div>
-
-                        <!-- 生成數量 -->
-                        <div class="bg-white rounded-3xl shadow-sm p-6">
-                            <h3 class="bs-text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                                <i class="fa-solid fa-images text-brand"></i>生成數量
-                            </h3>
-                            <div class="flex gap-3">
-                                ${[1,2,3,4].map(n => `
-                                    <button class="action-btn flex-1 py-3 rounded-2xl border-2 transition-all ${(state.aiImageCount || 4) === n ? 'border-brand bg-orange-50' : 'border-gray-200 bg-white hover:border-gray-300'}" data-action="selectImageCount" data-count="${n}">
-                                        <p class="bs-text-lg font-bold ${(state.aiImageCount || 4) === n ? 'text-brand' : 'text-gray-700'}">${n}</p>
-                                    </button>
-                                `).join('')}
-                            </div>
-                        </div>
-
-                        <!-- 生成結果 -->
-                        ${state.aiImageGenerating ? `
-                            <div class="bg-white rounded-3xl shadow-sm p-6">
-                                <div class="flex flex-col items-center justify-center py-12">
-                                    <div class="w-20 h-20 border-4 border-brand border-t-transparent rounded-full animate-spin mb-4"></div>
-                                    <p class="bs-text-lg font-bold text-gray-800 mb-2">AI 正在生成圖片...</p>
-                                    <p class="bs-text-sm text-gray-500">這可能需要 10-30 秒</p>
-                                </div>
-                            </div>
-                        ` : state.aiImageResults.length > 0 ? `
-                            <div class="bg-white rounded-3xl shadow-sm p-6">
-                                <h3 class="bs-text-lg font-bold text-gray-800 mb-4 flex items-center justify-between">
-                                    <span class="flex items-center gap-2">
-                                        <i class="fa-solid fa-sparkles text-brand"></i>生成結果 (${state.aiImageResults.length} 張)
-                                    </span>
-                                    <button class="action-btn px-4 py-2 bg-brand text-white rounded-xl bs-text-sm font-bold shadow-md hover:bg-brand-dark transition-colors" data-action="downloadAllGeneratedImages">
-                                        <i class="fa-solid fa-download mr-1"></i>全部保存
-                                    </button>
-                                </h3>
-
-                                <!-- 圖片網格 -->
-                                <div class="grid ${state.aiImageResults.length === 1 ? 'grid-cols-1' : 'grid-cols-2'} gap-3">
-                                    ${state.aiImageResults.map((img, idx) => `
-                                        <div class="relative rounded-2xl overflow-hidden bg-gray-100">
-                                            <img src="${img}" class="w-full h-auto" alt="生成的圖片 ${idx + 1}">
-                                            <div class="absolute bottom-2 right-2 flex gap-2">
-                                                <button class="action-btn w-8 h-8 bg-black/50 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-black/70 transition-colors" data-action="downloadGeneratedImage" data-url="${escapeAttribute(img)}">
-                                                    <i class="fa-solid fa-download bs-text-xs"></i>
-                                                </button>
-                                                <button class="action-btn w-8 h-8 bg-black/50 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-black/70 transition-colors" data-action="viewGeneratedImageFullscreen" data-url="${escapeAttribute(img)}">
-                                                    <i class="fa-solid fa-expand bs-text-xs"></i>
-                                                </button>
-                                                <button class="action-btn w-8 h-8 bg-black/50 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-black/70 transition-colors" data-action="showQrCode" data-url="${escapeAttribute(img)}">
-                                                    <i class="fa-solid fa-qrcode bs-text-xs"></i>
-                                                </button>
-                                            </div>
-                                        </div>
-                                    `).join('')}
-                                </div>
-
-                                <!-- 操作按鈕 -->
-                                <div class="flex gap-3 mt-4">
-                                    <button class="action-btn flex-1 py-3 bg-gray-600 text-white rounded-xl font-bold shadow-md hover:bg-gray-700 transition-colors" data-action="shareGeneratedImage" data-url="${escapeAttribute(state.aiImageResults[0])}">
-                                        <i class="fa-solid fa-share-nodes mr-2"></i>分享圖片
-                                    </button>
-                                </div>
-                            </div>
-                        ` : ''}
-                    </div>
-
-                    <!-- 底部生成按鈕 -->
-                    <div class="shrink-0 bg-white border-t border-gray-100 p-4">
-                        <button class="action-btn w-full py-4 rounded-2xl font-bold bs-text-lg shadow-lg transition-colors disabled:opacity-50 ${state.aiImageGenerating ? 'bg-gray-400 text-white' : 'bg-brand text-white hover:bg-brand-dark'}" data-action="generateAIImage" ${!state.aiImageRefImage || state.aiImageGenerating ? 'disabled' : ''}>
-                            ${state.aiImageGenerating ? '<i class="fa-solid fa-spinner fa-spin mr-2"></i>生成中...' : '<i class="fa-solid fa-wand-magic-sparkles mr-2"></i>開始生成'}
-                        </button>
-                    </div>
-
-                    <!-- 隱藏的文件輸入 -->
-                    <input type="file" id="aiImageFileInput" accept="image/*" class="hidden">
-                    <input type="file" id="aiImageCameraInput" accept="image/*" capture="environment" class="hidden">
-                </div>
-            `;
+            return renderCreative();
         }
 
         function closeAIImageGen() {
@@ -3622,8 +3588,8 @@
                 const count = Number(celebration.count || state.dailyMessageReward?.count || 20);
                 const threshold = Number(celebration.threshold || state.dailyMessageReward?.threshold || 20);
                 modalContent = `
-                    <div class="daily-reward-card relative w-[88%] max-w-sm overflow-hidden rounded-[2rem] bg-white shadow-2xl border border-orange-100">
-                        <div class="absolute inset-0 bg-gradient-to-b from-[#fff7ed] via-white to-[#fff1e6]"></div>
+                    <div class="daily-reward-card relative w-[88%] max-w-sm overflow-hidden rounded-[2rem] bg-white shadow-2xl border care-divider">
+                        <div class="absolute inset-0 bg-gradient-to-b from-[#F8F6EF] via-white to-[#E4EEE9]"></div>
                         <div class="absolute -top-16 left-1/2 h-36 w-36 -translate-x-1/2 rounded-full bg-yellow-200/40 blur-3xl"></div>
                         <div class="relative px-6 pt-7 pb-6 text-center">
                             <div class="absolute inset-0 pointer-events-none overflow-hidden">
@@ -3635,25 +3601,25 @@
                             <div class="relative mx-auto mb-5 flex h-36 items-center justify-center">
                                 <div class="daily-reward-halo"></div>
                                 <div class="daily-reward-avatar-shell relative z-10">
-                                    ${renderAvatar(state.userAvatar, { frameUrl, sizeClass: 'w-24 h-24', coreClass: 'bg-orange-100 text-brand-dark font-bold bs-text-4xl shadow-xl ring-4 ring-white' })}
+                                    ${renderAvatar(state.userAvatar, { frameUrl, sizeClass: 'w-24 h-24', coreClass: 'bg-[#E4EEE9] text-brand-dark font-bold bs-text-4xl shadow-xl ring-4 ring-white' })}
                                 </div>
                             </div>
-                            <div class="mx-auto mb-3 inline-flex items-center gap-2 rounded-full bg-orange-100 px-4 py-2 text-brand-dark bs-text-xs font-bold">
+                            <div class="mx-auto mb-3 inline-flex items-center gap-2 rounded-full bg-[#E4EEE9] px-4 py-2 text-brand-dark bs-text-xs font-bold">
                                 <i class="fa-solid fa-crown text-yellow-500"></i>
                                 今日限定獎勵
                             </div>
                             <h3 class="bs-text-2xl font-bold text-gray-900 mb-2">恭喜獲得今日頭像框</h3>
                             <p class="bs-text-base text-gray-600 mb-5">每日 ${threshold} 條訊息任務完成</p>
-                            <div class="rounded-2xl bg-white/80 border border-orange-100 px-4 py-3 mb-5 shadow-sm">
+                            <div class="rounded-2xl bg-white/80 border care-divider px-4 py-3 mb-5 shadow-sm">
                                 <div class="flex items-center justify-between bs-text-sm font-bold text-gray-700">
                                     <span>任務進度</span>
                                     <span class="text-brand">${Math.min(count, threshold)} / ${threshold}</span>
                                 </div>
-                                <div class="mt-2 h-2 rounded-full bg-orange-100 overflow-hidden">
+                                <div class="mt-2 h-2 rounded-full bg-[#E4EEE9] overflow-hidden">
                                     <div class="h-full rounded-full bg-gradient-to-r from-brand to-yellow-400" style="width: 100%;"></div>
                                 </div>
                             </div>
-                            <button class="action-btn w-full py-3.5 rounded-2xl bg-brand text-white font-bold shadow-lg shadow-orange-200 hover:bg-brand-dark transition-colors" data-action="closeModal">
+                            <button class="action-btn w-full py-3.5 rounded-2xl bg-brand text-white font-bold shadow-lg shadow-[rgba(47,127,122,0.22)] hover:bg-brand-dark transition-colors" data-action="closeModal">
                                 太好了
                             </button>
                         </div>
@@ -4025,14 +3991,14 @@
             if (state.showModal === 'confirmLeaveFamily') {
                 modalContent = `
                     <div class="bg-white w-full max-w-sm rounded-3xl p-6 text-center relative animate-fadeIn">
-                        <div class="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <i class="fa-solid fa-right-from-bracket bs-text-2xl text-orange-500"></i>
+                        <div class="w-16 h-16 bg-[#F6E6DF] rounded-full flex items-center justify-center mx-auto mb-4">
+                            <i class="fa-solid fa-right-from-bracket bs-text-2xl text-[#D98273]"></i>
                         </div>
                         <h3 class="bs-text-xl font-bold text-gray-800 mb-2">確認退出家庭？</h3>
                         <p class="text-gray-500 bs-text-sm mb-6">退出後你可以加入其他家庭，此家庭的訊息和回憶會保留</p>
                         <div class="flex gap-3">
                             <button class="action-btn flex-1 bg-gray-100 text-gray-600 font-bold py-3 rounded-2xl hover:bg-gray-200 transition-colors" data-action="closeModal">取消</button>
-                            <button class="action-btn flex-1 bg-orange-500 text-white font-bold py-3 rounded-2xl shadow-md hover:bg-orange-600 transition-colors" data-action="confirmLeaveFamily">退出</button>
+                            <button class="action-btn flex-1 bg-[#D98273] text-white font-bold py-3 rounded-2xl shadow-md hover:bg-[#C96E60] transition-colors" data-action="confirmLeaveFamily">退出</button>
                         </div>
                     </div>
                 `;
@@ -4041,7 +4007,7 @@
             // 編輯個人資料
             if (state.showModal === 'editProfile') {
                 const avatarOptions = state.role === 'senior' ? avatars.senior : avatars.child;
-                const currentAvatar = state.userAvatar || '👤';
+                const currentAvatar = state.userAvatar || avatarOptions[0] || '星';
                 const isCustomImage = currentAvatar.startsWith('data:') || currentAvatar.startsWith('http');
                 modalContent = `
                     <div class="bg-white w-full max-w-md rounded-3xl p-6 relative animate-fadeIn max-h-[85vh] overflow-y-auto">
@@ -4052,8 +4018,8 @@
 
                         <!-- 頭像 -->
                         <div class="text-center mb-4">
-                            <div class="w-20 h-20 mx-auto rounded-full bg-orange-100 flex items-center justify-center overflow-hidden border-4 border-orange-200 mb-2" id="editAvatarPreview">
-                                ${isCustomImage ? `<img src="${currentAvatar}" class="w-full h-full object-cover" id="editAvatarImg">` : `<span class="bs-text-4xl" id="editAvatarEmoji">${currentAvatar}</span>`}
+                            <div class="w-20 h-20 mx-auto rounded-full bg-[#E4EEE9] flex items-center justify-center overflow-hidden border-4 border-[#C9D8CF] mb-2" id="editAvatarPreview">
+                                ${isCustomImage ? `<img src="${currentAvatar}" class="w-full h-full object-cover" id="editAvatarImg">` : `<span class="bs-text-4xl" id="editAvatarText">${currentAvatar}</span>`}
                             </div>
                             <button class="action-btn bs-text-sm text-brand font-medium" data-action="uploadAvatar">
                                 <i class="fa-solid fa-camera mr-1"></i>上傳照片
@@ -4061,8 +4027,8 @@
                             <input type="file" id="avatarFileInput" accept="image/*" class="hidden">
                         </div>
 
-                        <!-- Emoji 頭像選擇 -->
-                        <p class="bs-text-sm text-gray-500 mb-2">或選擇 Emoji：</p>
+                        <!-- 文字頭像選擇 -->
+                        <p class="bs-text-sm text-gray-500 mb-2">或選擇文字頭像：</p>
                         <div class="grid grid-cols-6 gap-2 mb-4">
                             ${avatarOptions.map(a => `
                                 <button class="action-btn bs-text-2xl p-2 rounded-xl transition-all ${!isCustomImage && currentAvatar === a ? 'bg-brand shadow-md scale-105' : 'bg-gray-50 border border-gray-200 opacity-60'}" data-action="editSelectAvatar" data-avatar="${a}">${a}</button>
@@ -4455,6 +4421,13 @@
                         if (state.backendMode === 'server' && state.familyId && state.currentTab === 'chat') {
                             refreshServerMessages(state.familyId).catch(() => {});
                         }
+                    }
+                    else if (action === 'sendCareSignal') {
+                        await sendChatMessage({ type: 'text', content: '我想同你傾一陣，可以回覆我嗎？' });
+                        state.currentTab = 'chat';
+                        shouldStickChatToBottom = true;
+                        render();
+                        showMessage('已通知家人。');
                     }
                     else if (action === 'switchCalendar') {
                         state.calendarMode = newBtn.getAttribute('data-mode');
@@ -4937,7 +4910,7 @@
                     state.userAvatar = dataUrl;
                     const preview = document.getElementById('editAvatarPreview');
                     if (preview) preview.innerHTML = `<img src="${dataUrl}" class="w-full h-full object-cover">`;
-                    // 取消 emoji 選中狀態
+                    // 取消文字頭像選中狀態
                     document.querySelectorAll('[data-action="editSelectAvatar"]').forEach(b => {
                         b.className = 'action-btn bs-text-2xl p-2 rounded-xl transition-all bg-gray-50 border border-gray-200 opacity-60';
                     });
@@ -5774,7 +5747,7 @@
                 state.aiImageProgress = 100;
                 render();
 
-                showMessage(`🎉 成功生成 ${images.length} 張圖片！`);
+                showMessage(`成功生成 ${images.length} 張圖片。`);
             } catch (error) {
                 console.error('[AI Image] Generation error:', error);
                 let errorMsg = '請檢查網絡連接或稍後再試';
