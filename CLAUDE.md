@@ -105,7 +105,7 @@ For API changes, a practical smoke check is: start `npm run api-server`, call `/
 
 Important server behavior:
 
-- Environment config is read at startup. See `.env.example` and `API-SETUP.md` for the supported Azure/OpenRouter variables.
+- Environment config is read at startup. See `.env.example` and `docs/setup/API-SETUP.md` for the supported Azure/OpenRouter variables.
 - `JWT_SECRET` defaults to a new random value on every process start. Set a fixed value for any environment where users should stay logged in across restarts.
 - JSON storage is initialized and written through `ensureDb()`, `readDb()`, and `writeDb()`. `writeDb()` serializes writes through an in-process promise lock and renames a temp file over `API_DB_PATH`.
 - The DB schema is informal. Current top-level keys include `families`, plus auth-related `users` and `usersByEmail` once users register.

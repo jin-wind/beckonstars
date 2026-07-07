@@ -46,7 +46,7 @@ npm run api-server
 > ```bash
 > npm run migrate-to-sqlite
 > ```
-> 詳見 [SQLITE-MIGRATION.md](./SQLITE-MIGRATION.md)
+> 詳見 [SQLite 遷移指南](./docs/setup/SQLITE-MIGRATION.md)
 
 ### 3. 開始開發
 
@@ -105,7 +105,7 @@ git push origin v1.0.0
 
 ### 故障排除
 
-若構建失敗，查看 [GitHub Actions 故障排除指南](GITHUB_ACTIONS_TROUBLESHOOTING.md)
+若構建失敗，查看 [GitHub Actions 故障排除指南](./docs/troubleshooting/GITHUB_ACTIONS_TROUBLESHOOTING.md)
 
 ## 🔌 API 伺服器配置
 
@@ -211,9 +211,9 @@ netstat -an | grep 8787
 
 ## 📖 更多文檔
 
-- [APK 構建指南](APK_BUILD.md) - 詳細的 APK 打包流程
-- [Android 簽署指南](ANDROID_SIGNING.md) - 配置 Release APK 簽署
-- [自託管伺服器部署](SELF_HOSTED_SERVER.md) - 遠端伺服器部署說明
+- [文檔索引](./docs/README.md) - setup、AI 圖片、排錯與歸檔文檔
+- [APK 構建指南](./docs/setup/APK_BUILD.md) - 詳細的 APK 打包流程
+- [自託管伺服器部署](./docs/setup/SELF_HOSTED_SERVER.md) - 遠端伺服器部署說明
 
 ## 📄 許可證
 
