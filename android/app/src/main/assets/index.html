@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#FF944D">
+    <meta name="theme-color" content="#F7F3EA">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -20,6 +20,17 @@
 
         /* ===== 長者模式 CSS 變數 ===== */
         :root {
+            --care-bg: #F7F3EA;
+            --care-surface: #FFFDF8;
+            --care-surface-strong: #FFFFFF;
+            --care-line: #E7E1D4;
+            --care-text: #263238;
+            --care-muted: #708079;
+            --care-sage: #8FAF9C;
+            --care-teal: #2F7F7A;
+            --care-coral: #D98273;
+            --care-amber: #D7A84A;
+            --care-blue: #476B83;
             --font-xs: 12px; --font-sm: 14px; --font-base: 16px;
             --font-lg: 18px; --font-xl: 20px; --font-2xl: 24px;
             --font-3xl: 30px; --font-4xl: 36px;
@@ -52,12 +63,13 @@
         }
         body {
             font-family: 'Noto Sans TC', sans-serif;
-            background-color: #FFF8F0;
+            background-color: var(--care-bg);
             -webkit-tap-highlight-color: transparent;
             height: var(--app-height, 100dvh);
             min-height: 0;
             overflow: hidden;
             overscroll-behavior: none;
+            color: var(--care-text);
         }
         #app {
             height: var(--app-height, 100dvh);
@@ -66,7 +78,17 @@
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .glass-panel { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(10px); }
-        .tear-off-bg { background-image: repeating-linear-gradient(0deg, transparent, transparent 19px, #e5e7eb 19px, #e5e7eb 20px); }
+        .tear-off-bg { background-image: repeating-linear-gradient(0deg, transparent, transparent 19px, rgba(143, 175, 156, 0.18) 19px, rgba(143, 175, 156, 0.18) 20px); }
+        .care-shell { background: radial-gradient(circle at 18% -8%, rgba(143, 175, 156, 0.18), transparent 34%), linear-gradient(180deg, #fbf8f1 0%, #f3eee4 100%); color: var(--care-text); }
+        .care-card { background: rgba(255, 253, 248, 0.94); border: 1px solid rgba(231, 225, 212, 0.92); border-radius: 8px; box-shadow: 0 10px 26px rgba(47, 73, 70, 0.08); }
+        .care-card-flat { background: var(--care-surface); border: 1px solid var(--care-line); border-radius: 8px; }
+        .care-chip { border-radius: 999px; border: 1px solid rgba(143, 175, 156, 0.28); background: rgba(143, 175, 156, 0.14); color: #2f5f58; }
+        .care-icon-btn { min-width: var(--touch-target); min-height: var(--touch-target); border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; }
+        .care-primary { background: var(--care-teal); color: white; }
+        .care-secondary { background: rgba(143, 175, 156, 0.16); color: #315b54; }
+        .care-accent { color: var(--care-coral); }
+        .care-muted { color: var(--care-muted); }
+        .care-divider { border-color: var(--care-line); }
         
         /* 動畫 */
         @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
@@ -125,16 +147,16 @@
             theme: {
                 extend: {
                     colors: {
-                        brand: { light: '#FFD1B3', DEFAULT: '#FF944D', dark: '#CC6622', red: '#E63946' }
+                        brand: { light: '#DCE8D9', DEFAULT: '#2F7F7A', dark: '#225D58', red: '#D98273' }
                     }
                 }
             }
         }
     </script>
 </head>
-<body class="text-gray-800 w-full flex justify-center bg-gray-100">
+<body class="text-gray-800 w-full flex justify-center bg-[#e9e2d6]">
 
-    <div id="app" class="w-full max-w-md h-full min-h-0 bg-[#FFF8F0] shadow-2xl relative overflow-hidden flex flex-col">
+    <div id="app" class="w-full max-w-md h-full min-h-0 care-shell shadow-2xl relative overflow-hidden flex flex-col">
         <!-- 內容會由 JavaScript 動態渲染 -->
     </div>
 
@@ -176,7 +198,7 @@
             currentUser: null,       // 用戶資訊 { userId, email, name, picture, families }
             googleSignInLoading: false,
 
-            currentTab: 'calendar',  // 'calendar', 'chat', 'rewards', 'profile'
+            currentTab: 'home',      // 'home', 'chat', 'memories', 'creative', 'profile'
             calendarMode: 'tear-off',// 'tear-off', 'monthly'
             calendarYear: today.getFullYear(),
             calendarMonth: today.getMonth() + 1,
@@ -631,9 +653,39 @@
             return '';
         }
 
+        function avatarLabel(value, fallback = '星') {
+            const raw = String(value || '').trim();
+            if (!raw) return fallback;
+            if (/[\u4e00-\u9fffA-Za-z0-9]/.test(raw)) return raw.match(/[\u4e00-\u9fffA-Za-z0-9]/)[0].toUpperCase();
+            return fallback;
+        }
+
+        function normalizeAppTab(tab) {
+            if (tab === 'calendar') return 'memories';
+            if (tab === 'rewards' || tab === 'leaderboard') return 'profile';
+            return ['home', 'chat', 'memories', 'creative', 'profile'].includes(tab) ? tab : 'home';
+        }
+
+        function getVisibleMemories() {
+            if (state.role === 'child') return state.memories.filter(m => m.childId === 'child_1' || m.uid === state.authUid);
+            return state.memories || [];
+        }
+
+        function getTodayMemories() {
+            return getVisibleMemories().filter(m => Number(m.date) === today.getDate() && Number(m.month) === today.getMonth() + 1);
+        }
+
+        function getMemoryKind(memory) {
+            const imageSrc = getMemoryImageSrc(memory, true);
+            const audioSrc = getMemoryAudioSrc(memory);
+            if (imageSrc) return { icon: 'fa-image', label: '相片', tone: 'text-[#476B83]', bg: 'bg-[#E8EFF2]' };
+            if (audioSrc || memory?.type === 'voice' || memory?.type === 'audio') return { icon: 'fa-wave-square', label: '語音', tone: 'text-[#2F7F7A]', bg: 'bg-[#E4EEE9]' };
+            return { icon: 'fa-note-sticky', label: '文字', tone: 'text-[#D98273]', bg: 'bg-[#F6E6DF]' };
+        }
+
         function renderAvatar(avatar, options = {}) {
             const sizeClass = options.sizeClass || 'w-10 h-10';
-            const coreClass = options.coreClass || 'bg-orange-100 text-brand-dark font-bold bs-text-xl';
+            const coreClass = options.coreClass || 'bg-[#E4EEE9] text-[#2F5F58] font-bold bs-text-xl';
             const extraClass = options.extraClass || '';
             const frameUrl = options.frameUrl || getAvatarFrameForUser(options.userId);
             const value = avatar || '👤';
@@ -641,7 +693,7 @@
             const imageSrc = isImage ? resolveMediaUrl(value) : '';
             const content = isImage
                 ? `<img src="${escapeAttribute(imageSrc)}" class="w-full h-full object-cover" alt="avatar">`
-                : `<span>${escapeHtml(value)}</span>`;
+                : `<span>${escapeHtml(avatarLabel(value, avatarLabel(state.userName, '星')))}</span>`;
             return `
                 <div class="avatar-wrap ${sizeClass} ${frameUrl ? 'avatar-frame-spacing' : ''} ${extraClass}">
                     <div class="avatar-core ${sizeClass} ${coreClass}">${content}</div>
@@ -1104,7 +1156,7 @@
                     googleSignInLoading: false,
                     voiceRecording: createIdleVoiceRecordingState()
                 });
-                if (state.currentTab === 'leaderboard') state.currentTab = 'profile';
+                state.currentTab = normalizeAppTab(state.currentTab);
                 mergeDailyMessageReward(state.dailyMessageReward);
             } catch (error) {
                 console.warn('Unable to load demo data', error);
@@ -1784,8 +1836,8 @@
         };
 
         const avatars = {
-            senior: ['👵', '👴', '🧓', '👨‍🦳', '🐶', '🐱'],
-            child: ['👩', '👨', '👧', '👦', '🐼', '🐰']
+            senior: ['星', '安', '家', '心', '和', '暖'],
+            child: ['星', '陪', '念', '晴', '朗', '信']
         };
 
         async function initCloudBackend() {
@@ -2045,7 +2097,7 @@
                 }
             }
             // 更新日曆回憶
-            if (state.currentTab === 'calendar' && state.calendarMode === 'tear-off') {
+            if (state.currentTab === 'memories' && state.calendarMode === 'tear-off') {
                 updateCalendarContent();
             }
         }
@@ -2072,41 +2124,53 @@
         }
 
         function renderSingleChatMessage(msg, isMe) {
-            const displayAvatar = isMe ? state.userAvatar : ((msg.senderName || '家')[0] || '👤');
+            const displayAvatar = isMe ? avatarLabel(state.userName, '我') : avatarLabel(msg.senderName || '家', '家');
             const displayName = isMe ? state.userName : (msg.senderName || '家庭成員');
             const messageId = String(msg.id);
             const senderUserId = msg.senderId || msg.uid || '';
             const imageSrc = getMessageImageSrc(msg);
             const audioSrc = getMessageAudioSrc(msg);
             return `
-                <div data-msg-id="${escapeAttribute(messageId)}" data-msg-key="${escapeAttribute(getMessageRenderKey(msg))}" class="flex ${isMe ? 'justify-end' : 'justify-start'}">
-                    ${!isMe ? renderAvatar(displayAvatar, { userId: senderUserId, sizeClass: 'w-10 h-10', coreClass: 'bg-orange-200 text-brand-dark font-bold bs-text-xl', extraClass: 'mr-2' }) : ''}
-                    <div class="max-w-[75%] flex flex-col ${isMe ? 'items-end' : 'items-start'}">
-                        ${!isMe ? `<span class="bs-text-xs text-gray-500 mb-1 ml-1">${displayName}</span>` : ''}
-                        <div class="p-3 rounded-2xl shadow-sm ${isMe ? 'bg-brand text-white rounded-tr-none' : 'bg-white text-gray-800 rounded-tl-none border border-gray-100'}">
-                            ${msg.type === 'text' ? `<p class="bs-text-lg">${msg.content}</p>` : ''}
-                            ${msg.type === 'photo' && imageSrc ? `<img src="${escapeAttribute(imageSrc)}" class="max-w-56 max-h-56 rounded-xl object-cover">${msg.content ? `<p class="bs-text-base mt-2">${msg.content}</p>` : ''}` : ''}
-                            ${msg.type === 'audio' ? `<div class="space-y-2 w-60 max-w-[68vw]">${renderVoicePlayer(msg, isMe)}<div class="${isMe ? 'bg-white/10' : 'bg-gray-50'} rounded-xl p-2"><p class="bs-text-xs opacity-70 mb-1">語音轉譯</p>${msg.transcript ? `<p class="bs-text-base">${msg.transcript}</p>` : `<p class="bs-text-sm opacity-80">未取得轉譯文字，可播放錄音確認內容。</p>`}</div></div>` : ''}
+                <div data-msg-id="${escapeAttribute(messageId)}" data-msg-key="${escapeAttribute(getMessageRenderKey(msg))}" class="flex ${isMe ? 'justify-end' : 'justify-start'} animate-fadeIn">
+                    ${!isMe ? renderAvatar(displayAvatar, { userId: senderUserId, sizeClass: 'w-9 h-9', coreClass: 'bg-[#E4EEE9] text-[#2F5F58] font-bold bs-text-sm', extraClass: 'mr-2 mt-5' }) : ''}
+                    <div class="max-w-[78%] flex flex-col ${isMe ? 'items-end' : 'items-start'}">
+                        <span class="bs-text-xs care-muted mb-1 ${isMe ? 'mr-1' : 'ml-1'}">${escapeHtml(displayName || (isMe ? '我' : '家庭成員'))}</span>
+                        <div class="p-3 rounded-lg ${isMe ? 'bg-[#2F7F7A] text-white shadow-sm' : 'care-card-flat text-[#263238]'}">
+                            ${msg.type === 'text' ? `<p class="bs-text-base leading-relaxed">${escapeHtml(msg.content)}</p>` : ''}
+                            ${msg.type === 'photo' && imageSrc ? `<img src="${escapeAttribute(imageSrc)}" class="max-w-56 max-h-56 rounded-lg object-cover">${msg.content ? `<p class="bs-text-base mt-2">${escapeHtml(msg.content)}</p>` : ''}` : ''}
+                            ${msg.type === 'audio' ? `
+                                <div class="space-y-2 w-60 max-w-[68vw]">
+                                    <div class="${isMe ? 'bg-white/10' : 'bg-[#E8EFF2]'} rounded-lg p-2">
+                                        <div class="flex items-center gap-2 mb-2">
+                                            <i class="fa-solid fa-wave-square ${isMe ? 'text-white' : 'text-[#2F7F7A]'}"></i>
+                                            <span class="bs-text-xs font-bold ${isMe ? 'text-white/85' : 'text-[#2F7F7A]'}">語音訊息</span>
+                                        </div>
+                                        ${renderVoicePlayer(msg, isMe)}
+                                    </div>
+                                    <div class="${isMe ? 'bg-white/10' : 'bg-[#F4F1E9]'} rounded-lg p-2">
+                                        <p class="bs-text-xs ${isMe ? 'text-white/70' : 'care-muted'} mb-1">AI 轉文字</p>
+                                        ${msg.transcript ? `<p class="bs-text-sm leading-relaxed">${escapeHtml(msg.transcript)}</p>` : `<p class="bs-text-sm ${isMe ? 'text-white/75' : 'care-muted'}">未取得轉譯文字，可播放錄音確認內容。</p>`}
+                                    </div>
+                                </div>
+                            ` : ''}
                         </div>
                         ${msg.type === 'audio' && msg.transcript && !msg.aiSummary && state.backendMode === 'server' ? `
-                            <button class="action-btn mt-2 bg-blue-50 border border-blue-100 text-blue-700 rounded-xl px-3 py-2 bs-text-sm font-bold" data-action="summarizeVoice" data-message-id="${escapeAttribute(messageId)}">
-                                <i class="fa-solid fa-wand-magic-sparkles mr-1"></i>總結錄音
+                            <button class="action-btn mt-2 care-chip px-3 py-2 bs-text-sm font-bold" data-action="summarizeVoice" data-message-id="${escapeAttribute(messageId)}">
+                                <i class="fa-solid fa-wand-magic-sparkles mr-1"></i>摘要
                             </button>
                         ` : ''}
                         ${msg.type === 'audio' && (msg.audio || msg.audioUrl) && !msg.transcript && state.backendMode === 'server' ? `
-                            <button class="action-btn mt-2 bg-amber-50 border border-amber-100 text-amber-700 rounded-xl px-3 py-2 bs-text-sm font-bold disabled:opacity-60" data-action="transcribeVoice" data-message-id="${escapeAttribute(messageId)}" ${state.transcribingMessageId === messageId ? 'disabled' : ''}>
+                            <button class="action-btn mt-2 bg-[#F4E7D1] border border-[#E6D3AA] text-[#7A5A1F] rounded-lg px-3 py-2 bs-text-sm font-bold disabled:opacity-60" data-action="transcribeVoice" data-message-id="${escapeAttribute(messageId)}" ${state.transcribingMessageId === messageId ? 'disabled' : ''}>
                                 <i class="fa-solid ${state.transcribingMessageId === messageId ? 'fa-spinner fa-spin' : 'fa-closed-captioning'} mr-1"></i>${state.transcribingMessageId === messageId ? 'AI 轉譯中' : 'AI 轉譯錄音'}
                             </button>
                         ` : ''}
                         ${msg.aiSummary ? `
-                            <div class="mt-2 bg-blue-50 border border-blue-100 rounded-xl p-3 shadow-sm relative w-full">
-                                <div class="absolute -top-2 -left-2 bg-blue-500 text-white w-6 h-6 rounded-full flex items-center justify-center bs-text-xs shadow-md">
-                                    <i class="fa-solid fa-robot"></i>
-                                </div>
-                                <p class="bs-text-sm text-blue-800 pl-3 font-medium">${msg.aiSummary}</p>
+                            <div class="mt-2 bg-[#E8EFF2] border border-[#D4E0E6] rounded-lg p-3 shadow-sm relative w-full">
+                                <p class="bs-text-xs font-bold text-[#476B83] mb-1"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i>摘要</p>
+                                <p class="bs-text-sm text-[#2F4654] font-medium">${escapeHtml(msg.aiSummary)}</p>
                             </div>
                         ` : ''}
-                        <span class="bs-text-xs text-gray-400 mt-1 ${isMe ? 'mr-1' : 'ml-1'}">${msg.time}</span>
+                        <span class="bs-text-xs care-muted mt-1 ${isMe ? 'mr-1' : 'ml-1'}">${escapeHtml(msg.time || '')}</span>
                     </div>
                 </div>
             `;
@@ -2115,7 +2179,7 @@
         function renderChatMessages() {
             const visibleMessages = state.messages;
             return `
-                <div class="text-center bs-text-xs text-gray-400 mb-4">今天</div>
+                <div class="text-center bs-text-xs care-muted mb-4">今天</div>
                 ${visibleMessages.map(msg => {
                     const isMe = msg.senderId === state.authUid || msg.uid === state.authUid;
                     return renderSingleChatMessage(msg, isMe);
@@ -2142,38 +2206,37 @@
             });
             const sorted = Object.values(memberScores).sort((a, b) => b.score - a.score);
             if (sorted.length === 0) {
-                return `<div id="familyMemberActivityCard" class="bg-white rounded-3xl shadow-sm overflow-hidden"><div class="flex flex-col items-center justify-center py-12 px-6 text-center"><div class="w-20 h-20 bg-orange-100 rounded-full flex items-center justify-center mb-4"><i class="fa-solid fa-users bs-text-3xl text-brand"></i></div><h3 class="bs-text-xl font-bold text-gray-800 mb-2">暫未有家庭互動</h3><p class="text-gray-500">開始聊天和分享回憶後，家庭成員活躍度會自動更新。</p></div></div>`;
+                return `<div id="familyMemberActivityCard" class="care-card-flat overflow-hidden"><div class="flex flex-col items-center justify-center py-10 px-6 text-center"><div class="w-14 h-14 bg-[#E4EEE9] rounded-lg flex items-center justify-center mb-4"><i class="fa-solid fa-users bs-text-2xl text-[#2F7F7A]"></i></div><h3 class="bs-text-lg font-bold text-[#263238] mb-2">暫未有家庭互動</h3><p class="care-muted bs-text-sm">開始聊天和分享回憶後，這裡會顯示家人的近況。</p></div></div>`;
             }
-            const rankIcons = ['👑', '2', '3'];
-            const subtitles = ['本週互動最熱烈！', '繼續保持～', '加油追上去！'];
             const rankItems = sorted.map((member, index) => {
                 const rank = index + 1;
-                const icon = rank <= 3 ? rankIcons[index] : String(rank);
-                const subtitle = rank <= 3 ? subtitles[index] : (member.messageCount > 0 ? `${member.messageCount} 則訊息` : '潛水中...');
-                const avatarBg = rank === 1 ? 'bg-[#f6d1aa] text-[#b66122]' : (rank <= 3 ? 'bg-orange-100 text-brand-dark' : 'bg-gray-100 text-gray-500');
-                return `<div class="flex items-center py-4 px-5 border-b border-gray-50"><div class="w-8 text-center mr-4 ${rank <= 3 ? (rank===1?'bs-text-2xl text-yellow-400':rank===2?'bs-text-xl text-gray-400':'bs-text-lg text-amber-600') : 'bs-text-base text-gray-400'} font-bold">${icon}</div>${renderAvatar(member.avatar, { userId: member.id, sizeClass: 'w-12 h-12', coreClass: `${avatarBg} bs-text-xl font-bold`, extraClass: 'mr-4' })}<div class="flex-1"><div class="font-bold text-gray-800 bs-text-base">${member.name}</div><div class="bs-text-xs text-gray-400">${subtitle}</div></div><div class="text-right"><div class="bs-text-lg font-bold text-brand">${member.score.toLocaleString()}</div><div class="bs-text-xs text-gray-400">分</div></div></div>`;
+                const subtitle = member.messageCount > 0 ? `${member.messageCount} 則訊息` : '有回憶更新';
+                return `<div class="flex items-center py-4 px-4 border-b care-divider last:border-b-0"><div class="w-7 h-7 rounded-full bg-[#F4F1E9] text-[#708079] bs-text-xs font-bold flex items-center justify-center mr-3">${rank}</div>${renderAvatar(member.avatar, { userId: member.id, sizeClass: 'w-11 h-11', coreClass: 'bg-[#E4EEE9] text-[#2F5F58] bs-text-base font-bold', extraClass: 'mr-3' })}<div class="flex-1 min-w-0"><div class="font-bold text-[#263238] bs-text-base truncate">${escapeHtml(member.name)}</div><div class="bs-text-xs care-muted">${subtitle}</div></div><div class="text-right"><div class="bs-text-base font-bold text-[#2F7F7A]">${member.score.toLocaleString()}</div><div class="bs-text-xs care-muted">互動</div></div></div>`;
             }).join('');
-            return `<div id="familyMemberActivityCard" class="bg-white rounded-3xl shadow-sm overflow-hidden">${rankItems}</div>`;
+            return `<div id="familyMemberActivityCard" class="care-card-flat overflow-hidden">${rankItems}</div>`;
         }
 
         // --- 核心渲染引擎 ---
         function render() {
             const app = document.getElementById('app');
             const previousChatSnapshot = readChatScrollSnapshot();
-            if (state.currentTab === 'leaderboard') state.currentTab = 'profile';
+            state.currentTab = normalizeAppTab(state.currentTab);
             saveDemoData();
             
             if (!state.appReady) {
                 app.innerHTML = renderOnboardingFlow();
-            } else if (state.aiImageGenView) {
-                app.innerHTML = renderAIImageGen() + renderModals();
             } else {
+                if (state.aiImageGenView) {
+                    state.aiImageGenView = false;
+                    state.currentTab = 'creative';
+                }
                 app.innerHTML = `
                     ${renderHeader()}
-                    <main class="flex-1 min-h-0 ${state.currentTab === 'chat' ? 'overflow-hidden pb-[calc(5.75rem+env(safe-area-inset-bottom))]' : 'overflow-y-auto no-scrollbar pb-[calc(5.75rem+env(safe-area-inset-bottom))]'}">
-                        ${state.currentTab === 'calendar' ? renderCalendar() : ''}
+                    <main class="flex-1 min-h-0 ${state.currentTab === 'chat' ? 'overflow-hidden pb-[calc(6.4rem+env(safe-area-inset-bottom))]' : 'overflow-y-auto no-scrollbar pb-[calc(6.4rem+env(safe-area-inset-bottom))]'}">
+                        ${state.currentTab === 'home' ? renderHome() : ''}
                         ${state.currentTab === 'chat' ? renderChat() : ''}
-                        ${state.currentTab === 'rewards' ? renderRewards() : ''}
+                        ${state.currentTab === 'memories' ? renderCalendar() : ''}
+                        ${state.currentTab === 'creative' ? renderCreative() : ''}
                         ${state.currentTab === 'profile' ? renderProfile() : ''}
                     </main>
                     ${renderBottomNav()}
@@ -2215,53 +2278,75 @@
         function renderStep1Auth() {
             const isLogin = state.authMode === 'login';
             return `
-                <div class="flex flex-col items-center justify-center h-full p-8 bg-gradient-to-b from-[#FFF8F0] to-[#FFE5D0] animate-fadeIn overflow-y-auto">
-                    <div class="w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-lg mb-4">
-                        <i class="fa-solid fa-star bs-text-4xl text-brand"></i>
-                    </div>
-                    <h1 class="bs-text-3xl font-bold text-gray-800 mb-1 tracking-wider">星喚</h1>
-                    <p class="bs-text-base text-gray-600 mb-6">Beckon Stars</p>
-
-                    <div class="w-full max-w-sm">
-                        <div class="flex mb-6 bg-gray-100 rounded-xl p-1">
-                            <button class="action-btn flex-1 py-2 rounded-lg bs-text-sm font-medium transition-colors ${isLogin ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}" data-action="switchAuthMode" data-mode="login">登入</button>
-                            <button class="action-btn flex-1 py-2 rounded-lg bs-text-sm font-medium transition-colors ${!isLogin ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}" data-action="switchAuthMode" data-mode="register">註冊</button>
+                <div class="flex flex-col h-full px-6 py-8 animate-fadeIn overflow-y-auto">
+                    <div class="flex-1 flex flex-col justify-center">
+                        <div class="mb-8">
+                            <div class="w-14 h-14 bg-[#E4EEE9] text-[#2F7F7A] rounded-lg flex items-center justify-center mb-5 border border-[#C9D8CF]">
+                                <i class="fa-solid fa-star bs-text-2xl"></i>
+                            </div>
+                            <p class="bs-text-sm care-muted font-bold">Beckon Stars</p>
+                            <h1 class="bs-text-4xl font-bold text-[#263238] mt-1">星喚</h1>
+                            <p class="bs-text-base care-muted mt-3 leading-relaxed">家庭日曆、溫馨對話與回憶同步，陪家人慢慢保持聯絡。</p>
                         </div>
 
-                        <div class="mb-4">
-                            <button class="action-btn w-full min-h-[44px] bg-white text-gray-700 bs-text-base font-bold py-3 px-6 rounded-xl border border-gray-200 shadow-sm hover:bg-gray-50 transition-colors flex items-center justify-center gap-3" data-action="androidGoogleLogin" ${state.googleSignInLoading ? 'disabled' : ''}>
-                                <i class="fa-brands fa-google text-red-500"></i>
-                                <span>${state.googleSignInLoading ? 'Google 登入中...' : '使用 Google 登入'}</span>
+                        <div class="care-card p-4 mb-4">
+                            <div class="grid grid-cols-3 gap-2 text-center">
+                                <div class="bg-[#E4EEE9] rounded-lg p-3">
+                                    <i class="fa-solid fa-calendar-days text-[#2F7F7A]"></i>
+                                    <p class="bs-text-xs font-bold mt-1">家庭日曆</p>
+                                </div>
+                                <div class="bg-[#E8EFF2] rounded-lg p-3">
+                                    <i class="fa-solid fa-comments text-[#476B83]"></i>
+                                    <p class="bs-text-xs font-bold mt-1">語音對話</p>
+                                </div>
+                                <div class="bg-[#F6E6DF] rounded-lg p-3">
+                                    <i class="fa-solid fa-box-archive text-[#D98273]"></i>
+                                    <p class="bs-text-xs font-bold mt-1">回憶匣</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="w-full">
+                            <div class="flex mb-4 bg-[#EEE8DC] rounded-lg p-1">
+                                <button class="action-btn flex-1 py-2 rounded-md bs-text-sm font-bold transition-colors ${isLogin ? 'bg-white text-[#263238] shadow-sm' : 'text-[#708079]'}" data-action="switchAuthMode" data-mode="login">登入</button>
+                                <button class="action-btn flex-1 py-2 rounded-md bs-text-sm font-bold transition-colors ${!isLogin ? 'bg-white text-[#263238] shadow-sm' : 'text-[#708079]'}" data-action="switchAuthMode" data-mode="register">註冊</button>
+                            </div>
+
+                            <div class="mb-4">
+                                <button class="action-btn w-full min-h-[48px] bg-white text-[#263238] bs-text-base font-bold py-3 px-5 rounded-lg border care-divider shadow-sm flex items-center justify-center gap-3" data-action="androidGoogleLogin" ${state.googleSignInLoading ? 'disabled' : ''}>
+                                    <i class="fa-brands fa-google text-[#D98273]"></i>
+                                    <span>${state.googleSignInLoading ? 'Google 登入中...' : '使用 Google 登入'}</span>
+                                </button>
+                            </div>
+
+                            <div class="flex items-center gap-3 mb-4">
+                                <div class="h-px bg-[#E7E1D4] flex-1"></div>
+                                <span class="bs-text-xs care-muted">或使用電郵</span>
+                                <div class="h-px bg-[#E7E1D4] flex-1"></div>
+                            </div>
+
+                            ${!isLogin ? `
+                            <div class="mb-3">
+                                <input id="authName" type="text" placeholder="用戶名稱" class="w-full px-4 py-3 rounded-lg border care-divider bs-text-base focus:outline-none focus:border-[#2F7F7A] bg-[#FFFDF8]" autocomplete="name">
+                            </div>
+                            ` : ''}
+
+                            <div class="mb-3">
+                                <input id="authEmail" type="email" placeholder="電郵地址" class="w-full px-4 py-3 rounded-lg border care-divider bs-text-base focus:outline-none focus:border-[#2F7F7A] bg-[#FFFDF8]" autocomplete="email">
+                            </div>
+
+                            <div class="mb-4">
+                                <input id="authPassword" type="password" placeholder="密碼" class="w-full px-4 py-3 rounded-lg border care-divider bs-text-base focus:outline-none focus:border-[#2F7F7A] bg-[#FFFDF8]" autocomplete="${isLogin ? 'current-password' : 'new-password'}">
+                            </div>
+
+                            <button class="action-btn w-full care-primary bs-text-lg font-bold py-3.5 px-6 rounded-lg shadow-md" data-action="${isLogin ? 'login' : 'register'}">
+                                ${isLogin ? '登入' : '註冊'}
                             </button>
+
+                            ${state.errorMsg ? `<p class="text-[#D98273] bs-text-sm mt-3 text-center animate-shake">${escapeHtml(state.errorMsg)}</p>` : ''}
+
+                            <p class="bs-text-xs care-muted text-center mt-4">${isLogin ? '還沒有帳號？' : '已有帳號？'} <button class="action-btn text-[#2F7F7A] font-bold" data-action="switchAuthMode" data-mode="${isLogin ? 'register' : 'login'}">${isLogin ? '立即註冊' : '返回登入'}</button></p>
                         </div>
-
-                        <div class="flex items-center gap-3 mb-4">
-                            <div class="h-px bg-gray-200 flex-1"></div>
-                            <span class="bs-text-xs text-gray-400">或使用電郵</span>
-                            <div class="h-px bg-gray-200 flex-1"></div>
-                        </div>
-
-                        ${!isLogin ? `
-                        <div class="mb-3">
-                            <input id="authName" type="text" placeholder="用戶名稱" class="w-full px-4 py-3 rounded-xl border border-gray-200 bs-text-base focus:outline-none focus:border-brand bg-white" autocomplete="name">
-                        </div>
-                        ` : ''}
-
-                        <div class="mb-3">
-                            <input id="authEmail" type="email" placeholder="電郵地址" class="w-full px-4 py-3 rounded-xl border border-gray-200 bs-text-base focus:outline-none focus:border-brand bg-white" autocomplete="email">
-                        </div>
-
-                        <div class="mb-4">
-                            <input id="authPassword" type="password" placeholder="密碼" class="w-full px-4 py-3 rounded-xl border border-gray-200 bs-text-base focus:outline-none focus:border-brand bg-white" autocomplete="${isLogin ? 'current-password' : 'new-password'}">
-                        </div>
-
-                        <button class="action-btn w-full bg-brand text-white bs-text-lg font-bold py-3 px-6 rounded-xl shadow-md hover:opacity-90 transition-opacity" data-action="${isLogin ? 'login' : 'register'}">
-                            ${isLogin ? '登入' : '註冊'}
-                        </button>
-
-                        ${state.errorMsg ? `<p class="text-red-500 bs-text-sm mt-3 text-center animate-shake">${state.errorMsg}</p>` : ''}
-
-                        <p class="bs-text-xs text-gray-400 text-center mt-4">${isLogin ? '還沒有帳號？' : '已有帳號？'} <button class="action-btn text-brand font-medium" data-action="switchAuthMode" data-mode="${isLogin ? 'register' : 'login'}">${isLogin ? '立即註冊' : '返回登入'}</button></p>
                     </div>
                 </div>
             `;
@@ -2270,21 +2355,32 @@
         // 步驟 2: 選擇角色
         function renderStep2Role() {
             return `
-                <div class="flex flex-col items-center justify-center h-full p-8 text-center bg-gradient-to-b from-[#FFF8F0] to-[#FFE5D0] animate-fadeIn">
-                    <div class="w-28 h-28 bg-white rounded-full flex items-center justify-center shadow-lg mb-6">
-                        <i class="fa-solid fa-star text-5xl text-brand"></i>
+                <div class="flex flex-col h-full p-6 animate-fadeIn">
+                    <div class="flex-1 flex flex-col justify-center">
+                        <p class="bs-text-sm care-muted font-bold">建立照顧關係</p>
+                        <h1 class="bs-text-3xl font-bold text-[#263238] mt-2 mb-3">您在家庭裡的身份是？</h1>
+                        <p class="bs-text-base care-muted mb-6">星喚會依身份調整字體、入口和提示語氣。</p>
+                        <div class="space-y-3">
+                            <button class="action-btn care-card p-5 w-full text-left flex items-center gap-4" data-action="setRole" data-role="senior">
+                                <div class="w-12 h-12 rounded-lg bg-[#E4EEE9] text-[#2F7F7A] flex items-center justify-center shrink-0">
+                                    <i class="fa-solid fa-person-cane bs-text-xl"></i>
+                                </div>
+                                <div>
+                                    <h3 class="bs-text-xl font-bold text-[#263238]">我是長者</h3>
+                                    <p class="bs-text-sm care-muted mt-1">大字體、簡潔操作、清楚提示。</p>
+                                </div>
+                            </button>
+                            <button class="action-btn care-card-flat p-5 w-full text-left flex items-center gap-4" data-action="setRole" data-role="child">
+                                <div class="w-12 h-12 rounded-lg bg-[#E8EFF2] text-[#476B83] flex items-center justify-center shrink-0">
+                                    <i class="fa-solid fa-user-group bs-text-xl"></i>
+                                </div>
+                                <div>
+                                    <h3 class="bs-text-xl font-bold text-[#263238]">我是子女</h3>
+                                    <p class="bs-text-sm care-muted mt-1">快速查看家人近況、傳訊息和回憶。</p>
+                                </div>
+                            </button>
+                        </div>
                     </div>
-                    <h1 class="bs-text-4xl font-bold text-gray-800 mb-2 tracking-wider">星喚</h1>
-                    <p class="bs-text-lg text-gray-600 mb-10">Beckon Stars</p>
-                    
-                    <h2 class="bs-text-xl font-medium text-gray-700 mb-6">請選擇您的身份</h2>
-                    
-                    <button class="action-btn w-full bg-brand text-white bs-text-xl font-bold py-4 px-6 rounded-2xl shadow-md mb-4 hover:bg-brand-dark transition-colors" data-action="setRole" data-role="senior">
-                        <i class="fa-solid fa-person-cane mr-2"></i> 我是長者
-                    </button>
-                    <button class="action-btn w-full bg-white text-brand border-2 border-brand bs-text-xl font-bold py-4 px-6 rounded-2xl shadow-sm hover:bg-orange-50 transition-colors" data-action="setRole" data-role="child">
-                        <i class="fa-solid fa-children mr-2"></i> 我是子女
-                    </button>
                 </div>
             `;
         }
@@ -2297,31 +2393,29 @@
             }
 
             return `
-                <div class="flex flex-col h-full p-8 bg-[#FFF8F0] animate-fadeIn">
-                    <button class="action-btn self-start text-gray-400 mb-6 bs-text-xl" data-action="backStep" data-step="1">
+                <div class="flex flex-col h-full p-6 animate-fadeIn">
+                    <button class="action-btn care-icon-btn bg-[#F4F1E9] text-[#708079] mb-6" data-action="backStep" data-step="1">
                         <i class="fa-solid fa-arrow-left"></i>
                     </button>
-                    <h2 class="bs-text-3xl font-bold text-gray-800 mb-2">設定個人檔案</h2>
-                    <p class="text-gray-500 mb-8">選擇一個喜歡的頭像並輸入稱呼</p>
+                    <h2 class="bs-text-3xl font-bold text-[#263238] mb-2">設定個人檔案</h2>
+                    <p class="care-muted mb-6">選一個簡潔代號，家人會在對話和回憶裡看到。</p>
                     
-                    <!-- 頭像選擇 -->
-                    <div class="grid grid-cols-3 gap-4 mb-8">
+                    <div class="grid grid-cols-3 gap-3 mb-7">
                         ${avatarOptions.map(avatar => `
-                            <button class="action-btn bs-text-4xl p-3 rounded-2xl transition-all ${state.userAvatar === avatar ? 'bg-brand shadow-md transform scale-105' : 'bg-white border border-gray-200 opacity-60'}" data-action="selectAvatar" data-avatar="${avatar}">
+                            <button class="action-btn bs-text-2xl font-bold min-h-[72px] rounded-lg transition-all ${state.userAvatar === avatar ? 'care-primary shadow-md' : 'care-card-flat care-muted'}" data-action="selectAvatar" data-avatar="${avatar}">
                                 ${avatar}
                             </button>
                         `).join('')}
                     </div>
 
-                    <!-- 稱呼輸入 -->
                     <div class="mb-8 relative">
-                        <label class="block text-gray-700 font-bold mb-2">您的稱呼</label>
-                        <input type="text" id="nameInput" value="${state.userName}" placeholder="例如: ${state.role === 'senior' ? '媽媽, 爺爺' : '阿強, 妹妹'}" class="w-full bs-text-xl p-4 rounded-2xl border-2 ${state.errorMsg ? 'border-red-400' : 'border-gray-200'} focus:border-brand outline-none bg-white">
-                        ${state.errorMsg ? `<p class="text-red-500 bs-text-sm mt-2 absolute -bottom-6 animate-shake">${state.errorMsg}</p>` : ''}
+                        <label class="block text-[#263238] font-bold mb-2">您的稱呼</label>
+                        <input type="text" id="nameInput" value="${escapeAttribute(state.userName)}" placeholder="例如：${state.role === 'senior' ? '媽媽、爺爺' : '阿強、妹妹'}" class="w-full bs-text-lg p-4 rounded-lg border ${state.errorMsg ? 'border-[#D98273]' : 'care-divider'} focus:border-[#2F7F7A] outline-none bg-[#FFFDF8]">
+                        ${state.errorMsg ? `<p class="text-[#D98273] bs-text-sm mt-2 absolute -bottom-6 animate-shake">${escapeHtml(state.errorMsg)}</p>` : ''}
                     </div>
 
                     <div class="flex-1"></div>
-                    <button class="action-btn w-full bg-brand text-white bs-text-xl font-bold py-4 rounded-2xl shadow-lg hover:bg-brand-dark transition-colors" data-action="submitProfile">
+                    <button class="action-btn w-full care-primary bs-text-xl font-bold py-4 rounded-lg shadow-md" data-action="submitProfile">
                         下一步 <i class="fa-solid fa-arrow-right ml-2"></i>
                     </button>
                 </div>
@@ -2332,31 +2426,31 @@
         function renderStep4Connect() {
             if (!state.connectionMode || state.connectionMode === 'select') {
                 return `
-                    <div class="flex flex-col h-full p-8 bg-[#FFF8F0] animate-fadeIn">
-                        <button class="action-btn self-start text-gray-400 mb-6 bs-text-xl" data-action="backStep" data-step="2">
+                    <div class="flex flex-col h-full p-6 animate-fadeIn">
+                        <button class="action-btn care-icon-btn bg-[#F4F1E9] text-[#708079] mb-6" data-action="backStep" data-step="2">
                             <i class="fa-solid fa-arrow-left"></i>
                         </button>
-                        <h2 class="bs-text-3xl font-bold text-gray-800 mb-2">加入共用日曆</h2>
-                        <p class="text-gray-500 mb-10">與家人連結，隨時隨地分享生活點滴。</p>
+                        <h2 class="bs-text-3xl font-bold text-[#263238] mb-2">連接家庭空間</h2>
+                        <p class="care-muted mb-8">建立或加入同一個家庭碼，就能同步日曆、對話和回憶。</p>
                         
-                        <div class="space-y-6">
-                            <button class="action-btn w-full bg-white border-2 border-brand p-6 rounded-3xl shadow-sm text-left flex items-center hover:bg-orange-50 transition-colors" data-action="setConnectionMode" data-mode="create">
-                                <div class="w-14 h-14 rounded-full bg-orange-100 text-brand flex items-center justify-center bs-text-2xl mr-4 shrink-0">
-                                    <i class="fa-solid fa-house-chimney-medical"></i>
+                        <div class="space-y-3">
+                            <button class="action-btn w-full care-card p-5 text-left flex items-center gap-4" data-action="setConnectionMode" data-mode="create">
+                                <div class="w-12 h-12 rounded-lg bg-[#E4EEE9] text-[#2F7F7A] flex items-center justify-center bs-text-xl shrink-0">
+                                    <i class="fa-solid fa-house-medical"></i>
                                 </div>
                                 <div>
-                                    <h3 class="bs-text-xl font-bold text-gray-800">建立新日曆</h3>
-                                    <p class="bs-text-sm text-gray-500 mt-1">產生一組數字邀請家人加入</p>
+                                    <h3 class="bs-text-xl font-bold text-[#263238]">建立新家庭</h3>
+                                    <p class="bs-text-sm care-muted mt-1">產生一組數字邀請家人加入。</p>
                                 </div>
                             </button>
 
-                            <button class="action-btn w-full bg-white border-2 border-gray-200 p-6 rounded-3xl shadow-sm text-left flex items-center hover:bg-gray-50 transition-colors" data-action="setConnectionMode" data-mode="join">
-                                <div class="w-14 h-14 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center bs-text-2xl mr-4 shrink-0">
+                            <button class="action-btn w-full care-card-flat p-5 text-left flex items-center gap-4" data-action="setConnectionMode" data-mode="join">
+                                <div class="w-12 h-12 rounded-lg bg-[#E8EFF2] text-[#476B83] flex items-center justify-center bs-text-xl shrink-0">
                                     <i class="fa-solid fa-right-to-bracket"></i>
                                 </div>
                                 <div>
-                                    <h3 class="bs-text-xl font-bold text-gray-800">加入現有日曆</h3>
-                                    <p class="bs-text-sm text-gray-500 mt-1">輸入家人提供給您的6位數字</p>
+                                    <h3 class="bs-text-xl font-bold text-[#263238]">加入家庭</h3>
+                                    <p class="bs-text-sm care-muted mt-1">輸入家人提供的 6 位數字。</p>
                                 </div>
                             </button>
                         </div>
@@ -2370,24 +2464,24 @@
                     state.calendarCode = Math.floor(100000 + Math.random() * 900000).toString();
                 }
                 return `
-                    <div class="flex flex-col h-full p-8 bg-[#FFF8F0] animate-fadeIn text-center">
-                        <button class="action-btn self-start text-gray-400 mb-2 bs-text-xl" data-action="setConnectionMode" data-mode="select">
+                    <div class="flex flex-col h-full p-6 animate-fadeIn text-center">
+                        <button class="action-btn care-icon-btn bg-[#F4F1E9] text-[#708079] mb-4" data-action="setConnectionMode" data-mode="select">
                             <i class="fa-solid fa-arrow-left"></i>
                         </button>
-                        <h2 class="bs-text-2xl font-bold text-gray-800 mb-6">您的日曆邀請碼</h2>
+                        <h2 class="bs-text-2xl font-bold text-[#263238] mb-6">您的家庭邀請碼</h2>
                         
-                        <div class="bg-white p-8 rounded-3xl shadow-lg border border-orange-100 mb-8">
-                            <p class="text-gray-500 mb-4">請將這組數字告訴您的家人</p>
-                            <div class="text-6xl font-bold text-brand tracking-widest font-mono mb-4 bg-orange-50 py-4 rounded-xl">
+                        <div class="care-card p-6 mb-8">
+                            <p class="care-muted mb-4">請將這組數字告訴您的家人</p>
+                            <div class="text-5xl font-bold text-[#263238] tracking-widest font-mono mb-4 bg-[#F4F1E9] py-5 rounded-lg">
                                 ${state.calendarCode}
                             </div>
-                            <button class="action-btn text-brand-dark font-bold py-2 px-4 rounded-full bg-orange-100 flex items-center justify-center mx-auto" data-action="copyCode">
+                            <button class="action-btn care-chip font-bold py-2 px-4 flex items-center justify-center mx-auto" data-action="copyCode">
                                 <i class="fa-regular fa-copy mr-2"></i> 複製號碼
                             </button>
                         </div>
 
                         <div class="flex-1"></div>
-                        <button class="action-btn w-full bg-brand text-white bs-text-xl font-bold py-4 rounded-2xl shadow-lg hover:bg-brand-dark transition-colors" data-action="finishOnboarding">
+                        <button class="action-btn w-full care-primary bs-text-xl font-bold py-4 rounded-lg shadow-md" data-action="finishOnboarding">
                             進入應用程式
                         </button>
                     </div>
@@ -2396,20 +2490,20 @@
 
             if (state.connectionMode === 'join') {
                 return `
-                    <div class="flex flex-col h-full p-8 bg-[#FFF8F0] animate-fadeIn text-center">
-                        <button class="action-btn self-start text-gray-400 mb-6 bs-text-xl" data-action="setConnectionMode" data-mode="select">
+                    <div class="flex flex-col h-full p-6 animate-fadeIn text-center">
+                        <button class="action-btn care-icon-btn bg-[#F4F1E9] text-[#708079] mb-6" data-action="setConnectionMode" data-mode="select">
                             <i class="fa-solid fa-arrow-left"></i>
                         </button>
-                        <h2 class="bs-text-3xl font-bold text-gray-800 mb-2">輸入邀請碼</h2>
-                        <p class="text-gray-500 mb-8">請輸入家人提供給您的6位數字</p>
+                        <h2 class="bs-text-3xl font-bold text-[#263238] mb-2">輸入邀請碼</h2>
+                        <p class="care-muted mb-8">請輸入家人提供給您的 6 位數字</p>
                         
                         <div class="mb-8 relative">
-                            <input type="number" id="joinCodeInput" placeholder="_ _ _ _ _ _" class="w-full text-center bs-text-4xl font-mono tracking-widest p-6 rounded-2xl border-2 ${state.errorMsg ? 'border-red-400' : 'border-gray-200'} focus:border-brand outline-none bg-white">
-                            ${state.errorMsg ? `<p class="text-red-500 bs-text-sm mt-3 animate-shake">${state.errorMsg}</p>` : ''}
+                            <input type="number" id="joinCodeInput" placeholder="_ _ _ _ _ _" class="w-full text-center bs-text-4xl font-mono tracking-widest p-6 rounded-lg border ${state.errorMsg ? 'border-[#D98273]' : 'care-divider'} focus:border-[#2F7F7A] outline-none bg-[#FFFDF8]">
+                            ${state.errorMsg ? `<p class="text-[#D98273] bs-text-sm mt-3 animate-shake">${escapeHtml(state.errorMsg)}</p>` : ''}
                         </div>
 
                         <div class="flex-1"></div>
-                        <button class="action-btn w-full bg-brand text-white bs-text-xl font-bold py-4 rounded-2xl shadow-lg hover:bg-brand-dark transition-colors" data-action="submitJoinCode">
+                        <button class="action-btn w-full care-primary bs-text-xl font-bold py-4 rounded-lg shadow-md" data-action="submitJoinCode">
                             確認加入
                         </button>
                     </div>
@@ -2419,87 +2513,229 @@
 
         // --- 主應用程式視圖 ---
 
-        // 頂部導航列 (加入一鍵刪除按鈕)
         function renderHeader() {
-            const titles = { 'calendar': '日曆', 'chat': '對話', 'rewards': '獎勵', 'profile': '我' };
+            const titles = {
+                home: '今日家人近況',
+                chat: '溫馨對話',
+                memories: '回憶匣',
+                creative: '創作問候',
+                profile: '我的'
+            };
             const currentTitle = titles[state.currentTab] || '星喚';
             return `
-                <header class="bg-white px-6 pt-12 pb-4 shadow-sm z-10 sticky top-0 flex justify-between items-center rounded-b-2xl">
-                    <div class="flex items-center">
-                        ${renderAvatar(state.userAvatar, { userId: state.authUid, sizeClass: 'w-10 h-10', coreClass: 'bg-orange-100 bs-text-2xl border-2 border-brand-light shadow-sm', extraClass: 'mr-3' })}
-                        <h2 class="bs-text-2xl font-bold text-gray-800">${currentTitle}</h2>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <div class="bg-orange-100 text-brand-dark px-3 py-1.5 rounded-full font-bold flex items-center shadow-inner">
-                            <i class="fa-solid fa-coins mr-1.5 text-yellow-500"></i> ${state.points}
+                <header class="px-5 pt-10 pb-3 z-10 sticky top-0 bg-[#F7F3EA]/95 backdrop-blur-md border-b care-divider">
+                    <div class="flex items-center justify-between gap-3">
+                        <div class="flex items-center min-w-0">
+                            ${renderAvatar(state.userAvatar, { userId: state.authUid, sizeClass: 'w-11 h-11', coreClass: 'bg-[#E4EEE9] text-[#2F5F58] bs-text-lg border border-[#C9D8CF] shadow-sm', extraClass: 'mr-3' })}
+                            <div class="min-w-0">
+                                <p class="bs-text-xs care-muted font-medium">星喚 Beckon Stars</p>
+                                <h2 class="bs-text-xl font-bold text-[#263238] truncate">${currentTitle}</h2>
+                            </div>
                         </div>
-                        <button class="action-btn w-9 h-9 rounded-full ${state.notificationPermission === 'granted' ? 'bg-green-50 text-green-600' : 'bg-yellow-50 text-yellow-600'} flex items-center justify-center hover:bg-yellow-100 transition-colors" data-action="requestNotifications" title="開啟通知提示">
-                            <i class="fa-solid ${state.notificationPermission === 'granted' ? 'fa-bell' : 'fa-bell-slash'}"></i>
-                        </button>
-                        ${state.canInstallApp ? `
-                            <button class="action-btn w-9 h-9 rounded-full bg-orange-50 text-brand flex items-center justify-center hover:bg-orange-100 transition-colors" data-action="installApp" title="安裝成手機 App">
-                                <i class="fa-solid fa-mobile-screen-button"></i>
+                        <div class="flex items-center gap-2 shrink-0">
+                            <button class="action-btn care-icon-btn ${state.notificationPermission === 'granted' ? 'bg-[#E4EEE9] text-[#2F7F7A]' : 'bg-[#F4E7D1] text-[#9A6C24]'}" data-action="requestNotifications" title="通知">
+                                <i class="fa-solid ${state.notificationPermission === 'granted' ? 'fa-bell' : 'fa-bell-slash'}"></i>
                             </button>
-                        ` : ''}
-                        <button class="action-btn w-9 h-9 rounded-full bg-gray-900 text-green-300 flex items-center justify-center hover:bg-gray-800 transition-colors" data-action="openModal" data-modal="logs" title="查看 Log">
-                            <i class="fa-solid fa-terminal"></i>
-                        </button>
-                        <button class="action-btn w-9 h-9 rounded-full bg-gray-50 text-gray-400 flex items-center justify-center hover:bg-red-50 hover:text-red-500 transition-colors" data-action="openModal" data-modal="confirmReset" title="清除數據並重新開始">
-                            <i class="fa-solid fa-trash-can"></i>
-                        </button>
+                            <button class="action-btn care-icon-btn bg-white/80 text-[#476B83] border care-divider" data-action="switchTab" data-tab="profile" title="我的">
+                                <i class="fa-solid fa-user"></i>
+                            </button>
+                        </div>
                     </div>
                 </header>
             `;
         }
 
-        // 底部導航列
         function renderBottomNav() {
             const tabs = [
-                { id: 'calendar', icon: 'fa-calendar-days', label: '日曆' },
-                { id: 'chat', icon: 'fa-comments', label: '聊天' },
-                { id: 'rewards', icon: 'fa-gift', label: '獎勵' },
-                { id: 'profile', icon: 'fa-user', label: '我' }
+                { id: 'home', icon: 'fa-house', label: '今日' },
+                { id: 'chat', icon: 'fa-comments', label: '對話' },
+                { id: 'memories', icon: 'fa-box-archive', label: '回憶' },
+                { id: 'creative', icon: 'fa-wand-magic-sparkles', label: '創作' },
+                { id: 'profile', icon: 'fa-gear', label: '我的' }
             ];
 
             return `
-                <nav class="absolute bottom-0 w-full bg-white border-t border-gray-100 px-6 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] flex justify-between items-center z-20 shadow-[0_-5px_15px_rgba(0,0,0,0.03)]">
-                    ${tabs.map(tab => `
-                        <button class="action-btn flex flex-col items-center p-2 flex-1 ${state.currentTab === tab.id ? 'text-brand' : 'text-gray-400'}" data-action="switchTab" data-tab="${tab.id}">
-                            <i class="fa-solid ${tab.icon} bs-text-2xl mb-1 transition-transform ${state.currentTab === tab.id ? 'transform scale-110' : ''}"></i>
-                            <span class="bs-text-xs font-medium">${tab.label}</span>
-                        </button>
-                    `).join('')}
+                <nav class="absolute bottom-0 w-full bg-[#FFFDF8]/96 backdrop-blur-md border-t care-divider px-3 pt-2 pb-[calc(0.7rem+env(safe-area-inset-bottom))] grid grid-cols-5 gap-1 z-20 shadow-[0_-8px_22px_rgba(47,73,70,0.08)]">
+                    ${tabs.map(tab => {
+                        const active = state.currentTab === tab.id;
+                        return `
+                            <button class="action-btn min-h-[58px] rounded-lg flex flex-col items-center justify-center gap-1 transition-colors ${active ? 'bg-[#E4EEE9] text-[#2F7F7A]' : 'text-[#81908A]'}" data-action="switchTab" data-tab="${tab.id}">
+                                <i class="fa-solid ${tab.icon} bs-text-lg"></i>
+                                <span class="bs-text-xs font-bold">${tab.label}</span>
+                            </button>
+                        `;
+                    }).join('')}
                 </nav>
             `;
         }
 
-        // 日曆視圖
-        function renderCalendar() {
-            let visibleMemories = state.memories;
-            if (state.role === 'child') {
-                visibleMemories = state.memories.filter(m => m.childId === 'child_1');
-            }
+        function renderHome() {
+            const visibleMemories = getVisibleMemories();
+            const todayMemories = getTodayMemories();
+            const latestMessage = [...(state.messages || [])].slice(-1)[0];
+            const reward = state.dailyMessageReward || {};
+            const threshold = Number(reward.threshold || 20);
+            const count = Math.min(Number(reward.count ?? state.dailyMessages ?? 0), threshold);
+            const progress = threshold > 0 ? Math.min((count / threshold) * 100, 100) : 0;
+            const days = Array.from({ length: 7 }, (_, index) => {
+                const d = new Date(today);
+                d.setDate(today.getDate() - 3 + index);
+                const memories = visibleMemories.filter(m => Number(m.date) === d.getDate() && Number(m.month) === d.getMonth() + 1);
+                return { date: d, active: d.toDateString() === today.toDateString(), memories };
+            });
 
             return `
-                <div class="p-6" id="calendarContent">
-                    <div class="flex bg-gray-200 rounded-xl p-1 mb-6">
-                        <button class="action-btn flex-1 py-2 rounded-lg font-bold bs-text-sm transition-colors ${state.calendarMode === 'tear-off' ? 'bg-white text-brand shadow' : 'text-gray-500'}" data-action="switchCalendar" data-mode="tear-off">
-                            手撕日曆
-                        </button>
-                        <button class="action-btn flex-1 py-2 rounded-lg font-bold bs-text-sm transition-colors ${state.calendarMode === 'monthly' ? 'bg-white text-brand shadow' : 'text-gray-500'}" data-action="switchCalendar" data-mode="monthly">
-                            現時月曆
-                        </button>
-                    </div>
+                <div class="px-5 py-5 space-y-4">
+                    <section class="care-card p-5">
+                        <div class="flex items-start justify-between gap-4 mb-5">
+                            <div>
+                                <p class="bs-text-sm care-muted font-medium">${today.getFullYear()}年 ${today.getMonth() + 1}月${today.getDate()}日</p>
+                                <h1 class="bs-text-3xl font-bold text-[#263238] mt-1">慢慢連上家人的一天</h1>
+                            </div>
+                            <span class="care-chip px-3 py-1.5 bs-text-xs font-bold shrink-0">
+                                <i class="fa-solid fa-cloud-arrow-up mr-1"></i>安心同步
+                            </span>
+                        </div>
+                        <div class="grid grid-cols-3 gap-2">
+                            <button class="action-btn care-secondary min-h-[76px] rounded-lg p-3 text-left" data-action="switchTab" data-tab="chat">
+                                <i class="fa-solid fa-message text-[#2F7F7A] mb-2"></i>
+                                <p class="font-bold bs-text-sm">傳訊息</p>
+                            </button>
+                            <button class="action-btn bg-[#F6E6DF] text-[#7A443A] min-h-[76px] rounded-lg p-3 text-left" data-action="openModal" data-modal="addMemory">
+                                <i class="fa-solid fa-plus mb-2"></i>
+                                <p class="font-bold bs-text-sm">留低一刻</p>
+                            </button>
+                            <button class="action-btn bg-[#E8EFF2] text-[#476B83] min-h-[76px] rounded-lg p-3 text-left" data-action="switchTab" data-tab="profile">
+                                <i class="fa-solid fa-users mb-2"></i>
+                                <p class="font-bold bs-text-sm">看看家人</p>
+                            </button>
+                        </div>
+                    </section>
+
+                    <section class="grid grid-cols-2 gap-3">
+                        <div class="care-card-flat p-4">
+                            <p class="bs-text-xs care-muted font-bold">今日回憶</p>
+                            <p class="bs-text-3xl font-bold text-[#2F7F7A] mt-1">${todayMemories.length}</p>
+                            <p class="bs-text-xs care-muted mt-1">相片、文字、語音</p>
+                        </div>
+                        <div class="care-card-flat p-4">
+                            <p class="bs-text-xs care-muted font-bold">互動任務</p>
+                            <p class="bs-text-3xl font-bold text-[#D7A84A] mt-1">${count}/${threshold}</p>
+                            <div class="h-1.5 bg-[#EFE8DA] rounded-full overflow-hidden mt-2">
+                                <div class="h-full bg-[#D7A84A]" style="width: ${progress}%;"></div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="care-card p-4">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="bs-text-lg font-bold text-[#263238]">家庭日曆</h3>
+                            <button class="action-btn bs-text-sm font-bold text-[#2F7F7A]" data-action="switchTab" data-tab="memories">查看</button>
+                        </div>
+                        <div class="grid grid-cols-7 gap-1">
+                            ${days.map(item => `
+                                <button class="action-btn min-h-[58px] rounded-lg ${item.active ? 'bg-[#2F7F7A] text-white' : 'bg-[#F3F0E8] text-[#5D6A66]'} flex flex-col items-center justify-center" data-action="switchTab" data-tab="memories">
+                                    <span class="bs-text-xs font-bold">${['日','一','二','三','四','五','六'][item.date.getDay()]}</span>
+                                    <span class="bs-text-base font-bold">${item.date.getDate()}</span>
+                                    <span class="w-1.5 h-1.5 rounded-full mt-0.5 ${item.memories.length ? 'bg-[#D98273]' : 'bg-transparent'}"></span>
+                                </button>
+                            `).join('')}
+                        </div>
+                    </section>
+
+                    <section class="care-card p-4">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="bs-text-lg font-bold text-[#263238]">最近對話</h3>
+                            <button class="action-btn bs-text-sm font-bold text-[#2F7F7A]" data-action="switchTab" data-tab="chat">回覆</button>
+                        </div>
+                        ${latestMessage ? `
+                            <div class="flex items-start gap-3">
+                                ${renderAvatar((latestMessage.senderName || '家')[0], { sizeClass: 'w-10 h-10', coreClass: 'bg-[#E4EEE9] text-[#2F5F58] font-bold' })}
+                                <div class="min-w-0 flex-1">
+                                    <p class="bs-text-sm font-bold text-[#263238]">${escapeHtml(latestMessage.senderName || '家庭成員')}</p>
+                                    <p class="bs-text-base care-muted truncate">${escapeHtml(latestMessage.transcript || latestMessage.content || '傳來一則新訊息')}</p>
+                                </div>
+                            </div>
+                        ` : `
+                            <p class="bs-text-base care-muted">還未有訊息，先向家人說聲早晨。</p>
+                        `}
+                    </section>
+
+                    <button class="action-btn w-full care-primary rounded-lg py-4 font-bold bs-text-lg shadow-md" data-action="switchTab" data-tab="creative">
+                        <i class="fa-solid fa-wand-magic-sparkles mr-2"></i>創作一張問候圖
+                    </button>
+                </div>
+            `;
+        }
+
+        function renderCalendar() {
+            const visibleMemories = getVisibleMemories();
+            const recentMemories = visibleMemories.slice(0, 6);
+
+            return `
+                <div class="px-5 py-5 space-y-4" id="calendarContent">
+                    <section class="care-card p-5">
+                        <div class="flex items-start justify-between gap-3 mb-4">
+                            <div>
+                                <p class="bs-text-xs care-muted font-bold">家庭日曆</p>
+                                <h1 class="bs-text-2xl font-bold text-[#263238] mt-1">一起保存生活的小片段</h1>
+                            </div>
+                            <button class="action-btn care-icon-btn care-primary" data-action="openModal" data-modal="addMemory" title="記錄今日回憶">
+                                <i class="fa-solid fa-plus"></i>
+                            </button>
+                        </div>
+                        <div class="flex bg-[#EEE8DC] rounded-lg p-1">
+                            <button class="action-btn flex-1 py-2 rounded-md font-bold bs-text-sm transition-colors ${state.calendarMode === 'tear-off' ? 'bg-white text-[#2F7F7A] shadow-sm' : 'text-[#708079]'}" data-action="switchCalendar" data-mode="tear-off">
+                                今日
+                            </button>
+                            <button class="action-btn flex-1 py-2 rounded-md font-bold bs-text-sm transition-colors ${state.calendarMode === 'monthly' ? 'bg-white text-[#2F7F7A] shadow-sm' : 'text-[#708079]'}" data-action="switchCalendar" data-mode="monthly">
+                                月曆
+                            </button>
+                        </div>
+                    </section>
 
                     ${state.calendarMode === 'tear-off' ? renderTearOffCalendar(visibleMemories) : renderMonthlyCalendar(visibleMemories)}
 
-                    <button class="action-btn mt-6 w-full bg-white border-2 border-orange-100 text-brand-dark py-4 rounded-2xl font-bold bs-text-lg shadow-sm flex items-center justify-center hover:bg-orange-50 transition-colors" data-action="openModal" data-modal="weeklySummary">
-                        <i class="fa-solid fa-wand-magic-sparkles mr-2 text-brand"></i> 生成家庭回憶摘要
-                    </button>
+                    <section class="space-y-3">
+                        <div class="flex items-center justify-between">
+                            <h3 class="bs-text-lg font-bold text-[#263238]">最近回憶</h3>
+                            <button class="action-btn bs-text-sm font-bold text-[#2F7F7A]" data-action="openModal" data-modal="weeklySummary">整理摘要</button>
+                        </div>
+                        ${recentMemories.length ? recentMemories.map(memory => {
+                            const kind = getMemoryKind(memory);
+                            const imageSrc = getMemoryImageSrc(memory, true);
+                            return `
+                                <button class="action-btn w-full care-card-flat p-3 text-left flex items-center gap-3" data-action="viewMemories" data-date="${escapeAttribute(memory.date)}" data-month="${escapeAttribute(memory.month)}">
+                                    <div class="w-14 h-14 rounded-lg ${kind.bg} ${kind.tone} flex items-center justify-center overflow-hidden shrink-0">
+                                        ${imageSrc ? `<img src="${escapeAttribute(imageSrc)}" class="w-full h-full object-cover" alt="">` : `<i class="fa-solid ${kind.icon} bs-text-xl"></i>`}
+                                    </div>
+                                    <div class="min-w-0 flex-1">
+                                        <div class="flex items-center gap-2 mb-1">
+                                            <span class="bs-text-xs font-bold ${kind.tone}">${kind.label}</span>
+                                            <span class="bs-text-xs care-muted">${memory.month || today.getMonth()+1}月${memory.date || today.getDate()}日</span>
+                                        </div>
+                                        <p class="bs-text-base font-bold text-[#263238] truncate">${escapeHtml(memory.content || '一段家人的回憶')}</p>
+                                        <p class="bs-text-xs care-muted">${escapeHtml(memory.childName || '家庭成員')}</p>
+                                    </div>
+                                </button>
+                            `;
+                        }).join('') : `
+                            <div class="care-card-flat p-5 text-center">
+                                <i class="fa-solid fa-box-archive bs-text-3xl text-[#8FAF9C] mb-3"></i>
+                                <p class="font-bold text-[#263238]">還未有回憶</p>
+                                <p class="bs-text-sm care-muted mt-1">可以先記錄一張相片、一段語音或一句話。</p>
+                            </div>
+                        `}
+                    </section>
 
-                    <button class="action-btn mt-4 w-full bg-brand text-white py-4 rounded-2xl font-bold bs-text-lg shadow-lg flex items-center justify-center hover:bg-brand-dark transition-colors" data-action="openModal" data-modal="addMemory">
-                        <i class="fa-solid fa-plus-circle mr-2 bs-text-xl"></i> 記錄今日回憶
-                    </button>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button class="action-btn care-secondary rounded-lg py-4 font-bold" data-action="openModal" data-modal="weeklySummary">
+                            <i class="fa-solid fa-wand-magic-sparkles mr-2"></i>回憶摘要
+                        </button>
+                        <button class="action-btn bg-[#F6E6DF] text-[#7A443A] rounded-lg py-4 font-bold" data-action="openModal" data-modal="videoPlayer">
+                            <i class="fa-solid fa-film mr-2"></i>本月影片
+                        </button>
+                    </div>
                 </div>
             `;
         }
@@ -2521,20 +2757,15 @@
             const calendarEl = document.getElementById('calendarContent');
             if (!calendarEl) return;
 
-            // 保留切換按鈕和底部按鈕，只替換中間的日曆內容
+            // 保留頁面外框與操作按鈕，只替換中間的日曆內容
             const tmp = document.createElement('div');
             tmp.innerHTML = state.calendarMode === 'tear-off'
                 ? renderTearOffCalendar(visibleMemories)
                 : renderMonthlyCalendar(visibleMemories);
             const newCalendar = tmp.firstElementChild;
 
-            // 找到現有的日曆容器（切換按鈕之後的第一個子元素）
-            const switcher = calendarEl.querySelector('.flex.bg-gray-200');
-            if (switcher && switcher.nextElementSibling) {
-                // 如果現有元素有 calendarPageContainer，保留其動畫狀態
-                const oldContainer = switcher.nextElementSibling;
-                calendarEl.replaceChild(newCalendar, oldContainer);
-            }
+            const oldContainer = calendarEl.querySelector('#tearOffCalendar, #monthlyCalendar');
+            if (oldContainer && newCalendar) calendarEl.replaceChild(newCalendar, oldContainer);
 
             // 重新綁定日曆區塊的事件
             calendarEl.querySelectorAll('.calendar-nav-btn').forEach(btn => {
@@ -2739,19 +2970,19 @@
 
             if (recording.locked) {
                 return `
-                    <div id="chatComposerBar" class="shrink-0 bg-white px-3 py-3 border-t border-gray-100 shadow-[0_-4px_10px_rgba(0,0,0,0.03)] flex items-center gap-3">
-                        <button class="action-btn w-12 h-12 rounded-full bg-red-100 text-brand-red flex items-center justify-center shrink-0 shadow-sm hover:bg-red-200 transition-colors" data-action="deleteLockedVoiceRecording" title="刪除錄音">
+                    <div id="chatComposerBar" class="shrink-0 bg-[#FFFDF8] px-3 py-3 border-t care-divider shadow-[0_-8px_20px_rgba(47,73,70,0.06)] flex items-center gap-3">
+                        <button class="action-btn w-12 h-12 rounded-full bg-[#F6E6DF] text-[#D98273] flex items-center justify-center shrink-0 shadow-sm" data-action="deleteLockedVoiceRecording" title="刪除錄音">
                             <i class="fa-solid fa-trash bs-text-lg"></i>
                         </button>
-                        <div class="min-w-0 flex-1 flex items-center gap-3 bg-gray-50 rounded-2xl px-4 py-3">
-                            <span class="w-3 h-3 rounded-full bg-brand-red recording-pulse shrink-0"></span>
+                        <div class="min-w-0 flex-1 flex items-center gap-3 bg-[#F4F1E9] rounded-lg px-4 py-3">
+                            <span class="w-3 h-3 rounded-full bg-[#D98273] recording-pulse shrink-0"></span>
                             <div class="min-w-0 flex-1">
-                                <p id="voiceRecordingLockedTimerText" class="font-bold text-gray-800 bs-text-base leading-tight">${elapsed}</p>
-                                <p class="bs-text-xs text-gray-500 mt-0.5">已鎖定，正在錄音</p>
+                                <p id="voiceRecordingLockedTimerText" class="font-bold text-[#263238] bs-text-base leading-tight">${elapsed}</p>
+                                <p class="bs-text-xs care-muted mt-0.5">已鎖定，正在錄音</p>
                             </div>
-                            <i class="fa-solid fa-lock text-brand"></i>
+                            <i class="fa-solid fa-lock text-[#2F7F7A]"></i>
                         </div>
-                        <button class="action-btn w-12 h-12 rounded-full bg-brand text-white flex items-center justify-center shrink-0 shadow-md hover:bg-brand-dark transition-colors" data-action="sendLockedVoiceRecording" title="傳送錄音">
+                        <button class="action-btn w-12 h-12 rounded-full care-primary flex items-center justify-center shrink-0 shadow-md" data-action="sendLockedVoiceRecording" title="傳送錄音">
                             <i class="fa-solid fa-paper-plane bs-text-xl"></i>
                         </button>
                     </div>
@@ -2760,25 +2991,25 @@
 
             if (recording.active) {
                 return `
-                    <div id="chatComposerBar" class="shrink-0 bg-white px-3 py-3 border-t border-gray-100 shadow-[0_-4px_10px_rgba(0,0,0,0.03)]">
+                    <div id="chatComposerBar" class="shrink-0 bg-[#FFFDF8] px-3 py-3 border-t care-divider shadow-[0_-8px_20px_rgba(47,73,70,0.06)]">
                         <div class="flex items-center gap-3">
-                            <button id="voiceHoldButton" class="w-12 h-12 rounded-full ${isCancelling ? 'bg-red-100 text-brand-red' : 'bg-brand text-white'} flex items-center justify-center shrink-0 select-none touch-none shadow-md ${isCancelling ? '' : 'recording-pulse'}" title="按住錄音">
+                            <button id="voiceHoldButton" class="w-12 h-12 rounded-full ${isCancelling ? 'bg-[#F6E6DF] text-[#D98273]' : 'care-primary text-white'} flex items-center justify-center shrink-0 select-none touch-none shadow-md ${isCancelling ? '' : 'recording-pulse'}" title="按住錄音">
                                 <i class="fa-solid ${isCancelling ? 'fa-ban' : 'fa-microphone'} bs-text-xl"></i>
                             </button>
                             <div class="min-w-0 flex-1">
                                 <div class="flex items-center justify-between gap-3">
-                                    <div class="min-w-0 flex-1 flex items-center gap-2 ${isCancelling ? 'text-brand-red' : 'text-gray-500'} font-bold bs-text-sm">
+                                    <div class="min-w-0 flex-1 flex items-center gap-2 ${isCancelling ? 'text-[#D98273]' : 'care-muted'} font-bold bs-text-sm">
                                         ${isCancelling ? '<i class="fa-solid fa-ban"></i><span>鬆手取消錄音</span>' : '<span>向右滑取消</span><i class="fa-solid fa-arrow-right-long"></i>'}
                                     </div>
-                                    <div class="flex items-center gap-2 text-gray-800 font-bold bs-text-base shrink-0">
-                                        <span class="w-2.5 h-2.5 rounded-full bg-brand-red recording-pulse"></span>
+                                    <div class="flex items-center gap-2 text-[#263238] font-bold bs-text-base shrink-0">
+                                        <span class="w-2.5 h-2.5 rounded-full bg-[#D98273] recording-pulse"></span>
                                         <span id="voiceRecordingTimerText">${elapsed}</span>
                                     </div>
-                                    <div class="w-10 h-10 rounded-full ${isLocking ? 'bg-brand text-white shadow-md' : 'bg-gray-100 text-gray-500'} flex items-center justify-center shrink-0 transition-colors">
+                                    <div class="w-10 h-10 rounded-full ${isLocking ? 'care-primary text-white shadow-md' : 'bg-[#F4F1E9] text-[#708079]'} flex items-center justify-center shrink-0 transition-colors">
                                         <i class="fa-solid ${isLocking ? 'fa-lock' : 'fa-arrow-up'}"></i>
                                     </div>
                                 </div>
-                                <p class="bs-text-xs text-gray-400 mt-1 text-center">${isCancelling ? '保持向右並鬆手即可取消' : '鬆手即發送；向上滑可鎖定錄音'}</p>
+                                <p class="bs-text-xs care-muted mt-1 text-center">${isCancelling ? '保持向右並鬆手即可取消' : '鬆手即發送；向上滑可鎖定錄音'}</p>
                             </div>
                         </div>
                     </div>
@@ -2786,16 +3017,16 @@
             }
 
             return `
-                <div id="chatComposerBar" class="shrink-0 bg-white px-3 py-3 border-t border-gray-100 shadow-[0_-4px_10px_rgba(0,0,0,0.03)] flex items-center gap-2">
-                    <button id="voiceHoldButton" class="w-10 h-10 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center shrink-0 select-none touch-none" title="按住錄音">
+                <div id="chatComposerBar" class="shrink-0 bg-[#FFFDF8] px-3 py-3 border-t care-divider shadow-[0_-8px_20px_rgba(47,73,70,0.06)] flex items-center gap-2">
+                    <button id="voiceHoldButton" class="w-10 h-10 rounded-full bg-[#F4F1E9] text-[#476B83] flex items-center justify-center shrink-0 select-none touch-none" title="按住錄音">
                         <i class="fa-solid fa-microphone bs-text-xl"></i>
                     </button>
-                    <button class="action-btn w-10 h-10 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center shrink-0" data-action="selectChatImage" title="傳送圖片">
+                    <button class="action-btn w-10 h-10 rounded-full bg-[#F4F1E9] text-[#476B83] flex items-center justify-center shrink-0" data-action="selectChatImage" title="傳送圖片">
                         <i class="fa-solid fa-image bs-text-xl"></i>
                     </button>
                     <input id="chatImageInput" type="file" accept="image/*" class="hidden">
-                    <input id="chatInput" type="text" value="${escapeAttribute(chatDraft)}" placeholder="發送溫暖訊息..." class="min-w-0 flex-1 bg-gray-100 rounded-full px-4 py-3 bs-text-base outline-none focus:ring-2 focus:ring-brand-light">
-                    <button class="action-btn w-12 h-12 rounded-full bg-brand text-white flex items-center justify-center shrink-0 shadow-md hover:bg-brand-dark transition-colors" data-action="sendMessage">
+                    <input id="chatInput" type="text" value="${escapeAttribute(chatDraft)}" placeholder="發送溫暖訊息..." class="min-w-0 flex-1 bg-[#F4F1E9] rounded-full px-4 py-3 bs-text-base outline-none focus:ring-2 focus:ring-[#8FAF9C]">
+                    <button class="action-btn w-12 h-12 rounded-full care-primary flex items-center justify-center shrink-0 shadow-md" data-action="sendMessage">
                         <i class="fa-solid fa-paper-plane bs-text-xl"></i>
                     </button>
                 </div>
@@ -2804,20 +3035,27 @@
 
         function renderChat() {
             return `
-                <div class="flex flex-col h-full min-h-0 bg-[#FFF8F0]">
-                    <div id="chatMessages" class="flex-1 min-h-0 px-4 pt-4 pb-3 space-y-6 overflow-y-auto no-scrollbar">
+                <div class="flex flex-col h-full min-h-0">
+                    <div class="shrink-0 px-5 pt-4 pb-2">
+                        <div class="care-card-flat p-3 flex items-center justify-between gap-3">
+                            <div class="min-w-0">
+                                <p class="bs-text-xs care-muted font-bold">安心同步</p>
+                                <p class="bs-text-sm text-[#263238] truncate">語音、相片和訊息會同步給家庭成員</p>
+                            </div>
+                            <button class="action-btn care-chip px-3 py-2 bs-text-xs font-bold shrink-0" data-action="summarizeTodayChat" ${state.summarizingChat ? 'disabled' : ''}>
+                                <i class="fa-solid ${state.summarizingChat ? 'fa-spinner fa-spin' : 'fa-wand-magic-sparkles'} mr-1"></i>${state.summarizingChat ? '整理中' : '整理'}
+                            </button>
+                        </div>
+                    </div>
+                    <div id="chatMessages" class="flex-1 min-h-0 px-4 pt-3 pb-3 space-y-5 overflow-y-auto no-scrollbar">
                         ${renderChatMessages()}
                         <div id="chatBottomAnchor" aria-hidden="true" class="h-px"></div>
                     </div>
 
                     ${state.backendMode === 'server' ? `
-                    <div class="shrink-0 px-3 py-2 bg-[#FFF8F0] flex gap-2">
-                        <button class="action-btn flex-1 bg-white border border-gray-100 rounded-2xl py-2.5 px-4 flex items-center justify-center gap-2 bs-text-sm font-bold text-gray-600 shadow-sm hover:bg-gray-50 transition-colors disabled:opacity-60" data-action="summarizeTodayChat" ${state.summarizingChat ? 'disabled' : ''}>
-                            <i class="fa-solid ${state.summarizingChat ? 'fa-spinner fa-spin' : 'fa-wand-magic-sparkles'} text-brand"></i>
-                            ${state.summarizingChat ? 'AI 總結中...' : 'AI 總結今日聊天'}
-                        </button>
-                        <button class="action-btn w-12 h-12 bg-white border border-gray-100 rounded-2xl flex items-center justify-center text-brand shadow-sm hover:bg-gray-50 transition-colors" data-action="openAIImageGen" title="AI 圖片生成">
-                            <i class="fa-solid fa-image bs-text-lg"></i>
+                    <div class="shrink-0 px-3 py-2 flex gap-2">
+                        <button class="action-btn flex-1 bg-[#E8EFF2] text-[#476B83] rounded-lg py-2.5 px-4 flex items-center justify-center gap-2 bs-text-sm font-bold" data-action="switchTab" data-tab="creative">
+                            <i class="fa-solid fa-image"></i>創作問候圖
                         </button>
                     </div>
                     ` : ''}
@@ -2951,95 +3189,232 @@
             `;
         }
 
-        // --- 個人資料視圖 ---
-        function renderProfile() {
-            const avatar = state.userAvatar || '👤';
-            const roleLabel = state.role === 'senior' ? '長輩' : state.role === 'child' ? '子女' : '未設定';
-            const usesBibleVerse = state.dailyCardMode === 'bible';
+        function renderCreative() {
+            const styles = [
+                { id: 'random', name: '隨機風格', icon: 'fa-shuffle', desc: '由星喚配搭' },
+                { id: 'garden', name: '懷舊膠片', icon: 'fa-film', desc: '像舊相簿' },
+                { id: 'lotus', name: '荷花問候', icon: 'fa-leaf', desc: '早安關懷' },
+                { id: 'studio', name: '影樓風格', icon: 'fa-building', desc: '清爽端正' },
+                { id: 'premium', name: '高級影樓', icon: 'fa-gem', desc: '精緻肖像' },
+                { id: 'korean', name: '韓系早安海報', icon: 'fa-sun', desc: '溫柔日常' }
+            ];
 
             return `
-                <div class="p-6 space-y-4">
-                    <!-- 頭像和基本資訊 -->
-                    <div class="bg-white rounded-3xl shadow-sm p-6 text-center">
-                        ${renderAvatar(avatar, { userId: state.authUid, sizeClass: 'w-24 h-24', coreClass: 'bg-orange-100 border-4 border-orange-200 text-5xl', extraClass: 'mx-auto mb-4' })}
-                        <h2 class="bs-text-2xl font-bold text-gray-800">${state.userName || '用戶'}</h2>
-                        <p class="text-gray-500 bs-text-sm mt-1">${state.currentUser?.email || ''}</p>
-                        <span class="inline-block mt-2 px-3 py-1 rounded-full bs-text-xs font-medium bg-orange-100 text-brand-dark">${roleLabel}</span>
-                    </div>
+                <div class="px-5 py-5 space-y-4">
+                    <section class="care-card p-5">
+                        <p class="bs-text-xs care-muted font-bold">AI 創作問候</p>
+                        <h1 class="bs-text-2xl font-bold text-[#263238] mt-1">用一張相片，做一份可以分享的心意</h1>
+                        <p class="bs-text-sm care-muted mt-2">上傳或拍攝參考相片，選一種風格，生成後可保存、分享或用 QR 碼交給家人。</p>
+                    </section>
 
-                    <!-- 家庭成員列表 -->
-                    <div>
-                        <h3 class="bs-text-lg font-bold text-gray-800 mb-3 flex items-center">
-                            <i class="fa-solid fa-users text-brand mr-2"></i>家庭成員列表
-                        </h3>
+                    <section class="care-card p-4">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="bs-text-lg font-bold text-[#263238]">參考圖片</h3>
+                            ${state.aiImageRefImage ? `<button class="action-btn bs-text-sm font-bold text-[#D98273]" data-action="removeRefImage">移除</button>` : ''}
+                        </div>
+                        ${state.aiImageRefImage ? `
+                            <div class="rounded-lg overflow-hidden bg-[#F4F1E9]">
+                                <img src="${state.aiImageRefImage}" class="w-full h-auto" alt="參考圖片">
+                            </div>
+                        ` : `
+                            <div class="border border-dashed border-[#C9D8CF] rounded-lg p-6 text-center bg-[#F8F6EF]">
+                                <i class="fa-solid fa-image bs-text-4xl text-[#8FAF9C] mb-3"></i>
+                                <p class="bs-text-base font-bold text-[#263238] mb-3">加入一張家人相片</p>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <button class="action-btn care-primary rounded-lg py-3 font-bold" data-action="uploadRefImage">
+                                        <i class="fa-solid fa-upload mr-1"></i>上傳
+                                    </button>
+                                    <button class="action-btn care-secondary rounded-lg py-3 font-bold" data-action="captureRefImage">
+                                        <i class="fa-solid fa-camera mr-1"></i>拍照
+                                    </button>
+                                </div>
+                            </div>
+                        `}
+                    </section>
+
+                    <section class="space-y-3">
+                        <div class="flex items-center justify-between">
+                            <h3 class="bs-text-lg font-bold text-[#263238]">選擇風格</h3>
+                            <span class="bs-text-xs care-muted">每次 ${state.aiImageCount || 4} 張</span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            ${styles.map(style => {
+                                const active = state.aiImageStyle === style.id;
+                                return `
+                                    <button class="action-btn care-card-flat p-3 text-left ${active ? 'ring-2 ring-[#2F7F7A] bg-[#E4EEE9]' : ''}" data-action="selectStyle" data-style="${style.id}">
+                                        <i class="fa-solid ${style.icon} bs-text-xl ${active ? 'text-[#2F7F7A]' : 'text-[#81908A]'} mb-2"></i>
+                                        <p class="bs-text-sm font-bold text-[#263238]">${style.name}</p>
+                                        <p class="bs-text-xs care-muted">${style.desc}</p>
+                                    </button>
+                                `;
+                            }).join('')}
+                        </div>
+                    </section>
+
+                    <section class="care-card-flat p-4">
+                        <div class="flex items-center justify-between gap-3">
+                            <div>
+                                <p class="font-bold text-[#263238]">生成數量</p>
+                                <p class="bs-text-sm care-muted">多試幾張，選最自然的一張分享。</p>
+                            </div>
+                            <div class="flex gap-2 shrink-0">
+                                ${[1,2,4].map(n => `
+                                    <button class="action-btn w-10 h-10 rounded-full font-bold ${(state.aiImageCount || 4) === n ? 'care-primary' : 'bg-[#F4F1E9] text-[#708079]'}" data-action="selectImageCount" data-count="${n}">${n}</button>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </section>
+
+                    ${state.aiImageGenerating ? `
+                        <section class="care-card p-6 text-center">
+                            <div class="w-16 h-16 border-4 border-[#C9D8CF] border-t-[#2F7F7A] rounded-full animate-spin mx-auto mb-4"></div>
+                            <p class="bs-text-lg font-bold text-[#263238]">正在生成問候圖</p>
+                            <p class="bs-text-sm care-muted mt-1">這可能需要 10-30 秒</p>
+                        </section>
+                    ` : state.aiImageResults.length > 0 ? `
+                        <section class="care-card p-4">
+                            <div class="flex items-center justify-between mb-3">
+                                <h3 class="bs-text-lg font-bold text-[#263238]">生成結果</h3>
+                                <button class="action-btn care-chip px-3 py-2 bs-text-xs font-bold" data-action="downloadAllGeneratedImages">
+                                    <i class="fa-solid fa-download mr-1"></i>全部保存
+                                </button>
+                            </div>
+                            <div class="grid ${state.aiImageResults.length === 1 ? 'grid-cols-1' : 'grid-cols-2'} gap-3">
+                                ${state.aiImageResults.map((img, idx) => `
+                                    <div class="relative rounded-lg overflow-hidden bg-[#F4F1E9]">
+                                        <img src="${img}" class="w-full h-auto" alt="生成的圖片 ${idx + 1}">
+                                        <div class="absolute bottom-2 right-2 flex gap-2">
+                                            <button class="action-btn w-9 h-9 bg-black/50 text-white rounded-full flex items-center justify-center" data-action="downloadGeneratedImage" data-url="${escapeAttribute(img)}" title="保存">
+                                                <i class="fa-solid fa-download bs-text-xs"></i>
+                                            </button>
+                                            <button class="action-btn w-9 h-9 bg-black/50 text-white rounded-full flex items-center justify-center" data-action="viewGeneratedImageFullscreen" data-url="${escapeAttribute(img)}" title="全屏">
+                                                <i class="fa-solid fa-expand bs-text-xs"></i>
+                                            </button>
+                                            <button class="action-btn w-9 h-9 bg-black/50 text-white rounded-full flex items-center justify-center" data-action="showQrCode" data-url="${escapeAttribute(img)}" title="QR">
+                                                <i class="fa-solid fa-qrcode bs-text-xs"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                            <button class="action-btn w-full mt-3 bg-[#E8EFF2] text-[#476B83] rounded-lg py-3 font-bold" data-action="shareGeneratedImage" data-url="${escapeAttribute(state.aiImageResults[0])}">
+                                <i class="fa-solid fa-share-nodes mr-2"></i>分享第一張
+                            </button>
+                        </section>
+                    ` : ''}
+
+                    <button class="action-btn w-full py-4 rounded-lg font-bold bs-text-lg shadow-md disabled:opacity-50 ${state.aiImageGenerating ? 'bg-[#81908A] text-white' : 'care-primary'}" data-action="generateAIImage" ${!state.aiImageRefImage || state.aiImageGenerating ? 'disabled' : ''}>
+                        ${state.aiImageGenerating ? '<i class="fa-solid fa-spinner fa-spin mr-2"></i>生成中...' : '<i class="fa-solid fa-wand-magic-sparkles mr-2"></i>開始生成'}
+                    </button>
+
+                    <input type="file" id="aiImageFileInput" accept="image/*" class="hidden">
+                    <input type="file" id="aiImageCameraInput" accept="image/*" capture="environment" class="hidden">
+                </div>
+            `;
+        }
+
+        // --- 個人資料視圖 ---
+        function renderProfile() {
+            const avatar = state.userAvatar || avatarLabel(state.userName, '星');
+            const roleLabel = state.role === 'senior' ? '長輩' : state.role === 'child' ? '子女' : '未設定';
+            const usesBibleVerse = state.dailyCardMode === 'bible';
+            const reward = state.dailyMessageReward || {};
+            const threshold = Number(reward.threshold || 20);
+            const count = Math.min(Number(reward.count ?? state.dailyMessages ?? 0), threshold);
+            const remaining = Math.max(threshold - count, 0);
+            const progress = threshold > 0 ? Math.min((count / threshold) * 100, 100) : 0;
+
+            return `
+                <div class="px-5 py-5 space-y-4">
+                    <section class="care-card p-5 flex items-center gap-4">
+                        ${renderAvatar(avatar, { userId: state.authUid, sizeClass: 'w-20 h-20', coreClass: 'bg-[#E4EEE9] border border-[#C9D8CF] text-[#2F5F58] bs-text-3xl font-bold' })}
+                        <div class="min-w-0 flex-1">
+                            <h2 class="bs-text-2xl font-bold text-[#263238] truncate">${escapeHtml(state.userName || '用戶')}</h2>
+                            <p class="care-muted bs-text-sm truncate">${escapeHtml(state.currentUser?.email || '')}</p>
+                            <span class="inline-flex mt-2 px-3 py-1 rounded-full bs-text-xs font-bold bg-[#E8EFF2] text-[#476B83]">${roleLabel}</span>
+                        </div>
+                    </section>
+
+                    <section class="care-card-flat p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <div>
+                                <p class="font-bold text-[#263238]">每日互動任務</p>
+                                <p class="bs-text-sm care-muted">${reward.active ? '今日頭像框已生效' : `仲差 ${remaining} 條訊息`}</p>
+                            </div>
+                            <span class="bs-text-lg font-bold text-[#D7A84A]">${count}/${threshold}</span>
+                        </div>
+                        <div class="h-2 bg-[#EFE8DA] rounded-full overflow-hidden">
+                            <div class="h-full bg-[#D7A84A]" style="width: ${progress}%;"></div>
+                        </div>
+                    </section>
+
+                    <section>
+                        <h3 class="bs-text-lg font-bold text-[#263238] mb-3">家庭成員</h3>
                         ${renderLeaderboardCard()}
-                    </div>
+                    </section>
 
-                    <!-- 長者模式開關 -->
-                    <div class="bg-white rounded-3xl shadow-sm p-5 flex items-center justify-between">
-                        <div>
-                            <p class="font-bold text-gray-800 bs-text-lg">長者模式</p>
-                            <p class="bs-text-sm text-gray-500">放大字體，方便閱讀</p>
+                    <section class="care-card-flat divide-y care-divider">
+                        <div class="p-4 flex items-center justify-between">
+                            <div>
+                                <p class="font-bold text-[#263238]">長者模式</p>
+                                <p class="bs-text-sm care-muted">放大字體，方便閱讀</p>
+                            </div>
+                            <button class="action-btn relative w-14 h-8 rounded-full transition-colors" data-action="toggleSeniorMode" style="background: ${state.seniorMode ? '#2F7F7A' : '#d1d5db'}">
+                                <span class="absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow transition-transform" style="transform: translateX(${state.seniorMode ? '24px' : '0'})"></span>
+                            </button>
                         </div>
-                        <button class="action-btn relative w-14 h-8 rounded-full transition-colors" data-action="toggleSeniorMode"
-                            style="background: ${state.seniorMode ? '#FF944D' : '#d1d5db'}">
-                            <span class="absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow transition-transform"
-                                style="transform: translateX(${state.seniorMode ? '24px' : '0'})"></span>
-                        </button>
-                    </div>
-
-                    <!-- 手撕日曆內容開關 -->
-                    <div class="bg-white rounded-3xl shadow-sm p-5 flex items-center justify-between">
-                        <div>
-                            <p class="font-bold text-gray-800 bs-text-lg">手撕日曆內容</p>
-                            <p class="bs-text-sm text-gray-500">${usesBibleVerse ? '顯示聖經金句' : '顯示家庭小提醒'}</p>
+                        <div class="p-4 flex items-center justify-between">
+                            <div>
+                                <p class="font-bold text-[#263238]">日曆內容</p>
+                                <p class="bs-text-sm care-muted">${usesBibleVerse ? '顯示聖經金句' : '顯示家庭小提醒'}</p>
+                            </div>
+                            <button class="action-btn relative w-14 h-8 rounded-full transition-colors" data-action="toggleDailyCardMode" aria-label="切換手撕日曆內容" style="background: ${usesBibleVerse ? '#D7A84A' : '#d1d5db'}">
+                                <span class="absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow transition-transform" style="transform: translateX(${usesBibleVerse ? '24px' : '0'})"></span>
+                            </button>
                         </div>
-                        <button class="action-btn relative w-14 h-8 rounded-full transition-colors" data-action="toggleDailyCardMode" aria-label="切換手撕日曆內容"
-                            style="background: ${usesBibleVerse ? '#F59E0B' : '#d1d5db'}">
-                            <span class="absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow transition-transform"
-                                style="transform: translateX(${usesBibleVerse ? '24px' : '0'})"></span>
-                        </button>
-                    </div>
+                    </section>
 
-                    <!-- 家庭邀請碼 -->
-                    <div class="bg-white rounded-3xl shadow-sm p-6">
-                        <h3 class="bs-text-lg font-bold text-gray-800 mb-3"><i class="fa-solid fa-users mr-2 text-brand"></i>家庭邀請碼</h3>
-                        <div class="flex items-center justify-center gap-3 bg-orange-50 rounded-2xl p-4">
-                            <span class="bs-text-3xl font-bold tracking-[0.3em] text-gray-800">${state.calendarCode || '------'}</span>
-                            <button class="action-btn px-4 py-2 bg-brand text-white rounded-xl bs-text-sm font-bold shadow-md hover:bg-brand-dark transition-colors" data-action="copyFamilyCode">
+                    <section class="care-card p-4">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="bs-text-lg font-bold text-[#263238]">家庭邀請碼</h3>
+                            <button class="action-btn care-chip px-3 py-2 bs-text-xs font-bold" data-action="copyFamilyCode">
                                 <i class="fa-regular fa-copy mr-1"></i>複製
                             </button>
                         </div>
-                        <p class="bs-text-xs text-gray-400 text-center mt-2">分享此碼給家人加入</p>
-                    </div>
+                        <p class="bs-text-3xl font-bold tracking-[0.25em] text-[#263238] text-center bg-[#F4F1E9] rounded-lg p-4">${state.calendarCode || '------'}</p>
+                    </section>
 
-                    <!-- 退出家庭 -->
-                    <div class="bg-white rounded-3xl shadow-sm p-5">
-                        <button class="action-btn w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-orange-50 text-orange-600 font-bold hover:bg-orange-100 transition-colors" data-action="leaveFamily">
-                            <i class="fa-solid fa-right-from-bracket"></i>退出家庭
+                    <section class="care-card-flat divide-y care-divider">
+                        <button class="action-btn w-full flex items-center px-4 py-4 text-left" data-action="openModal" data-modal="editProfile">
+                            <i class="fa-solid fa-pen-to-square text-[#2F7F7A] bs-text-lg w-8"></i>
+                            <span class="text-[#263238] font-bold">編輯個人資料</span>
+                            <i class="fa-solid fa-chevron-right care-muted ml-auto"></i>
                         </button>
-                        <p class="bs-text-xs text-gray-400 text-center mt-2">退出後可加入其他家庭</p>
-                    </div>
+                        <button class="action-btn w-full flex items-center px-4 py-4 text-left" data-action="openModal" data-modal="changePassword">
+                            <i class="fa-solid fa-lock text-[#2F7F7A] bs-text-lg w-8"></i>
+                            <span class="text-[#263238] font-bold">修改密碼</span>
+                            <i class="fa-solid fa-chevron-right care-muted ml-auto"></i>
+                        </button>
+                        <button class="action-btn w-full flex items-center px-4 py-4 text-left" data-action="openModal" data-modal="logs">
+                            <i class="fa-solid fa-terminal text-[#476B83] bs-text-lg w-8"></i>
+                            <span class="text-[#263238] font-bold">系統 Log</span>
+                            <i class="fa-solid fa-chevron-right care-muted ml-auto"></i>
+                        </button>
+                        <button class="action-btn w-full flex items-center px-4 py-4 text-left" data-action="openModal" data-modal="confirmReset">
+                            <i class="fa-solid fa-trash-can text-[#D98273] bs-text-lg w-8"></i>
+                            <span class="text-[#263238] font-bold">清除本機資料</span>
+                            <i class="fa-solid fa-chevron-right care-muted ml-auto"></i>
+                        </button>
+                    </section>
 
-                    <!-- 操作按鈕 -->
-                    <div class="bg-white rounded-3xl shadow-sm p-2">
-                        <button class="action-btn w-full flex items-center px-4 py-4 rounded-2xl hover:bg-gray-50 transition-colors" data-action="openModal" data-modal="editProfile">
-                            <i class="fa-solid fa-pen-to-square text-brand bs-text-lg w-8"></i>
-                            <span class="text-gray-800 font-medium">編輯個人資料</span>
-                            <i class="fa-solid fa-chevron-right text-gray-300 ml-auto"></i>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button class="action-btn bg-[#F6E6DF] text-[#7A443A] font-bold py-4 rounded-lg" data-action="leaveFamily">
+                            <i class="fa-solid fa-right-from-bracket mr-2"></i>退出家庭
                         </button>
-                        <div class="border-t border-gray-100 mx-4"></div>
-                        <button class="action-btn w-full flex items-center px-4 py-4 rounded-2xl hover:bg-gray-50 transition-colors" data-action="openModal" data-modal="changePassword">
-                            <i class="fa-solid fa-lock text-brand bs-text-lg w-8"></i>
-                            <span class="text-gray-800 font-medium">修改密碼</span>
-                            <i class="fa-solid fa-chevron-right text-gray-300 ml-auto"></i>
+                        <button class="action-btn bg-[#F4F1E9] text-[#708079] font-bold py-4 rounded-lg" data-action="logout">
+                            <i class="fa-solid fa-arrow-right-from-bracket mr-2"></i>登出
                         </button>
                     </div>
-
-                    <!-- 登出 -->
-                    <button class="action-btn w-full bg-red-50 text-red-500 font-bold py-4 rounded-2xl hover:bg-red-100 transition-colors" data-action="logout">
-                        <i class="fa-solid fa-right-from-bracket mr-2"></i>登出
-                    </button>
                 </div>
             `;
         }
@@ -3393,105 +3768,109 @@
                 const weekMemories = state.memories.slice(0, 4);
                 const messageCount = state.messages.length;
                 modalContent = `
-                    <div class="bg-white w-[90%] max-w-sm rounded-3xl p-6 shadow-2xl animate-fadeIn relative">
-                        <button class="action-btn absolute top-4 right-4 w-8 h-8 bg-gray-100 rounded-full text-gray-500 flex items-center justify-center" data-action="closeModal">
+                    <div class="bg-[#FFFDF8] w-[90%] max-w-sm rounded-lg p-5 shadow-2xl animate-fadeIn relative border care-divider">
+                        <button class="action-btn absolute top-4 right-4 care-icon-btn bg-[#F4F1E9] text-[#708079]" data-action="closeModal">
                             <i class="fa-solid fa-times"></i>
                         </button>
-                        <div class="w-14 h-14 bg-orange-100 text-brand rounded-2xl flex items-center justify-center bs-text-2xl mb-4">
+                        <div class="w-12 h-12 bg-[#E4EEE9] text-[#2F7F7A] rounded-lg flex items-center justify-center bs-text-xl mb-4">
                             <i class="fa-solid fa-wand-magic-sparkles"></i>
                         </div>
-                        <h3 class="bs-text-2xl font-bold text-gray-800 mb-2">本週家庭回憶摘要</h3>
-                        <p class="bs-text-sm text-gray-500 mb-5">Demo AI 會把最近互動整理成 present 友善摘要。</p>
-                        <div class="bg-[#FFF8F0] border border-orange-100 rounded-2xl p-4 mb-4">
-                            <p class="text-gray-800 leading-relaxed">今週家人保持了穩定互動，共留下 ${state.memories.length} 個回憶、${messageCount} 則訊息。最值得紀念的是「${weekMemories[0]?.content || '今日的溫暖分享'}」，提醒家人即使忙碌亦有互相關心。</p>
+                        <h3 class="bs-text-2xl font-bold text-[#263238] mb-2">家庭互動整理</h3>
+                        <p class="bs-text-sm care-muted mb-5">把最近互動整理成可以分享給家人的溫柔摘要。</p>
+                        <div class="bg-[#F4F1E9] border care-divider rounded-lg p-4 mb-4">
+                            <p class="text-[#263238] leading-relaxed">今週家人保持了穩定互動，共留下 ${state.memories.length} 個回憶、${messageCount} 則訊息。最值得紀念的是「${escapeHtml(weekMemories[0]?.content || '今日的溫暖分享')}」，提醒家人即使忙碌亦有互相關心。</p>
                         </div>
                         <div class="grid grid-cols-3 gap-3 text-center mb-5">
-                            <div class="bg-gray-50 rounded-2xl p-3">
-                                <p class="bs-text-2xl font-bold text-brand">${state.memories.length}</p>
-                                <p class="bs-text-xs text-gray-500">回憶</p>
+                            <div class="bg-[#E4EEE9] rounded-lg p-3">
+                                <p class="bs-text-2xl font-bold text-[#2F7F7A]">${state.memories.length}</p>
+                                <p class="bs-text-xs care-muted">回憶</p>
                             </div>
-                            <div class="bg-gray-50 rounded-2xl p-3">
-                                <p class="bs-text-2xl font-bold text-brand">${messageCount}</p>
-                                <p class="bs-text-xs text-gray-500">訊息</p>
+                            <div class="bg-[#E8EFF2] rounded-lg p-3">
+                                <p class="bs-text-2xl font-bold text-[#476B83]">${messageCount}</p>
+                                <p class="bs-text-xs care-muted">訊息</p>
                             </div>
-                            <div class="bg-gray-50 rounded-2xl p-3">
-                                <p class="bs-text-2xl font-bold text-brand">${state.points}</p>
-                                <p class="bs-text-xs text-gray-500">積分</p>
+                            <div class="bg-[#F4E7D1] rounded-lg p-3">
+                                <p class="bs-text-2xl font-bold text-[#9A6C24]">${state.points}</p>
+                                <p class="bs-text-xs care-muted">積分</p>
                             </div>
                         </div>
-                        <button class="action-btn w-full py-3 bg-brand text-white font-bold rounded-xl shadow-md" data-action="shareSummary">分享摘要給家人</button>
+                        <button class="action-btn w-full py-3 care-primary font-bold rounded-lg shadow-md" data-action="shareSummary">分享摘要給家人</button>
                     </div>
                 `;
             }
 
             if (state.showModal === 'addMemory') {
                 const memoryTypes = [
-                    { id: 'photo', label: '相片', icon: 'fa-image', classes: 'bg-blue-50 border-blue-100 text-blue-500' },
-                    { id: 'text', label: '文字', icon: 'fa-pencil', classes: 'bg-green-50 border-green-100 text-green-500' },
-                    { id: 'voice', label: '語音', icon: 'fa-microphone', classes: 'bg-purple-50 border-purple-100 text-purple-500' }
+                    { id: 'text', label: '文字', icon: 'fa-note-sticky', tone: 'text-[#D98273]', bg: 'bg-[#F6E6DF]' },
+                    { id: 'photo', label: '相片', icon: 'fa-image', tone: 'text-[#476B83]', bg: 'bg-[#E8EFF2]' },
+                    { id: 'voice', label: '語音', icon: 'fa-microphone', tone: 'text-[#2F7F7A]', bg: 'bg-[#E4EEE9]' }
                 ];
                 modalContent = `
-                    <div class="bg-white w-full rounded-t-3xl p-6 transform transition-transform animate-slideUp">
-                        <div class="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6"></div>
-                        <h3 class="bs-text-2xl font-bold text-gray-800 mb-6 text-center">記錄今日點滴</h3>
-                        <div class="grid grid-cols-2 gap-4 mb-8">
-                            ${memoryTypes.map(type => `
-                                <button class="action-btn flex flex-col items-center p-4 rounded-2xl border hover:shadow-sm ${type.classes} ${state.pendingMemoryType === type.id ? 'ring-2 ring-brand shadow-md' : ''}" data-action="selectMemoryType" data-type="${type.id}">
-                                    <i class="fa-solid ${type.icon} bs-text-3xl mb-2"></i><span class="font-bold text-gray-700">${type.label}</span>
-                                </button>
-                            `).join('')}
+                    <div class="bg-[#FFFDF8] w-full rounded-t-lg p-5 transform transition-transform animate-slideUp border-t care-divider">
+                        <div class="w-12 h-1.5 bg-[#D9D1C3] rounded-full mx-auto mb-5"></div>
+                        <h3 class="bs-text-2xl font-bold text-[#263238] mb-1 text-center">記錄今日回憶</h3>
+                        <p class="bs-text-sm care-muted text-center mb-5">一張相、一句話、一段聲音都可以。</p>
+                        <div class="grid grid-cols-3 gap-3 mb-5">
+                            ${memoryTypes.map(type => {
+                                const active = state.pendingMemoryType === type.id;
+                                return `
+                                    <button class="action-btn flex flex-col items-center p-3 rounded-lg border ${active ? 'border-[#2F7F7A] bg-[#E4EEE9] shadow-sm' : 'care-divider bg-[#F8F6EF]'}" data-action="selectMemoryType" data-type="${type.id}">
+                                        <i class="fa-solid ${type.icon} bs-text-xl mb-2 ${active ? 'text-[#2F7F7A]' : type.tone}"></i><span class="font-bold text-[#263238] bs-text-sm">${type.label}</span>
+                                    </button>
+                                `;
+                            }).join('')}
                         </div>
                         <div class="space-y-3 mb-5">
-                            <textarea id="memoryContentInput" rows="3" placeholder="${state.pendingMemoryType === 'photo' ? '寫低想說的話（可選）...' : '寫低今日想分享的事...'}" class="w-full bg-gray-50 rounded-2xl border-2 ${state.errorMsg ? 'border-red-400' : 'border-gray-100'} p-4 outline-none focus:border-brand resize-none bs-text-lg">${state.pendingMemoryContent || ''}</textarea>
+                            <textarea id="memoryContentInput" rows="3" placeholder="${state.pendingMemoryType === 'photo' ? '寫低想說的話（可選）...' : '寫低今日想分享的事...'}" class="w-full bg-[#F8F6EF] rounded-lg border ${state.errorMsg ? 'border-[#D98273]' : 'care-divider'} p-4 outline-none focus:border-[#2F7F7A] resize-none bs-text-base">${escapeHtml(state.pendingMemoryContent || '')}</textarea>
                             ${state.pendingMemoryType === 'photo' ? `
                                 <input id="memoryImageInput" type="file" accept="image/*" class="hidden">
                                 <input id="memoryCameraInput" type="file" accept="image/*" capture="environment" class="hidden">
                                 <div class="grid grid-cols-2 gap-3">
-                                    <button type="button" class="action-btn bg-blue-50 text-blue-600 border-2 border-blue-100 rounded-2xl p-4 font-bold flex flex-col items-center justify-center" data-action="chooseMemoryCamera">
+                                    <button type="button" class="action-btn bg-[#E8EFF2] text-[#476B83] border border-[#D4E0E6] rounded-lg p-4 font-bold flex flex-col items-center justify-center" data-action="chooseMemoryCamera">
                                         <i class="fa-solid fa-camera bs-text-2xl mb-1"></i><span class="bs-text-sm">拍攝相片</span>
                                     </button>
-                                    <button type="button" class="action-btn bg-blue-50 text-blue-600 border-2 border-blue-100 rounded-2xl p-4 font-bold flex flex-col items-center justify-center" data-action="chooseMemoryImage">
+                                    <button type="button" class="action-btn bg-[#E8EFF2] text-[#476B83] border border-[#D4E0E6] rounded-lg p-4 font-bold flex flex-col items-center justify-center" data-action="chooseMemoryImage">
                                         <i class="fa-solid fa-images bs-text-2xl mb-1"></i><span class="bs-text-sm">從相簿選擇</span>
                                     </button>
                                 </div>
-                                ${state.pendingMemoryImage ? `<img src="${state.pendingMemoryImage}" class="w-full h-40 object-cover rounded-2xl border border-blue-100 mt-2">` : ''}
+                                ${state.pendingMemoryImage ? `<img src="${state.pendingMemoryImage}" class="w-full h-40 object-cover rounded-lg border border-[#D4E0E6] mt-2">` : ''}
                             ` : ''}
                             ${state.pendingMemoryType === 'voice' ? `
-                                <div class="bg-purple-50 border-2 border-purple-100 rounded-2xl p-4 mb-3">
+                                <div class="bg-[#E4EEE9] border border-[#C9D8CF] rounded-lg p-4 mb-3">
                                     ${state.isRecordingMemory ? `
-                                        <button type="button" class="action-btn w-full bg-red-500 text-white rounded-2xl py-4 font-bold flex items-center justify-center animate-pulse" data-action="stopMemoryVoiceRecording">
+                                        <button type="button" class="action-btn w-full bg-[#D98273] text-white rounded-lg py-4 font-bold flex items-center justify-center animate-pulse" data-action="stopMemoryVoiceRecording">
                                             <i class="fa-solid fa-stop bs-text-2xl mr-2"></i>
                                             <span class="bs-text-lg">停止錄音</span>
                                         </button>
-                                        <p class="text-red-600 bs-text-xs text-center mt-2">正在錄製中...</p>
+                                        <p class="text-[#7A443A] bs-text-xs text-center mt-2">正在錄製中...</p>
                                     ` : !state.pendingMemoryAudio ? `
-                                        <button type="button" class="action-btn w-full bg-purple-500 text-white rounded-2xl py-4 font-bold flex items-center justify-center" data-action="startMemoryVoiceRecording">
+                                        <button type="button" class="action-btn w-full care-primary rounded-lg py-4 font-bold flex items-center justify-center" data-action="startMemoryVoiceRecording">
                                             <i class="fa-solid fa-microphone bs-text-2xl mr-2"></i>
                                             <span class="bs-text-lg">開始錄音</span>
                                         </button>
-                                        <p class="text-purple-600 bs-text-xs text-center mt-2">點擊按鈕開始錄製語音回憶</p>
+                                        <p class="text-[#2F5F58] bs-text-xs text-center mt-2">點擊按鈕開始錄製語音回憶</p>
                                     ` : `
-                                        <div class="flex items-center justify-between bg-white rounded-xl p-3">
+                                        <div class="flex items-center justify-between bg-[#FFFDF8] rounded-lg p-3">
                                             <div class="flex items-center">
-                                                <div class="w-10 h-10 bg-purple-500 rounded-full flex items-center justify-center text-white mr-3">
+                                                <div class="w-10 h-10 care-primary rounded-lg flex items-center justify-center mr-3">
                                                     <i class="fa-solid fa-microphone"></i>
                                                 </div>
                                                 <div>
-                                                    <p class="font-bold text-gray-800 bs-text-base">語音錄製完成</p>
-                                                    <p class="text-gray-500 bs-text-sm">${state.pendingMemoryAudioDuration}秒</p>
+                                                    <p class="font-bold text-[#263238] bs-text-base">語音錄製完成</p>
+                                                    <p class="care-muted bs-text-sm">${state.pendingMemoryAudioDuration}秒</p>
                                                 </div>
                                             </div>
-                                            <button type="button" class="action-btn w-8 h-8 bg-red-50 text-red-500 rounded-full flex items-center justify-center" data-action="deleteMemoryVoiceRecording">
+                                            <button type="button" class="action-btn w-9 h-9 bg-[#F6E6DF] text-[#D98273] rounded-full flex items-center justify-center" data-action="deleteMemoryVoiceRecording">
                                                 <i class="fa-solid fa-trash-alt"></i>
                                             </button>
                                         </div>
                                     `}
                                 </div>
                             ` : ''}
-                            ${state.errorMsg ? `<p class="text-red-500 bs-text-sm animate-shake">${state.errorMsg}</p>` : ''}
+                            ${state.errorMsg ? `<p class="text-[#D98273] bs-text-sm animate-shake">${escapeHtml(state.errorMsg)}</p>` : ''}
                         </div>
-                        <button class="action-btn w-full py-3 bg-brand text-white font-bold rounded-xl shadow-md mb-3" data-action="saveMemory">儲存回憶</button>
-                        <button class="action-btn w-full py-3 text-gray-500 font-bold bg-gray-100 rounded-xl" data-action="closeModal">取消</button>
+                        <button class="action-btn w-full py-3 care-primary font-bold rounded-lg shadow-md mb-3" data-action="saveMemory">儲存回憶</button>
+                        <button class="action-btn w-full py-3 text-[#708079] font-bold bg-[#F4F1E9] rounded-lg" data-action="closeModal">取消</button>
                     </div>
                 `;
             }
@@ -3499,34 +3878,34 @@
             if (state.showModal === 'memoryDetail') {
                 const dayMemories = state.memories.filter(m => m.date === parseInt(state.selectedDate));
                 modalContent = `
-                    <div class="bg-white w-[90%] max-w-sm rounded-3xl p-6 relative animate-fadeIn">
-                        <button class="action-btn absolute top-4 right-4 w-8 h-8 bg-gray-100 rounded-full text-gray-500 flex items-center justify-center" data-action="closeModal">
+                    <div class="bg-[#FFFDF8] w-[90%] max-w-sm rounded-lg p-5 relative animate-fadeIn border care-divider">
+                        <button class="action-btn absolute top-4 right-4 care-icon-btn bg-[#F4F1E9] text-[#708079]" data-action="closeModal">
                             <i class="fa-solid fa-times"></i>
                         </button>
-                        <h3 class="bs-text-xl font-bold text-gray-800 mb-4">${today.getMonth() + 1}月${state.selectedDate}日 的回憶</h3>
-                        <div class="space-y-4 max-h-[60vh] overflow-y-auto no-scrollbar">
+                        <h3 class="bs-text-xl font-bold text-[#263238] mb-4">${today.getMonth() + 1}月${state.selectedDate}日 的回憶</h3>
+                        <div class="space-y-3 max-h-[60vh] overflow-y-auto no-scrollbar">
                             ${dayMemories.map(m => {
                                 const memoryImageSrc = getMemoryImageSrc(m);
                                 const memoryAudioSrc = getMemoryAudioSrc(m);
+                                const kind = getMemoryKind(m);
                                 return `
-                                    <div class="bg-orange-50 rounded-2xl p-4 border border-orange-100">
+                                    <div class="care-card-flat p-4">
                                         <div class="flex items-center mb-2">
-                                            <div class="w-6 h-6 rounded-full bg-brand text-white bs-text-xs flex items-center justify-center mr-2">
-                                                ${m.childName[0]}
-                                            </div>
-                                            <span class="bs-text-sm font-bold text-gray-700">${m.childName}</span>
+                                            ${renderAvatar(avatarLabel(m.childName || '家', '家'), { sizeClass: 'w-8 h-8', coreClass: 'bg-[#E4EEE9] text-[#2F5F58] font-bold bs-text-xs', extraClass: 'mr-2' })}
+                                            <span class="bs-text-sm font-bold text-[#263238]">${escapeHtml(m.childName || '家庭成員')}</span>
+                                            <span class="ml-auto bs-text-xs font-bold ${kind.tone}">${kind.label}</span>
                                         </div>
-                                        ${memoryImageSrc ? `<img src="${escapeAttribute(memoryImageSrc)}" class="w-full h-32 object-cover rounded-xl mb-2">` : ''}
+                                        ${memoryImageSrc ? `<img src="${escapeAttribute(memoryImageSrc)}" class="w-full h-32 object-cover rounded-lg mb-2">` : ''}
                                         ${m.type === 'voice' && memoryAudioSrc ? `
-                                            <div class="bg-purple-50 border border-purple-100 rounded-xl p-3 mb-2">
+                                            <div class="bg-[#E4EEE9] border border-[#C9D8CF] rounded-lg p-3 mb-2">
                                                 <div class="flex items-center justify-between mb-2">
                                                     <div class="flex items-center">
-                                                        <div class="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center text-white mr-2">
+                                                        <div class="w-8 h-8 care-primary rounded-lg flex items-center justify-center mr-2">
                                                             <i class="fa-solid fa-microphone bs-text-sm"></i>
                                                         </div>
                                                         <div>
-                                                            <p class="font-bold text-purple-700 bs-text-sm">語音回憶</p>
-                                                            <p class="text-purple-600 bs-text-xs">${m.duration || 0}秒</p>
+                                                            <p class="font-bold text-[#2F5F58] bs-text-sm">語音回憶</p>
+                                                            <p class="text-[#2F5F58] bs-text-xs">${m.duration || 0}秒</p>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -3537,7 +3916,7 @@
                                                 </audio>
                                             </div>
                                         ` : ''}
-                                        <p class="text-gray-800">${m.content}</p>
+                                        <p class="text-[#263238]">${escapeHtml(m.content || '')}</p>
                                     </div>
                                 `;
                             }).join('')}
@@ -4067,10 +4446,10 @@
                     }
                     // 主應用程式操作
                     else if (action === 'switchTab') {
-                        state.currentTab = newBtn.getAttribute('data-tab');
+                        state.currentTab = normalizeAppTab(newBtn.getAttribute('data-tab'));
                         if (state.currentTab === 'chat') shouldStickChatToBottom = true;
                         render();
-                        if (state.backendMode === 'server' && state.familyId && state.currentTab === 'calendar') {
+                        if (state.backendMode === 'server' && state.familyId && state.currentTab === 'memories') {
                             refreshServerMemories(state.familyId).catch(() => {});
                         }
                         if (state.backendMode === 'server' && state.familyId && state.currentTab === 'chat') {
@@ -4379,7 +4758,8 @@
                     }
                     // AI 圖片生成操作
                     else if (action === 'openAIImageGen') {
-                        state.aiImageGenView = true;
+                        state.aiImageGenView = false;
+                        state.currentTab = 'creative';
                         state.aiImageRefImage = null;
                         state.aiImageStyle = 'random';
                         state.aiImageGenerating = false;
