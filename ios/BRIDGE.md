@@ -116,7 +116,7 @@ Since WKWebView can't return synchronous values from native to JS, the shim must
     - If `mediaApiBase` is empty (**note: in the current `index.html`, `setMediaApiConfig` is never actually invoked from JS**, so this native method exists but the JS never calls it — meaning `mediaApiBase` is always `""` in the current app, and the code always takes the **legacy base64 path** in practice): calls `postFinishedVoiceRecordingLegacy` — reads whole file, base64-encodes it (`Base64.NO_WRAP`), builds `data:audio/mp4;base64,<...>` data URL, and posts payload `{ audio: dataUrl, audioMime: "audio/mp4", durationMs, transcript }`.
     - If `mediaApiBase` non-empty: uploads the file via multipart POST to `<mediaApiBase>/api/media/upload` with `Authorization: Bearer <mediaAuthToken>` if set, field name `file`, filename `recording.m4a`, content-type `audio/mp4`. Expects **HTTP 201** and a JSON body `{ "mediaUrl": "..." }`. On success posts payload `{ audioUrl: mediaUrl, audioMime: "audio/mp4", durationMs, transcript }`. On any exception: `postVoiceError("錄音上傳失敗：" + error.getMessage())`.
     - Deletes the local temp file in a `finally` block either way.
-- **JS callback** (success path, either variant): 
+- **JS callback** (success path, either variant):
   ```js
   window.handleAndroidVoiceRecording && window.handleAndroidVoiceRecording(payloadJsonString)
   ```

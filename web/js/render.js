@@ -88,7 +88,7 @@
             const previousChatSnapshot = readChatScrollSnapshot();
             if (state.currentTab === 'leaderboard') state.currentTab = 'profile';
             saveDemoData();
-            
+
             if (!state.appReady) {
                 app.innerHTML = renderOnboardingFlow();
             } else if (state.aiImageGenView) {
@@ -211,12 +211,12 @@
             buttons.forEach(btn => {
                 const newBtn = btn.cloneNode(true);
                 btn.parentNode.replaceChild(newBtn, btn);
-                
+
                 newBtn.addEventListener('click', async event => {
                     event.preventDefault();
                     const action = newBtn.getAttribute('data-action');
                     state.errorMsg = ''; // 重置錯誤訊息
-                    
+
                     // 刪除與重置數據
                     if (action === 'resetData') {
                         resetDemoData();
@@ -250,7 +250,7 @@
                         state.userAvatar = null; // 重置頭像確保切換角色時重新賦予預設值
                         state.onboardingStep = 3;
                         render();
-                    } 
+                    }
                     else if (action === 'backStep') {
                         state.onboardingStep = parseInt(newBtn.getAttribute('data-step'));
                         render();
