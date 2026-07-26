@@ -28,6 +28,18 @@ jobs:
         cache: 'gradle'
         cache-dependency-path: 'android/gradle/wrapper/gradle-wrapper.properties'
 
+    - name: Set up Node.js 22
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: npm
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Test shared web core
+      run: npm run test:web
+
     - name: Make gradlew executable
       run: chmod +x android/gradlew
 
@@ -54,19 +66,6 @@ jobs:
         path: android/app/build/outputs/apk/debug/app-debug.apk
         if-no-files-found: warn
         retention-days: 30
-
-    - name: Create Release
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-      uses: softprops/action-gh-release@v2
-      with:
-        tag_name: v${{ github.run_number }}
-        name: v${{ github.run_number }}
-        target_commitish: ${{ github.sha }}
-        files: android/app/build/outputs/apk/debug/app-debug.apk
-        body: |
-          ${{ github.event.head_commit.message }}
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-status:
     runs-on: ubuntu-latest

@@ -1,4 +1,7 @@
 {
+  "engines": {
+    "node": ">=20.19"
+  },
   "scripts": {
     "api-server": "node scripts/local-api-server.js",
     "migrate-to-sqlite": "node scripts/migrate-json-to-sqlite.js",

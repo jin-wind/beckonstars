@@ -6,7 +6,7 @@ import UserNotifications
 /// 注入 `window.__BeckonStarsIOS` 快照，並掛上 `beckonStars` message handler。
 ///
 /// 對應規格：ios/BRIDGE.md §1（WebView 設定對照表）。
-final class WebViewController: UIViewController {
+final class WebViewController: UIViewController, WKNavigationDelegate {
 
     /// 與 web 核心 `#FFF9F2` 一致的背景色，first paint 前先鋪底避免白閃。
     static let appBackgroundColor = UIColor(
@@ -31,7 +31,6 @@ final class WebViewController: UIViewController {
         "transcribeReceivedVoice",
         "saveImageToGallery",
         "shareAIImage",
-        "setMediaApiConfig",
     ]
 
     private let bridge = NativeBridge()
@@ -109,6 +108,7 @@ final class WebViewController: UIViewController {
         // 這裡不再讓 UIKit 疊加 content inset。
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.allowsBackForwardNavigationGestures = false
+        webView.navigationDelegate = self
         webView.overrideUserInterfaceStyle = .light
 
         view.addSubview(webView)
@@ -127,5 +127,26 @@ final class WebViewController: UIViewController {
         let webDirectoryURL = indexURL.deletingLastPathComponent()
         // 以 web/ 目錄為 read-access root，file:// 頁面才能載入 css/js/vendor 子資源。
         webView.loadFileURL(indexURL, allowingReadAccessTo: webDirectoryURL)
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationAction: WKNavigationAction,
+        decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+    ) {
+        guard let url = navigationAction.request.url else {
+            decisionHandler(.cancel)
+            return
+        }
+        if url.isFileURL {
+            decisionHandler(.allow)
+            return
+        }
+        if navigationAction.targetFrame?.isMainFrame != false,
+           let scheme = url.scheme?.lowercased(),
+           scheme == "http" || scheme == "https" {
+            UIApplication.shared.open(url)
+        }
+        decisionHandler(.cancel)
     }
 }

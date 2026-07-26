@@ -47,6 +47,18 @@ jobs:
             android/**/*.gradle
             android/**/*.gradle.kts
 
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test shared web core
+        run: npm run test:web
+
       - name: Make Gradle wrapper executable
         run: chmod +x android/gradlew
 
@@ -54,7 +66,16 @@ jobs:
         working-directory: android
         env:
           GRADLE_OPTS: "-Xmx2048m"
-        run: ./gradlew clean assembleDebug --stacktrace
+        run: |
+          tag_name="${GITHUB_REF_NAME}"
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            tag_name="${{ inputs.tag_name }}"
+          fi
+          if [[ ! "${tag_name}" =~ ^v[0-9]+$ ]]; then
+            echo "Release tag must be a numeric version-code tag such as v138." >&2
+            exit 1
+          fi
+          VERSION_CODE="${tag_name#v}" ./gradlew clean assembleDebug --stacktrace
 
       - name: Prepare release files
         id: release
@@ -76,8 +97,8 @@ jobs:
           asset_name="beckon-stars-${safe_tag}.apk"
 
           mkdir -p release
-          cp "${APK_PATH}" "release/${asset_name}"
-          sha256sum "release/${asset_name}" > "release/${asset_name}.sha256"
+          cp "${APK_PATH}" "release/app-debug.apk"
+          sha256sum "release/app-debug.apk" > "release/app-debug.apk.sha256"
 
           is_prerelease="false"
           if [[ "${{ github.event.inputs.prerelease }}" == "true" || "${tag_name}" =~ (alpha|beta|rc|pre) ]]; then
@@ -93,8 +114,8 @@ jobs:
         with:
           name: ${{ steps.release.outputs.asset_name }}
           path: |
-            release/${{ steps.release.outputs.asset_name }}
-            release/${{ steps.release.outputs.asset_name }}.sha256
+            release/app-debug.apk
+            release/app-debug.apk.sha256
           if-no-files-found: error
           retention-days: 30
 
@@ -107,17 +128,17 @@ jobs:
           prerelease: ${{ steps.release.outputs.is_prerelease }}
           fail_on_unmatched_files: true
           files: |
-            release/${{ steps.release.outputs.asset_name }}
-            release/${{ steps.release.outputs.asset_name }}.sha256
+            release/app-debug.apk
+            release/app-debug.apk.sha256
           body: |
             ## APK 下載
 
-            請從下方 Assets 下載 `${{ steps.release.outputs.asset_name }}`。
+            請從下方 Assets 下載 `app-debug.apk`。
 
             ## 安裝方法
 
             ```bash
-            adb install -r ${{ steps.release.outputs.asset_name }}
+            adb install -r app-debug.apk
             adb shell am start -n hk.beckonstars.app/.MainActivity
             ```
 

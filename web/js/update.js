@@ -1,5 +1,8 @@
 
         async function checkForUpdate() {
+            // GitHub releases currently publish Android APKs only. Never offer
+            // an APK update to the iOS shell or browser/PWA clients.
+            if (!isAndroidApk()) return;
             try {
                 const resp = await fetch('https://api.github.com/repos/jin-wind/beckonstars/releases/latest');
                 if (!resp.ok) return;

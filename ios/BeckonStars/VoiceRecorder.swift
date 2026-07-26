@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import AVFoundation
 import Speech
 
@@ -22,6 +23,58 @@ final class VoiceRecorder: NSObject {
     private var activeRecognitionTask: SFSpeechRecognitionTask?
     private var recordingRequestID: UInt = 0
     private var activeTranscriptionCancel: (() -> Void)?
+
+    override init() {
+        super.init()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAudioSessionInterruption(_:)),
+            name: AVAudioSession.interruptionNotification,
+            object: AVAudioSession.sharedInstance()
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAudioRouteChange(_:)),
+            name: AVAudioSession.routeChangeNotification,
+            object: AVAudioSession.sharedInstance()
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAppDidEnterBackground),
+            name: UIApplication.didEnterBackgroundNotification,
+            object: nil
+        )
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    @objc private func handleAudioSessionInterruption(_ notification: Notification) {
+        guard let typeRaw = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+              AVAudioSession.InterruptionType(rawValue: typeRaw) == .began else { return }
+        cancelInterruptedRecording()
+    }
+
+    @objc private func handleAudioRouteChange(_ notification: Notification) {
+        guard let reasonRaw = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
+              AVAudioSession.RouteChangeReason(rawValue: reasonRaw) == .oldDeviceUnavailable else { return }
+        cancelInterruptedRecording()
+    }
+
+    @objc private func handleAppDidEnterBackground() {
+        cancelInterruptedRecording()
+    }
+
+    private func cancelInterruptedRecording() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, self.audioRecorder != nil || self.currentRecordingURL != nil else { return }
+            self.recordingRequestID &+= 1
+            self.discardInFlightRecording()
+            try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+            self.postVoiceError("錄音已中斷，請再試一次。")
+        }
+    }
 
     // MARK: - 錄音（§2.7 / §2.8）
 

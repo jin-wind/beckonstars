@@ -82,6 +82,17 @@
         }
 
 
+        function abortMemoryVoiceRecording() {
+            if (state.recordingForMemory || state.isRecordingMemory) {
+                Platform.finishVoiceRecording(true);
+            }
+            state.recordingForMemory = false;
+            state.isRecordingMemory = false;
+            state.pendingMemoryAudio = null;
+            state.pendingMemoryAudioDuration = 0;
+        }
+
+
         // --- 核心渲染引擎 ---
         function render() {
             const app = document.getElementById('app');
@@ -346,6 +357,7 @@
                         render();
                     }
                     else if (action === 'confirmLogout') {
+                        abortMemoryVoiceRecording();
                         state.appReady = false;
                         state.onboardingStep = 1;
                         state.showModal = null;
@@ -543,6 +555,7 @@
                         await installPwaApp();
                     }
                     else if (action === 'closeModal') {
+                        abortMemoryVoiceRecording();
                         const mv = document.getElementById('memVideo');
                         if (mv) { mv.pause(); mv.src = ''; }
                         state.showModal = null;
@@ -566,7 +579,11 @@
                     else if (action === 'selectMemoryType') {
                         const memoryContentInput = document.getElementById('memoryContentInput');
                         if (memoryContentInput) state.pendingMemoryContent = memoryContentInput.value;
-                        state.pendingMemoryType = newBtn.getAttribute('data-type');
+                        const nextMemoryType = newBtn.getAttribute('data-type');
+                        if (state.pendingMemoryType === 'audio' && nextMemoryType !== 'audio') {
+                            abortMemoryVoiceRecording();
+                        }
+                        state.pendingMemoryType = nextMemoryType;
                         if (state.pendingMemoryType !== 'photo') state.pendingMemoryImage = '';
                         render();
                     }

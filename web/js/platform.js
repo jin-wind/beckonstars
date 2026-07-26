@@ -23,12 +23,12 @@
 
             const callAndroid = (method, ...args) => {
                 const bridge = window.BeckonStarsAndroid;
-                if (!bridge || typeof bridge[method] !== 'function') return undefined;
+                if (!bridge || typeof bridge[method] !== 'function') return { ok: false, value: undefined };
                 try {
-                    return bridge[method](...args);
+                    return { ok: true, value: bridge[method](...args) };
                 } catch (error) {
                     console.warn('[platform] Android bridge failed:', method, error);
-                    return undefined;
+                    return { ok: false, value: undefined };
                 }
             };
 
@@ -46,8 +46,7 @@
             // 回傳 true 表示已交給原生處理，false 表示目前平台不支援。
             const invoke = (method, ...args) => {
                 if (isAndroidApk() && typeof window.BeckonStarsAndroid[method] === 'function') {
-                    callAndroid(method, ...args);
-                    return true;
+                    return callAndroid(method, ...args).ok;
                 }
                 if (isIosApp() && supports(method)) {
                     return postIos(method, args);
@@ -66,19 +65,19 @@
 
                 // ---- 同步讀值 ----
                 getVersionCode() {
-                    if (isAndroidApk()) return callAndroid('getVersionCode') || 0;
+                    if (isAndroidApk()) return callAndroid('getVersionCode').value || 0;
                     if (isIosApp()) return iosSnapshot().versionCode || 0;
                     return 0;
                 },
                 getNotificationPermission() {
-                    if (isAndroidApk()) return callAndroid('getNotificationPermission') || 'default';
+                    if (isAndroidApk()) return callAndroid('getNotificationPermission').value || 'default';
                     if (isIosApp()) return iosSnapshot().notificationPermission || 'default';
                     return typeof Notification !== 'undefined' ? Notification.permission : 'unsupported';
                 },
 
                 // ---- 通知 ----
                 requestNotificationPermission() {
-                    if (isAndroidApk()) return callAndroid('requestNotificationPermission') === true;
+                    if (isAndroidApk()) return callAndroid('requestNotificationPermission').value === true;
                     if (isIosApp()) {
                         // iOS 為非同步授權，結果由殼層透過 setAndroidNotificationPermission 回報
                         postIos('requestNotificationPermission');

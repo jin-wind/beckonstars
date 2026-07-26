@@ -111,6 +111,8 @@ final class NativeBridge: NSObject, WKScriptMessageHandler {
         didReceive message: WKScriptMessage
     ) {
         guard message.name == "beckonStars",
+              message.frameInfo.isMainFrame,
+              message.frameInfo.request.url?.isFileURL == true,
               let body = message.body as? [String: Any],
               let method = body["method"] as? String else {
             return
@@ -435,6 +437,10 @@ final class NativeBridge: NSObject, WKScriptMessageHandler {
                 return
             }
             let controller = UIActivityViewController(activityItems: items, applicationActivities: nil)
+            let temporaryURLs = items.compactMap { $0 as? URL }.filter { $0.isFileURL }
+            controller.completionWithItemsHandler = { _, _, _, _ in
+                temporaryURLs.forEach { try? FileManager.default.removeItem(at: $0) }
+            }
             // iPad / popover 錨點（iPhone 上為 sheet，設定無害）。
             if let popover = controller.popoverPresentationController {
                 popover.sourceView = presenter.view

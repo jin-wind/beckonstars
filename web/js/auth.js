@@ -44,7 +44,7 @@
             state.errorMsg = '';
             render();
             try {
-                Platform.startGoogleSignIn();
+                if (!Platform.startGoogleSignIn()) throw new Error('native-bridge-failed');
             } catch (error) {
                 console.error('[auth] Android Google login failed to start:', error);
                 state.googleSignInLoading = false;

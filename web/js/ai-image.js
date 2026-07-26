@@ -165,7 +165,7 @@
                                         <i class="fa-solid fa-cloud-arrow-up bs-text-3xl"></i>
                                     </div>
                                     <p class="bs-text-sm text-[var(--ink-500)] mb-4">上傳或拍攝圖片</p>
-                                    <div class="grid grid-cols-2 gap-3">
+                                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                                         <button class="action-btn bs-btn bs-btn-primary w-full" data-action="uploadRefImage">
                                             <i class="fa-solid fa-upload"></i><span>上傳圖片</span>
                                         </button>
@@ -251,7 +251,7 @@
                                                     <i class="fa-solid fa-expand bs-text-xs"></i>
                                                 </button>
                                             </div>
-                                            <div class="grid grid-cols-2 gap-2 pt-2">
+                                            <div class="grid grid-cols-1 gap-2 pt-2">
                                                 <button class="action-btn bs-btn bs-btn-primary min-w-0 px-2 bs-text-sm" data-action="downloadGeneratedImage" data-url="${escapeAttribute(img)}">
                                                     <i class="fa-solid fa-download"></i><span>下載</span>
                                                 </button>

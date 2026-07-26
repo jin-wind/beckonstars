@@ -446,6 +446,9 @@
 
 
         window.handleAndroidVoiceError = message => {
+            if (state.recordingForMemory || state.isRecordingMemory) {
+                Platform.finishVoiceRecording(true);
+            }
             state.transcribingMessageId = null;
             state.recordingForMemory = false;
             state.isRecordingMemory = false;

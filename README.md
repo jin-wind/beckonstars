@@ -31,8 +31,8 @@
 
 ### 環境準備
 
-- **Node.js 18+**
-- **Android Build Tools** (如要編譯 APK)
+- **Node.js 20.19+**
+- **Java JDK 17** (如要編譯 APK)
 - **macOS + Xcode 15+** (如要編譯 iOS)
 - **Git**
 
@@ -67,7 +67,7 @@ npm run api-server
 
 ### 前置要求
 
-- Java JDK 11+
+- Java JDK 17
 - Gradle (項目內含 `gradlew`)
 
 ### 構建步驟
@@ -141,7 +141,7 @@ Android APK 預設連接遠端伺服器：
 const selfHostedApiBase = 'http://144.79.170.102:8787';
 ```
 
-如需修改伺服器地址，編輯 `android/app/src/main/assets/index.html` 中的配置。
+如需修改伺服器地址，編輯 `web/js/api.js` 中的 `selfHostedApiBase`。Android assets 是建置時從 `web/` 生成的產物，請勿直接修改。
 
 ## 📂 項目結構
 
@@ -171,13 +171,13 @@ const selfHostedApiBase = 'http://144.79.170.102:8787';
 
 ### 本機開發
 
-1. 修改 `android/app/src/main/assets/index.html` 或其他 UI 文件
+1. 修改 `web/` 下的共用 UI／邏輯
 2. 開啟 `npm run api-server` 測試 API
 3. 重新構建 APK 並安裝到裝置測試
 
 ### 部署到 Android
 
-1. 確認 assets 中的 `index.html` 為最新版本
+1. 確認 `web/` 的改動已通過 `npm run test:web`
 2. 執行 `cd android && ./gradlew assembleDebug`
 3. 透過 `adb install` 推送到裝置
 
