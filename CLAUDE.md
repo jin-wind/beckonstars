@@ -4,14 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project overview
 
-星喚 Beckon Stars is a family calendar/chat/memory Android app. The APK is a native Android WebView shell that loads a mostly self-contained HTML/JS app from Android assets and talks to a self-hosted Node API server.
+星喚 Beckon Stars is a family calendar/chat/memory app for Android and iOS. Both apps are thin native WebView shells around a single shared HTML/JS core, talking to a self-hosted Node API server.
 
 Main moving parts:
 
-- `android/app/src/main/assets/index.html` contains the web UI, app state, rendering, localStorage persistence, and API polling logic. It is currently the main application source.
+- `web/` is the shared cross-platform app core and the single source of truth for all UI/state/API logic. `web/index.html` is a slim entry that loads `web/css/` (design tokens + component layer) and `web/js/` (19 domain modules as classic scripts sharing the global scope; `js/boot.js` must load last). All third-party assets (Tailwind JIT, Font Awesome, qrcode-generator) are vendored under `web/vendor/` so the app renders fully offline.
+- `web/js/platform.js` is the only module allowed to touch a native bridge. It exposes `Platform.*` (plus `isAndroidApk()` / `isIosApp()` / `isNativeApp()`), routing to `window.BeckonStarsAndroid` on Android (synchronous), `window.webkit.messageHandlers.beckonStars` + the shell-injected `window.__BeckonStarsIOS` snapshot on iOS (async postMessage), and web fallbacks in browsers. Never call bridge objects from other modules.
 - `android/app/src/main/java/hk/beckonstars/app/MainActivity.java` is the Android shell. It loads `file:///android_asset/index.html`, exposes `window.BeckonStarsAndroid`, and bridges notification permission, local notifications, camera/file chooser, voice recording, and native speech recognition back into JavaScript callbacks.
+- `ios/` is the iOS shell (WKWebView, Swift). It bundles the same `web/` directory via an Xcode folder reference and implements the same bridge contract; the contract itself is documented in `ios/BRIDGE.md`. Requires macOS + Xcode to build.
 - `scripts/local-api-server.js` is a dependency-light Node HTTP server. It stores data in `data/server-db.json`, handles auth, family membership, messages, memories, almanac data, AI summaries, speech-to-text, and monthly summary video generation.
-- `android/app/build.gradle` defines the APK build and a `syncWebAssets` `Copy` task wired into `preBuild`. That task copies root-level `index.html`, `manifest.webmanifest`, `sw.js`, and `icons/icon.svg` into `android/app/src/main/assets` if those root files exist. In this checkout the tracked app HTML is under Android assets, so be careful not to introduce root web files that unintentionally overwrite asset edits during Gradle builds.
+- `android/app/build.gradle` wires a `syncWebAssets` `Sync` task into `preBuild`: it mirrors the whole `web/` tree into `android/app/src/main/assets` (deleting stale files) before every build. The assets directory is generated and gitignored — never edit files under `android/app/src/main/assets/` directly; edit `web/` instead.
 
 ## Common commands
 
@@ -79,7 +81,11 @@ Clean/rebuild if Gradle state is stale:
 
 ### Tests and focused checks
 
-There is no configured `npm test` script, lint script, or unit test runner in `package.json`.
+```powershell
+npm run test:web    # jsdom smoke test: boots web/ with real <script> semantics, asserts all views render
+```
+
+`npm run test:web` is the required gate for any `web/` change — it catches module load-order breaks (top-level const/let cross-references), boot-sequence crashes, and per-view render failures. There is no other lint or unit test runner.
 
 Available focused scripts/checks:
 
@@ -138,25 +144,38 @@ Key endpoints currently implemented:
 
 The manifest allows cleartext traffic because the configured self-hosted API uses HTTP. If moving to HTTPS-only production, review `android:usesCleartextTraffic` and the hard-coded API base.
 
+## iOS shell architecture notes
+
+`ios/` mirrors the Android shell in Swift: a WKWebView loads the bundled `web/` folder (Xcode folder reference, so `web/` edits flow into the iOS bundle at build time), and `NativeBridge.swift` implements the same JS-visible contract via a `beckonStars` `WKScriptMessageHandler`. Key differences from Android:
+
+- iOS calls are async `postMessage({method, args})`; synchronous reads (`getVersionCode`, `getNotificationPermission`) come from the `window.__BeckonStarsIOS` snapshot injected at document-start and refreshed on permission changes.
+- Native→JS callbacks use the exact same global function names as Android (`handleAndroidVoiceRecording`, `setAndroidNotificationPermission`, etc.) — the "Android" in the name is historical; both shells share the contract, documented in `ios/BRIDGE.md`.
+- v1 does not support Google Sign-In or the APK self-update flow; the web core degrades via `Platform.supports()`. ATS is opened (`NSAllowsArbitraryLoads`) because the API is plain HTTP.
+- The project can be regenerated with XcodeGen from `ios/project.yml` if `project.pbxproj` is ever mangled.
+
 ## Front-end architecture notes
 
-The HTML app uses inline JavaScript rather than a bundler/framework. State is held in the global `state` object and rendering is string-template driven through `render()` and helper render functions.
+The shared app in `web/` uses no bundler/framework. All modules are classic `<script>` files sharing the global scope (top-level `const`/`let` are visible across files; inline `onclick` handlers resolve against globals). State is held in the global `state` object and rendering is string-template driven through `render()` and helper render functions.
+
+Module load order matters and is defined by the `<script>` tags in `web/index.html`: `platform → utils → state → api → auth → almanac → calendar → chat → voice → memories → ai-image → family → settings → notifications → update → pwa → render → modals → boot`. Function declarations can live anywhere, but code that runs at load time (top-level statements) must only call into files loaded earlier — `npm run test:web` catches violations.
 
 Important front-end behavior:
 
-- `selfHostedApiBase` in `android/app/src/main/assets/index.html` is the server URL used by the APK/web app. Current value is a hard-coded remote HTTP server.
+- `selfHostedApiBase` in `web/js/api.js` is the server URL used by the packaged apps. Current value is a hard-coded remote HTTP server.
 - `serverApi()` adds JSON headers and the JWT bearer token from `state.authToken`.
 - Auth state and app state are persisted in localStorage under keys such as `beckon-stars-auth-token`, `beckon-stars-user`, and `beckon-stars-demo-state-v1`.
-- Google login is APK-native only: Android Credential Manager returns a Google ID token to the HTML app through `BeckonStarsAndroid`, then the backend verifies it at `POST /api/auth/google` before issuing the app JWT.
+- Native access goes exclusively through `Platform.*` in `web/js/platform.js`; feature-gate with `Platform.supports('methodName')` rather than sniffing bridge objects.
+- Google login is Android-native only for now: Android Credential Manager returns a Google ID token through the bridge, then the backend verifies it at `POST /api/auth/google` before issuing the app JWT.
 - `subscribeFamilyMessages()` and `subscribeFamilyMemories()` poll the server every 3s and 5s respectively; there is no websocket layer.
-- PWA install and push-notification paths are disabled or stubbed in APK contexts; Android notification behavior goes through `BeckonStarsAndroid`.
+- PWA install and push-notification paths are disabled or stubbed inside the native shells (`isNativeApp()`); native notification behavior goes through `Platform`.
 - Chat rendering has incremental refresh logic (`refreshVisibleContent()`) to avoid full chat rerenders while polling.
+- The UI is styled by design tokens (`web/css/tokens.css`) plus a component layer (`web/css/app.css`: `bs-card`, `bs-btn-*`, `bs-input`, `bs-tabbar`, `bs-bubble-*`, `bs-modal-*`, …) on top of vendored Tailwind utilities. Senior mode works by CSS variable overrides under `.senior-mode` — always use `bs-text-*` classes for font sizes so senior mode scales them.
 
-When changing front-end behavior, prefer following the existing single-file pattern unless the task explicitly includes a refactor. Verify changes in the APK path, not just a browser, when touching Android bridge interactions.
+When changing front-end behavior, edit `web/` (never the generated Android assets), keep the classic-script/global-scope pattern, run `npm run test:web`, and verify in the APK path when touching bridge interactions.
 
 ### Voice recording for memories (added 2026-06-22)
 
-Memory voice recording reuses the existing `window.BeckonStarsAndroid.startVoiceRecording()` / `finishVoiceRecording()` / `handleAndroidVoiceRecording()` infrastructure used for chat voice messages.
+Memory voice recording reuses the existing `Platform.startVoiceRecording()` / `Platform.finishVoiceRecording()` / `handleAndroidVoiceRecording()` infrastructure used for chat voice messages.
 
 **Key implementation details:**
 

@@ -96,7 +96,7 @@
             } else {
                 app.innerHTML = `
                     ${renderHeader()}
-                    <main class="flex-1 min-h-0 ${state.currentTab === 'chat' ? 'overflow-hidden pb-[calc(5.75rem+env(safe-area-inset-bottom))]' : 'overflow-y-auto no-scrollbar pb-[calc(5.75rem+env(safe-area-inset-bottom))]'}">
+                    <main class="flex-1 min-h-0 bg-[var(--surface-0)] ${state.currentTab === 'chat' ? 'overflow-hidden pb-[calc(5.75rem+env(safe-area-inset-bottom))]' : 'overflow-y-auto no-scrollbar pb-[calc(5.75rem+env(safe-area-inset-bottom))]'}">
                         ${state.currentTab === 'calendar' ? renderCalendar() : ''}
                         ${state.currentTab === 'chat' ? renderChat() : ''}
                         ${state.currentTab === 'rewards' ? renderRewards() : ''}
@@ -132,10 +132,12 @@
 
         // --- 登入/註冊引導流程 (Onboarding) ---
         function renderOnboardingFlow() {
-            if (state.onboardingStep === 1) return renderStep1Auth();
-            if (state.onboardingStep === 2) return renderStep2Role();
-            if (state.onboardingStep === 3) return renderStep3Profile();
-            if (state.onboardingStep === 4) return renderStep4Connect();
+            let step;
+            if (state.onboardingStep === 1) step = renderStep1Auth();
+            if (state.onboardingStep === 2) step = renderStep2Role();
+            if (state.onboardingStep === 3) step = renderStep3Profile();
+            if (state.onboardingStep === 4) step = renderStep4Connect();
+            return `<div class="h-full w-full bg-[var(--surface-0)]">${step}</div>`;
         }
 
 
@@ -145,28 +147,32 @@
         function renderHeader() {
             const titles = { 'calendar': '日曆', 'chat': '對話', 'rewards': '獎勵', 'profile': '我' };
             const currentTitle = titles[state.currentTab] || '星喚';
+            const greeting = state.userName ? `你好，${state.userName}` : '星喚 Beckon Stars';
             return `
-                <header class="bg-white px-6 pt-12 pb-4 shadow-sm z-10 sticky top-0 flex justify-between items-center rounded-b-2xl">
+                <header class="bs-appbar px-6 pt-12 pb-4 z-10 sticky top-0 flex justify-between items-center">
                     <div class="flex items-center">
-                        ${renderAvatar(state.userAvatar, { userId: state.authUid, sizeClass: 'w-10 h-10', coreClass: 'bg-orange-100 bs-text-2xl border-2 border-brand-light shadow-sm', extraClass: 'mr-3' })}
-                        <h2 class="bs-text-2xl font-bold text-gray-800">${currentTitle}</h2>
+                        ${renderAvatar(state.userAvatar, { userId: state.authUid, sizeClass: 'w-11 h-11', coreClass: 'bg-gradient-to-br from-[var(--brand-100)] to-[var(--brand-200)] text-brand-dark bs-text-2xl border-2 border-white shadow-sm', extraClass: 'mr-3' })}
+                        <div class="min-w-0">
+                            <h2 class="bs-text-xl font-bold text-[var(--ink-900)] tracking-wide leading-tight truncate">${currentTitle}</h2>
+                            <p class="bs-text-xs text-[var(--ink-500)] leading-tight truncate">${greeting}</p>
+                        </div>
                     </div>
                     <div class="flex items-center gap-2">
-                        <div class="bg-orange-100 text-brand-dark px-3 py-1.5 rounded-full font-bold flex items-center shadow-inner">
-                            <i class="fa-solid fa-coins mr-1.5 text-yellow-500"></i> ${state.points}
+                        <div class="bs-chip shadow-sm">
+                            <i class="fa-solid fa-coins text-[var(--accent-gold)]"></i> ${state.points}
                         </div>
-                        <button class="action-btn w-9 h-9 rounded-full ${state.notificationPermission === 'granted' ? 'bg-green-50 text-green-600' : 'bg-yellow-50 text-yellow-600'} flex items-center justify-center hover:bg-yellow-100 transition-colors" data-action="requestNotifications" title="開啟通知提示">
+                        <button class="action-btn w-9 h-9 rounded-full ${state.notificationPermission === 'granted' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'} flex items-center justify-center hover:opacity-80 transition-colors" data-action="requestNotifications" title="開啟通知提示">
                             <i class="fa-solid ${state.notificationPermission === 'granted' ? 'fa-bell' : 'fa-bell-slash'}"></i>
                         </button>
                         ${state.canInstallApp ? `
-                            <button class="action-btn w-9 h-9 rounded-full bg-orange-50 text-brand flex items-center justify-center hover:bg-orange-100 transition-colors" data-action="installApp" title="安裝成手機 App">
+                            <button class="action-btn w-9 h-9 rounded-full bg-[var(--surface-2)] text-brand flex items-center justify-center hover:bg-[var(--brand-100)] transition-colors" data-action="installApp" title="安裝成手機 App">
                                 <i class="fa-solid fa-mobile-screen-button"></i>
                             </button>
                         ` : ''}
-                        <button class="action-btn w-9 h-9 rounded-full bg-gray-900 text-green-300 flex items-center justify-center hover:bg-gray-800 transition-colors" data-action="openModal" data-modal="logs" title="查看 Log">
+                        <button class="action-btn w-9 h-9 rounded-full bg-[var(--ink-900)] text-emerald-300 flex items-center justify-center hover:opacity-85 transition-colors" data-action="openModal" data-modal="logs" title="查看 Log">
                             <i class="fa-solid fa-terminal"></i>
                         </button>
-                        <button class="action-btn w-9 h-9 rounded-full bg-gray-50 text-gray-400 flex items-center justify-center hover:bg-red-50 hover:text-red-500 transition-colors" data-action="openModal" data-modal="confirmReset" title="清除數據並重新開始">
+                        <button class="action-btn w-9 h-9 rounded-full bg-[var(--surface-2)] text-[var(--ink-500)] flex items-center justify-center hover:bg-red-50 hover:text-[var(--brand-red)] transition-colors" data-action="openModal" data-modal="confirmReset" title="清除數據並重新開始">
                             <i class="fa-solid fa-trash-can"></i>
                         </button>
                     </div>
@@ -185,10 +191,12 @@
             ];
 
             return `
-                <nav class="absolute bottom-0 w-full bg-white border-t border-gray-100 px-6 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] flex justify-between items-center z-20 shadow-[0_-5px_15px_rgba(0,0,0,0.03)]">
+                <nav class="bs-tabbar absolute bottom-0 w-full rounded-t-[var(--radius-lg)] px-4 pt-2 pb-[calc(0.6rem+env(safe-area-inset-bottom))] flex justify-between items-center z-20">
                     ${tabs.map(tab => `
-                        <button class="action-btn flex flex-col items-center p-2 flex-1 ${state.currentTab === tab.id ? 'text-brand' : 'text-gray-400'}" data-action="switchTab" data-tab="${tab.id}">
-                            <i class="fa-solid ${tab.icon} bs-text-2xl mb-1 transition-transform ${state.currentTab === tab.id ? 'transform scale-110' : ''}"></i>
+                        <button class="bs-tab action-btn flex-1 ${state.currentTab === tab.id ? 'is-active' : ''}" data-action="switchTab" data-tab="${tab.id}">
+                            <span class="bs-tab-icon">
+                                <i class="fa-solid ${tab.icon} bs-text-lg"></i>
+                            </span>
                             <span class="bs-text-xs font-medium">${tab.label}</span>
                         </button>
                     `).join('')}

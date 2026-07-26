@@ -54,24 +54,24 @@
             }
 
             return `
-                <div class="p-6" id="calendarContent">
-                    <div class="flex bg-gray-200 rounded-xl p-1 mb-6">
-                        <button class="action-btn flex-1 py-2 rounded-lg font-bold bs-text-sm transition-colors ${state.calendarMode === 'tear-off' ? 'bg-white text-brand shadow' : 'text-gray-500'}" data-action="switchCalendar" data-mode="tear-off">
-                            手撕日曆
+                <div class="p-5 space-y-4" id="calendarContent">
+                    <div class="flex bg-gray-200 gap-1 rounded-full p-1" style="background: var(--surface-2);">
+                        <button class="action-btn flex-1 py-2.5 rounded-full font-bold bs-text-sm transition-all ${state.calendarMode === 'tear-off' ? 'bg-white text-brand-dark shadow-sm' : 'text-[var(--ink-500)]'}" data-action="switchCalendar" data-mode="tear-off">
+                            <i class="fa-solid fa-scroll mr-1.5"></i>手撕日曆
                         </button>
-                        <button class="action-btn flex-1 py-2 rounded-lg font-bold bs-text-sm transition-colors ${state.calendarMode === 'monthly' ? 'bg-white text-brand shadow' : 'text-gray-500'}" data-action="switchCalendar" data-mode="monthly">
-                            現時月曆
+                        <button class="action-btn flex-1 py-2.5 rounded-full font-bold bs-text-sm transition-all ${state.calendarMode === 'monthly' ? 'bg-white text-brand-dark shadow-sm' : 'text-[var(--ink-500)]'}" data-action="switchCalendar" data-mode="monthly">
+                            <i class="fa-solid fa-table-cells mr-1.5"></i>現時月曆
                         </button>
                     </div>
 
                     ${state.calendarMode === 'tear-off' ? renderTearOffCalendar(visibleMemories) : renderMonthlyCalendar(visibleMemories)}
 
-                    <button class="action-btn mt-6 w-full bg-white border-2 border-orange-100 text-brand-dark py-4 rounded-2xl font-bold bs-text-lg shadow-sm flex items-center justify-center hover:bg-orange-50 transition-colors" data-action="openModal" data-modal="weeklySummary">
-                        <i class="fa-solid fa-wand-magic-sparkles mr-2 text-brand"></i> 生成家庭回憶摘要
+                    <button class="action-btn bs-btn bs-btn-secondary w-full" data-action="openModal" data-modal="weeklySummary">
+                        <i class="fa-solid fa-wand-magic-sparkles text-brand"></i>生成家庭回憶摘要
                     </button>
 
-                    <button class="action-btn mt-4 w-full bg-brand text-white py-4 rounded-2xl font-bold bs-text-lg shadow-lg flex items-center justify-center hover:bg-brand-dark transition-colors" data-action="openModal" data-modal="addMemory">
-                        <i class="fa-solid fa-plus-circle mr-2 bs-text-xl"></i> 記錄今日回憶
+                    <button class="action-btn bs-btn bs-btn-primary w-full" data-action="openModal" data-modal="addMemory">
+                        <i class="fa-solid fa-plus-circle"></i>記錄今日回憶
                     </button>
                 </div>
             `;
