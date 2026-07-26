@@ -1,0 +1,84 @@
+/* ============================================================
+   星喚 Beckon Stars — Design tokens
+   一套代碼共用 iOS / Android，所有顏色、字級、間距、圓角、陰影
+   都從這裡取值。長者模式 (.senior-mode) 只放大字級與觸控目標。
+   ============================================================ */
+
+:root {
+    /* ---- 品牌色 ---- */
+    --brand-50:  #FFF4EC;
+    --brand-100: #FFE4D1;
+    --brand-200: #FFD1B3;
+    --brand-300: #FFB585;
+    --brand-400: #FF9F66;
+    --brand-500: #FF944D;   /* 主色 */
+    --brand-600: #F07A2E;
+    --brand-700: #CC6622;
+    --brand-red: #E63946;
+
+    /* ---- 輔助色 ---- */
+    --accent-gold:  #FFC94D;
+    --accent-teal:  #2A9D8F;
+    --accent-plum:  #9B5DE5;
+    --accent-sky:   #4EA8DE;
+
+    /* ---- 中性色（暖灰） ---- */
+    --surface-0: #FFF9F2;   /* app 背景 */
+    --surface-1: #FFFFFF;   /* 卡片 */
+    --surface-2: #FFF1E6;   /* 次級底 */
+    --surface-3: #F7E8DC;   /* 分隔底 */
+    --ink-900: #33261C;
+    --ink-700: #59493C;
+    --ink-500: #8A7A6C;
+    --ink-300: #C4B6A9;
+    --line:    #F0E2D4;
+
+    /* ---- 陰影 ---- */
+    --shadow-sm: 0 1px 2px rgba(80, 50, 20, 0.06);
+    --shadow-md: 0 4px 16px rgba(80, 50, 20, 0.08);
+    --shadow-lg: 0 12px 32px rgba(80, 50, 20, 0.14);
+    --shadow-brand: 0 6px 18px rgba(255, 148, 77, 0.35);
+
+    /* ---- 圓角 ---- */
+    --radius-sm: 10px;
+    --radius: 16px;
+    --radius-lg: 22px;
+    --radius-full: 9999px;
+
+    /* ---- 字級（長者模式會覆蓋） ---- */
+    --font-xs: 12px; --font-sm: 14px; --font-base: 16px;
+    --font-lg: 18px; --font-xl: 20px; --font-2xl: 24px;
+    --font-3xl: 30px; --font-4xl: 36px;
+
+    /* ---- 間距 / 觸控 ---- */
+    --space-xs: 4px; --space-sm: 8px; --space-md: 12px;
+    --space-lg: 16px; --space-xl: 24px;
+    --btn-min-h: 44px; --touch-target: 40px;
+    --line-height: 1.4;
+
+    /* ---- 動效 ---- */
+    --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
+    --dur-fast: 0.18s;
+    --dur-base: 0.3s;
+}
+
+.senior-mode {
+    --font-xs: 15px; --font-sm: 18px; --font-base: 20px;
+    --font-lg: 22px; --font-xl: 24px; --font-2xl: 28px;
+    --font-3xl: 32px; --font-4xl: 38px;
+    --space-xs: 6px; --space-sm: 10px; --space-md: 16px;
+    --space-lg: 20px; --space-xl: 28px;
+    --btn-min-h: 52px; --touch-target: 48px;
+    --line-height: 1.5;
+    --radius: 20px;
+}
+
+/* 字級 utility（模板既有引用，保留） */
+.bs-text-xs   { font-size: var(--font-xs);   line-height: var(--line-height); }
+.bs-text-sm   { font-size: var(--font-sm);   line-height: var(--line-height); }
+.bs-text-base { font-size: var(--font-base); line-height: var(--line-height); }
+.bs-text-lg   { font-size: var(--font-lg);   line-height: var(--line-height); }
+.bs-text-xl   { font-size: var(--font-xl);   line-height: var(--line-height); }
+.bs-text-2xl  { font-size: var(--font-2xl);  line-height: var(--line-height); }
+.bs-text-3xl  { font-size: var(--font-3xl);  line-height: var(--line-height); }
+.bs-text-4xl  { font-size: var(--font-4xl);  line-height: var(--line-height); }

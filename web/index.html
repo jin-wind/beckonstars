@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#FF944D">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="星喚">
+    <title>星喚 Beckon Stars</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="icons/icon.svg">
+
+    <!-- 依賴全部本地化：離線（WebView 無網路）也能完整渲染 -->
+    <script src="vendor/tailwind.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: { light: '#FFD1B3', DEFAULT: '#FF944D', dark: '#CC6622', red: '#E63946' }
+                    }
+                }
+            }
+        }
+    </script>
+    <link rel="stylesheet" href="vendor/fontawesome/css/all.min.css">
+    <script src="vendor/qrcode.min.js"></script>
+
+    <link rel="stylesheet" href="css/tokens.css">
+    <link rel="stylesheet" href="css/app.css">
+</head>
+<body class="text-gray-800 w-full flex justify-center bg-gray-100">
+
+    <div id="app" class="w-full max-w-md h-full min-h-0 bg-[#FFF9F2] shadow-2xl relative overflow-hidden flex flex-col">
+        <!-- 內容會由 JavaScript 動態渲染 -->
+    </div>
+
+    <!-- 共用核心（classic script，共享全域作用域；載入順序有意義：boot.js 必須最後） -->
+    <script src="js/platform.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/state.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/almanac.js"></script>
+    <script src="js/calendar.js"></script>
+    <script src="js/chat.js"></script>
+    <script src="js/voice.js"></script>
+    <script src="js/memories.js"></script>
+    <script src="js/ai-image.js"></script>
+    <script src="js/family.js"></script>
+    <script src="js/settings.js"></script>
+    <script src="js/notifications.js"></script>
+    <script src="js/update.js"></script>
+    <script src="js/pwa.js"></script>
+    <script src="js/render.js"></script>
+    <script src="js/modals.js"></script>
+    <script src="js/boot.js"></script>
+</body>
+</html>

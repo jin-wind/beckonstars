@@ -1,7 +1,8 @@
 {
   "scripts": {
     "api-server": "node scripts/local-api-server.js",
-    "migrate-to-sqlite": "node scripts/migrate-json-to-sqlite.js"
+    "migrate-to-sqlite": "node scripts/migrate-json-to-sqlite.js",
+    "test:web": "node scripts/smoke-web.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
@@ -10,5 +11,8 @@
     "jsonwebtoken": "^9.0.3",
     "lunar-javascript": "^1.7.7",
     "sharp": "^0.33.5"
+  },
+  "devDependencies": {
+    "jsdom": "^29.1.1"
   }
 }

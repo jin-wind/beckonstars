@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="星喚">
+  <rect width="512" height="512" rx="112" fill="#FFF8F0"/>
+  <circle cx="256" cy="256" r="184" fill="#FF944D"/>
+  <path d="M256 92l43 111 119 7-92 76 30 116-100-63-100 63 30-116-92-76 119-7z" fill="#fff"/>
+  <circle cx="256" cy="256" r="58" fill="#FFD1B3"/>
+  <path d="M179 344c42 42 112 42 154 0" fill="none" stroke="#CC6622" stroke-width="24" stroke-linecap="round"/>
+</svg>
