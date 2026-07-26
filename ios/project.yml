@@ -1,0 +1,36 @@
+name: BeckonStars
+options:
+  minimumXcodeGenVersion: 2.38.0
+  deploymentTarget:
+    iOS: "15.0"
+  groupSortPosition: top
+  generateEmptyDirectories: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "15.0"
+    CODE_SIGN_STYLE: Automatic
+targets:
+  BeckonStars:
+    type: application
+    platform: iOS
+    deploymentTarget: "15.0"
+    sources:
+      - path: BeckonStars
+        excludes:
+          - Info.plist
+      # type: folder 產生藍色 folder reference，bundle 內維持 web/ 子目錄結構。
+      - path: ../web
+        name: web
+        type: folder
+        buildPhase: resources
+    settings:
+      base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        PRODUCT_BUNDLE_IDENTIFIER: hk.beckonstars.app
+        PRODUCT_NAME: BeckonStars
+        INFOPLIST_FILE: BeckonStars/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        TARGETED_DEVICE_FAMILY: "1"

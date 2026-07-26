@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>zh-Hant</string>
+	<key>CFBundleDisplayName</key>
+	<string>星喚</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>星喚需要使用相機拍攝照片，加入家庭回憶。</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>星喚需要使用麥克風錄製語音訊息與語音回憶。</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>星喚需要將 AI 生成的圖片保存到你的相簿。</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>星喚需要讀取相簿照片，讓你挑選照片加入家庭回憶。</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>星喚需要使用語音辨識，把語音訊息轉成文字。</string>
+	<key>UILaunchScreen</key>
+	<dict/>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+</dict>
+</plist>
