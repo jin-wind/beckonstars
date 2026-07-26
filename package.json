@@ -2,7 +2,8 @@
   "scripts": {
     "api-server": "node scripts/local-api-server.js",
     "migrate-to-sqlite": "node scripts/migrate-json-to-sqlite.js",
-    "test:web": "node scripts/smoke-web.js"
+    "test:web": "node scripts/smoke-web.js",
+    "test:visual": "node scripts/visual-smoke.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
@@ -13,6 +14,7 @@
     "sharp": "^0.33.5"
   },
   "devDependencies": {
-    "jsdom": "^29.1.1"
+    "jsdom": "^29.1.1",
+    "playwright-core": "^1.62.0"
   }
 }

@@ -11,5 +11,5 @@ server_secret_*.json
 .claude/settings.local.json
 .superpowers/
 .refactor-tmp/
+.artifacts/
 android/app/src/main/assets/
-android/local.properties
