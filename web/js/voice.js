@@ -271,8 +271,8 @@
             if (!state.voiceRecording.active || !state.voiceRecording.locked) return;
             resetVoiceRecordingState();
             replaceVoiceRecordingBar();
-            if (isAndroidApk() && window.BeckonStarsAndroid?.finishVoiceRecording) {
-                window.BeckonStarsAndroid.finishVoiceRecording(!!cancelled);
+            if (Platform.supports('finishVoiceRecording')) {
+                Platform.finishVoiceRecording(!!cancelled);
             }
         }
 
@@ -316,10 +316,10 @@
                     if (!state.voiceRecording.active) return;
                     completeRecording(false);
                 }, 60000);
-                if (isAndroidApk() && window.BeckonStarsAndroid?.startVoiceRecording) {
-                    window.BeckonStarsAndroid.startVoiceRecording();
+                if (Platform.supports('startVoiceRecording')) {
+                    Platform.startVoiceRecording();
                 } else {
-                    window.handleAndroidVoiceError('目前環境未支援 APK 錄音。請在 Android APK 內使用。');
+                    window.handleAndroidVoiceError('目前環境未支援語音錄製。請在星喚 App 內使用。');
                 }
             };
 
@@ -355,8 +355,8 @@
                 pointerId = null;
                 resetVoiceRecordingState();
                 replaceVoiceRecordingBar();
-                if (isAndroidApk() && window.BeckonStarsAndroid?.finishVoiceRecording) {
-                    window.BeckonStarsAndroid.finishVoiceRecording(!!cancelled);
+                if (Platform.supports('finishVoiceRecording')) {
+                    Platform.finishVoiceRecording(!!cancelled);
                 }
             };
 

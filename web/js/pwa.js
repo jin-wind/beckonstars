@@ -3,7 +3,7 @@
 
 
         async function registerPwa() {
-            if (isAndroidApk()) return;
+            if (isNativeApp()) return;
             if (!('serviceWorker' in navigator)) return;
             try {
                 serviceWorkerRegistration = await navigator.serviceWorker.register('./sw.js');
@@ -14,8 +14,8 @@
 
 
         async function installPwaApp() {
-            if (isAndroidApk()) {
-                showMessage('目前已經是 APK 版本，不需要再加入主畫面。');
+            if (isNativeApp()) {
+                showMessage('目前已經是 App 版本，不需要再加入主畫面。');
                 return;
             }
             if (!deferredInstallPrompt) {

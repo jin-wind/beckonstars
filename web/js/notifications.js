@@ -1,21 +1,21 @@
 
         function updateNotificationPermission() {
             state.notificationPermission = getRuntimeNotificationPermission();
-            state.canInstallApp = !isAndroidApk() && !!deferredInstallPrompt;
+            state.canInstallApp = !isNativeApp() && !!deferredInstallPrompt;
         }
 
 
         async function requestNotificationPermission() {
-            if (isAndroidApk()) {
-                const granted = window.BeckonStarsAndroid.requestNotificationPermission();
+            if (isNativeApp()) {
+                const granted = Platform.requestNotificationPermission();
                 state.notificationPermission = getRuntimeNotificationPermission();
                 render();
                 if (granted || state.notificationPermission === 'granted') {
-                    showLocalNotification('星喚通知已開啟', 'APK 會由 Android 原生通知處理提示。');
-                    showMessage('APK 通知已開啟。');
+                    showLocalNotification('星喚通知已開啟', '通知會由系統原生通知處理提示。');
+                    showMessage('App 通知已開啟。');
                     return;
                 }
-                showMessage('請在 Android 權限視窗或 App 設定中允許通知。');
+                showMessage('請在系統權限視窗或 App 設定中允許通知。');
                 return;
             }
 
@@ -72,8 +72,8 @@
 
 
         async function showLocalNotification(title, body) {
-            if (isAndroidApk()) {
-                window.BeckonStarsAndroid.showLocalNotification(title, body);
+            if (isNativeApp()) {
+                Platform.showLocalNotification(title, body);
                 return;
             }
             if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;

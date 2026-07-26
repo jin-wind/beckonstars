@@ -377,8 +377,8 @@
                             });
                     }
                     else if (action === 'downloadUpdate') {
-                        if (window.BeckonStarsAndroid?.downloadAndInstallUpdate) {
-                            window.BeckonStarsAndroid.downloadAndInstallUpdate(state.updateInfo.downloadUrl);
+                        if (Platform.supports('downloadAndInstallUpdate')) {
+                            Platform.downloadAndInstallUpdate(state.updateInfo.downloadUrl);
                             state.showModal = null;
                             render();
                             showMessage('正在下載更新，完成後會自動提示安裝');
@@ -571,23 +571,19 @@
                         cameraInput?.click();
                     }
                     else if (action === 'startMemoryVoiceRecording') {
-                        if (!isAndroidApk()) {
-                            showMessage('語音錄製功能僅在 Android APK 中可用。');
-                            return;
-                        }
-                        if (!window.BeckonStarsAndroid?.startVoiceRecording) {
-                            showMessage('您的 APK 版本不支援語音錄製。');
+                        if (!Platform.supports('startVoiceRecording')) {
+                            showMessage('語音錄製功能需要在星喚 App 內使用。');
                             return;
                         }
                         state.recordingForMemory = true;
                         state.isRecordingMemory = true;
-                        window.BeckonStarsAndroid.startVoiceRecording();
+                        Platform.startVoiceRecording();
                         // Don't render immediately to avoid UI jump
                         setTimeout(() => render(), 50);
                     }
                     else if (action === 'stopMemoryVoiceRecording') {
-                        if (window.BeckonStarsAndroid?.finishVoiceRecording) {
-                            window.BeckonStarsAndroid.finishVoiceRecording(false);
+                        if (Platform.supports('finishVoiceRecording')) {
+                            Platform.finishVoiceRecording(false);
                             state.isRecordingMemory = false;
                             // Don't render immediately to avoid UI jump
                         }
@@ -843,7 +839,7 @@
                     else if (action === 'downloadGeneratedImage') {
                         const url = newBtn.getAttribute('data-url');
                         if (url) {
-                            if (isAndroidApk() && window.BeckonStarsAndroid?.saveImageToGallery) {
+                            if (Platform.supports('saveImageToGallery')) {
                                 showMessage('正在保存圖片到手機相簿...');
                             }
                             downloadImage(url);

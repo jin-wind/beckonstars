@@ -34,7 +34,7 @@
 
         function startAndroidGoogleLogin() {
             if (state.googleSignInLoading) return;
-            if (!isAndroidApk() || !window.BeckonStarsAndroid?.startGoogleSignIn) {
+            if (!Platform.supports('startGoogleSignIn')) {
                 state.errorMsg = 'Google 登入需要在 Android APK 內使用';
                 render();
                 return;
@@ -44,7 +44,7 @@
             state.errorMsg = '';
             render();
             try {
-                window.BeckonStarsAndroid.startGoogleSignIn();
+                Platform.startGoogleSignIn();
             } catch (error) {
                 console.error('[auth] Android Google login failed to start:', error);
                 state.googleSignInLoading = false;
@@ -198,7 +198,7 @@
             state.currentUser = null;
             state.authUid = null;
             try {
-                window.BeckonStarsAndroid?.clearGoogleCredentialState?.();
+                Platform.clearGoogleCredentialState();
             } catch (ignored) {}
             localStorage.removeItem('beckon-stars-auth-token');
             localStorage.removeItem('beckon-stars-user');

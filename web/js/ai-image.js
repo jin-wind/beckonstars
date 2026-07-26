@@ -30,8 +30,8 @@
             const imageUrl = String(url || '').trim();
             if (!imageUrl) return;
 
-            if (isAndroidApk() && window.BeckonStarsAndroid?.saveImageToGallery) {
-                window.BeckonStarsAndroid.saveImageToGallery(imageUrl);
+            if (Platform.supports('saveImageToGallery')) {
+                Platform.saveImageToGallery(imageUrl);
                 return;
             }
 
@@ -55,8 +55,8 @@
             const imageUrl = String(url || '').trim();
             if (!imageUrl) return;
 
-            if (isAndroidApk() && window.BeckonStarsAndroid?.shareAIImage) {
-                window.BeckonStarsAndroid.shareAIImage(imageUrl);
+            if (Platform.supports('shareAIImage')) {
+                Platform.shareAIImage(imageUrl);
                 return;
             }
 
