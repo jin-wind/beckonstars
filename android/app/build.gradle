@@ -22,14 +22,11 @@ dependencies {
     implementation "com.google.android.libraries.identity.googleid:googleid:1.1.1"
 }
 
-tasks.register("syncWebAssets", Copy) {
-    def webRoot = rootProject.projectDir.parentFile
-    from(webRoot) {
-        include "index.html"
-        include "manifest.webmanifest"
-        include "sw.js"
-        include "icons/icon.svg"
-    }
+// 共用 web 核心（repo 根目錄 web/）是唯一事實來源；
+// 每次建置前整棵同步進 assets（Sync 會刪除目的地多餘檔案）。
+// iOS 殼層以 folder reference 引用同一個 web/ 目錄。
+tasks.register("syncWebAssets", Sync) {
+    from new File(rootProject.projectDir.parentFile, "web")
     into layout.projectDirectory.dir("src/main/assets")
 }
 
