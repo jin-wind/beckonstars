@@ -137,32 +137,32 @@
             // 日曆副標題顯示
             let subDateDisplay = '';
             if (state.dailyCardMode === 'bible') {
-                subDateDisplay = `<p class="bs-text-xs text-gray-400 mt-1">${isToday ? '今日' : `${displayMonth}月${displayDay}日`} · 聖經金句</p>`;
+                subDateDisplay = `<p class="bs-text-xs text-[var(--ink-300)] mt-1">${isToday ? '今日' : `${displayMonth}月${displayDay}日`} · 聖經金句</p>`;
             } else {
-                subDateDisplay = `<p class="bs-text-xs text-gray-400 mt-1">${isToday ? '今日' : `${displayMonth}月${displayDay}日`} · 家庭小提醒</p>`;
+                subDateDisplay = `<p class="bs-text-xs text-[var(--ink-300)] mt-1">${isToday ? '今日' : `${displayMonth}月${displayDay}日`} · 家庭小提醒</p>`;
             }
 
             let dailyCardHtml = '';
             if (state.dailyCardMode === 'bible') {
                 if (hasBibleVerse) {
                     dailyCardHtml = `
-                        <div class="bg-[#FFF8F0] border border-amber-200 rounded-xl p-4 pb-7 shadow-sm inline-block text-left relative max-w-full">
+                        <div class="bs-card-flat p-4 pb-7 inline-block text-left relative max-w-full">
                             <div class="flex items-center gap-2 mb-2">
-                                <span class="bg-amber-100 text-amber-700 px-2 py-1 rounded bs-text-sm font-bold">${isToday ? '今日金句' : '金句'}</span>
-                                <span class="text-gray-500 bs-text-xs font-medium">${escapeHtml(bibleVerse.reference || '')}</span>
+                                <span class="bs-chip font-bold">${isToday ? '今日金句' : '金句'}</span>
+                                <span class="text-[var(--ink-500)] bs-text-xs font-medium">${escapeHtml(bibleVerse.reference || '')}</span>
                             </div>
-                            <p class="text-gray-700 font-medium leading-relaxed">${escapeHtml(bibleVerse.text || '')}</p>
-                            <p class="absolute right-3 bottom-2 text-[3px] text-gray-400 tracking-wide uppercase">FROM ${escapeHtml(bibleVerse.source || '信望愛站聖經')}</p>
+                            <p class="text-[var(--ink-700)] font-medium leading-relaxed">${escapeHtml(bibleVerse.text || '')}</p>
+                            <p class="absolute right-3 bottom-2 text-[3px] text-[var(--ink-300)] tracking-wide uppercase">FROM ${escapeHtml(bibleVerse.source || '信望愛站聖經')}</p>
                         </div>
                     `;
                 }
             } else {
                 const encouragement = getDailyEncouragement(dateKey);
                 dailyCardHtml = `
-                    <div class="bg-[#FFF8F0] border border-orange-200 rounded-xl p-4 shadow-sm inline-block text-left relative max-w-full">
+                    <div class="bs-card-flat p-4 inline-block text-left relative max-w-full">
                         <div class="flex items-start gap-2">
-                            <span class="bg-orange-100 text-brand-dark px-2 py-1 rounded bs-text-sm font-bold shrink-0">${isToday ? '今日適宜' : '適宜'}</span>
-                            <span class="text-gray-700 font-medium leading-relaxed">${escapeHtml(encouragement.replace(/^今日適宜/, '').trim())}</span>
+                            <span class="bs-chip font-bold shrink-0">${isToday ? '今日適宜' : '適宜'}</span>
+                            <span class="text-[var(--ink-700)] font-medium leading-relaxed">${escapeHtml(encouragement.replace(/^今日適宜/, '').trim())}</span>
                         </div>
                     </div>
                 `;
@@ -170,29 +170,29 @@
 
             return `
                 <div class="p-8 text-center relative tear-off-bg">
-                    <h3 class="bs-text-2xl font-medium text-gray-500 mb-2">${dayNames[displayDate.getDay()]}</h3>
-                    <h1 class="text-8xl font-bold text-gray-800 mb-2 font-serif">${displayDay}</h1>
+                    <h3 class="bs-text-2xl font-medium text-[var(--ink-500)] mb-2">${dayNames[displayDate.getDay()]}</h3>
+                    <h1 class="text-8xl font-bold text-[var(--ink-900)] mb-2 font-serif">${displayDay}</h1>
                     ${subDateDisplay}
                     <div class="mt-4">${dailyCardHtml}</div>
                 </div>
                 ${dayMemories.length > 0 ? `
-                    <div class="bg-orange-50 p-4 border-t border-orange-100">
-                        <p class="bs-text-sm font-bold text-brand-dark mb-2"><i class="fa-solid fa-heart"></i> ${displayDay}日已有 ${dayMemories.length} 個回憶</p>
+                    <div class="bg-[var(--surface-2)] p-4 border-t border-[var(--line)]">
+                        <p class="bs-text-sm font-bold text-brand-dark mb-2"><i class="fa-solid fa-heart text-brand"></i> ${displayDay}日已有 ${dayMemories.length} 個回憶</p>
                         <div class="flex gap-2 overflow-x-auto no-scrollbar">
                             ${dayMemories.map(m => {
                                 const memoryImageSrc = getMemoryImageSrc(m, true);
                                 const memoryAudioSrc = getMemoryAudioSrc(m);
                                 return `
-                                    <div class="w-12 h-12 rounded-lg flex-shrink-0 flex items-center justify-center overflow-hidden ${memoryImageSrc ? '' : memoryAudioSrc ? 'bg-gradient-to-br from-purple-100 to-purple-50 border border-purple-200' : 'bg-white border border-orange-200'}">
+                                    <div class="w-12 h-12 rounded-lg flex-shrink-0 flex items-center justify-center overflow-hidden ${memoryImageSrc ? '' : 'bg-[var(--surface-1)] border border-[var(--line)]'}">
                                         ${memoryImageSrc ? `<img src="${escapeAttribute(memoryImageSrc)}" class="w-full h-full object-cover">` : memoryAudioSrc ? `
                                             <div class="flex items-end justify-center gap-0.5 h-6">
-                                                <div class="w-1 bg-purple-400 rounded-full" style="height: 40%;"></div>
-                                                <div class="w-1 bg-purple-500 rounded-full" style="height: 70%;"></div>
-                                                <div class="w-1 bg-purple-600 rounded-full" style="height: 100%;"></div>
-                                                <div class="w-1 bg-purple-500 rounded-full" style="height: 60%;"></div>
-                                                <div class="w-1 bg-purple-400 rounded-full" style="height: 35%;"></div>
+                                                <div class="w-1 bg-[var(--accent-plum)] opacity-40 rounded-full" style="height: 40%;"></div>
+                                                <div class="w-1 bg-[var(--accent-plum)] opacity-70 rounded-full" style="height: 70%;"></div>
+                                                <div class="w-1 bg-[var(--accent-plum)] rounded-full" style="height: 100%;"></div>
+                                                <div class="w-1 bg-[var(--accent-plum)] opacity-70 rounded-full" style="height: 60%;"></div>
+                                                <div class="w-1 bg-[var(--accent-plum)] opacity-40 rounded-full" style="height: 35%;"></div>
                                             </div>
-                                        ` : `<i class="fa-solid fa-font text-gray-400 bs-text-xl"></i>`}
+                                        ` : `<i class="fa-solid fa-font text-[var(--ink-300)] bs-text-xl"></i>`}
                                     </div>
                                 `;
                             }).join('')}
@@ -213,11 +213,11 @@
             prefetchDailyCardWindow(state.calendarYear, state.calendarMonth, displayDay);
 
             return `
-                <div class="bg-white rounded-3xl shadow-xl overflow-hidden border-2 border-gray-100 relative" id="tearOffCalendar">
+                <div class="bs-card overflow-hidden relative" id="tearOffCalendar">
                     <div class="bg-brand-red text-white py-3 px-6 flex justify-between items-center">
-                        <button class="calendar-nav-btn text-white/80 hover:text-white bs-text-lg px-2" data-calendar-dir="-1"><i class="fa-solid fa-chevron-left"></i></button>
+                        <button class="calendar-nav-btn text-white/90 hover:text-white active:scale-90 transition-transform w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/15 bs-text-lg" data-calendar-dir="-1"><i class="fa-solid fa-chevron-left"></i></button>
                         <span class="bs-text-xl font-bold">${state.calendarYear}年 ${state.calendarMonth}月</span>
-                        <button class="calendar-nav-btn text-white/80 hover:text-white bs-text-lg px-2" data-calendar-dir="1"><i class="fa-solid fa-chevron-right"></i></button>
+                        <button class="calendar-nav-btn text-white/90 hover:text-white active:scale-90 transition-transform w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/15 bs-text-lg" data-calendar-dir="1"><i class="fa-solid fa-chevron-right"></i></button>
                     </div>
 
                     <div class="calendar-page-container overflow-hidden relative" id="calendarPageContainer">
@@ -243,7 +243,7 @@
             const isCurrentMonth = calYear === today.getFullYear() && calMonth === today.getMonth() + 1;
             const dayNames = ["日", "一", "二", "三", "四", "五", "六"];
 
-            let gridHtml = dayNames.map(d => `<div class="text-center bs-text-sm font-bold text-gray-400 py-2">${d}</div>`).join('');
+            let gridHtml = dayNames.map(d => `<div class="text-center bs-text-sm font-bold text-[var(--ink-300)] py-2">${d}</div>`).join('');
             for (let i = 0; i < firstDay; i++) gridHtml += `<div></div>`;
             for (let i = 1; i <= daysInMonth; i++) {
                 const isToday = isCurrentMonth && i === today.getDate();
@@ -251,20 +251,20 @@
                 const hasMemory = dayMemories.length > 0;
                 gridHtml += `
                     <div class="aspect-square flex items-center justify-center p-1 relative">
-                        <button class="action-btn w-full h-full rounded-xl flex items-center justify-center font-medium bs-text-lg transition-all ${isToday ? 'bg-brand text-white shadow-md' : 'bg-gray-50 text-gray-700 hover:bg-orange-100'} ${hasMemory && !isToday ? 'border-2 border-brand-light' : ''}"
+                        <button class="action-btn w-full h-full rounded-full flex items-center justify-center font-medium bs-text-lg transition-all ${isToday ? 'text-white shadow-md bg-[linear-gradient(135deg,var(--brand-400),var(--brand-600))]' : 'bg-[var(--surface-2)] text-[var(--ink-700)] hover:bg-[var(--surface-3)]'}"
                                 ${hasMemory ? `data-action="viewMemories" data-date="${i}" data-month="${calMonth}"` : ''}>
                             ${i}
                         </button>
-                        ${hasMemory ? `<div class="absolute top-2 right-2 w-2 h-2 bg-brand-red rounded-full shadow-sm"></div>` : ''}
+                        ${hasMemory ? `<span class="calendar-day-dot absolute bottom-1.5 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full shadow-sm ${isToday ? 'bg-white' : 'bg-brand-red'}"></span>` : ''}
                     </div>
                 `;
             }
 
             return `
                 <div class="flex justify-between items-center mb-4">
-                    <button class="calendar-nav-btn text-gray-400 hover:text-brand transition-colors p-2" data-calendar-dir="-1"><i class="fa-solid fa-chevron-left"></i></button>
-                    <h3 class="bs-text-xl font-bold text-gray-800">${calYear}年 ${calMonth}月</h3>
-                    <button class="calendar-nav-btn text-gray-400 hover:text-brand transition-colors p-2" data-calendar-dir="1"><i class="fa-solid fa-chevron-right"></i></button>
+                    <button class="calendar-nav-btn text-[var(--ink-300)] hover:text-brand transition-colors w-9 h-9 rounded-full flex items-center justify-center hover:bg-[var(--surface-2)]" data-calendar-dir="-1"><i class="fa-solid fa-chevron-left"></i></button>
+                    <h3 class="bs-text-xl font-bold text-[var(--ink-900)]">${calYear}年 ${calMonth}月</h3>
+                    <button class="calendar-nav-btn text-[var(--ink-300)] hover:text-brand transition-colors w-9 h-9 rounded-full flex items-center justify-center hover:bg-[var(--surface-2)]" data-calendar-dir="1"><i class="fa-solid fa-chevron-right"></i></button>
                 </div>
                 <div class="grid grid-cols-7 gap-2 mb-6">
                     ${gridHtml}
@@ -281,7 +281,7 @@
             const nextMonth = getShiftedCalendarMonth(calYear, calMonth, 1);
 
             return `
-                <div class="bg-white rounded-3xl shadow-lg p-5 border border-gray-100 relative" id="monthlyCalendar">
+                <div class="bs-card p-5 relative" id="monthlyCalendar">
                     <div class="calendar-page-container overflow-hidden relative" id="calendarPageContainer">
                         <div class="calendar-page calendar-page-adjacent" data-calendar-preview="-1" aria-hidden="true" style="transform: translate3d(-100%, 0, 0);">
                             ${monthlyPageHtml(prevMonth.year, prevMonth.month, memories)}
@@ -294,14 +294,14 @@
                         </div>
                     </div>
 
-                    <button class="action-btn w-full bg-gradient-to-r from-orange-400 to-brand-dark text-white rounded-xl p-4 flex items-center justify-between shadow-md mt-4" data-action="openModal" data-modal="videoPlayer">
+                    <button class="action-btn w-full text-white rounded-[var(--radius-lg)] p-4 flex items-center justify-between mt-4 bg-[linear-gradient(135deg,var(--brand-400),var(--brand-600))] shadow-[var(--shadow-md)]" data-action="openModal" data-modal="videoPlayer">
                         <div class="flex items-center">
                             <div class="w-10 h-10 bg-white/30 rounded-full flex items-center justify-center mr-3 backdrop-blur-sm">
                                 <i class="fa-solid fa-play text-white"></i>
                             </div>
                             <div class="text-left">
                                 <p class="font-bold bs-text-lg">本月回憶影片</p>
-                                <p class="bs-text-xs text-orange-100">為您集合這個月的溫暖時刻</p>
+                                <p class="bs-text-xs text-[var(--brand-100)]">為您集合這個月的溫暖時刻</p>
                             </div>
                         </div>
                         <i class="fa-solid fa-chevron-right text-white/70"></i>

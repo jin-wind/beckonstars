@@ -31,12 +31,19 @@
                 ? `讀取失敗：${errorText}`
                 : (lines.length ? lines.join('\n') : (isLoading ? '讀取中...' : emptyText));
             return `
-                <section class="border border-gray-200 rounded-2xl overflow-hidden bg-white">
-                    <div class="px-3 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
-                        <p class="font-bold text-gray-700 bs-text-sm"><i class="fa-solid ${icon} mr-2"></i>${title}</p>
-                        ${isLoading ? '<i class="fa-solid fa-spinner fa-spin text-gray-400 bs-text-xs"></i>' : ''}
+                <section class="bs-card overflow-hidden">
+                    <div class="flex items-center justify-between gap-3 border-b border-[var(--line)] bg-[var(--surface-1)] px-5 py-4">
+                        <div class="flex min-w-0 items-center gap-3">
+                            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius)] bg-[var(--surface-2)] text-brand bs-text-base">
+                                <i class="fa-solid ${icon}"></i>
+                            </span>
+                            <p class="truncate font-bold text-[var(--ink-900)] bs-text-base">${title}</p>
+                        </div>
+                        ${isLoading ? '<span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)] text-brand"><i class="fa-solid fa-spinner fa-spin bs-text-sm"></i></span>' : ''}
                     </div>
-                    <pre class="bg-gray-950 text-gray-100 font-mono bs-text-xs leading-relaxed p-3 h-44 overflow-y-auto whitespace-pre-wrap">${escapeHtml(body)}</pre>
+                    <div class="bg-[var(--surface-2)] p-3">
+                        <pre class="h-44 overflow-y-auto whitespace-pre-wrap rounded-[var(--radius)] border border-[var(--line)] bg-[var(--surface-1)] p-4 font-mono text-[var(--ink-700)] bs-text-xs leading-relaxed shadow-[var(--shadow-sm)]">${escapeHtml(body)}</pre>
+                    </div>
                 </section>
             `;
         }
@@ -50,52 +57,65 @@
             const remaining = Math.max(threshold - count, 0);
             const progress = threshold > 0 ? Math.min((count / threshold) * 100, 100) : 0;
             return `
-                <div class="p-6">
-                    <div class="bg-gradient-to-br from-brand-light to-brand text-white rounded-3xl p-6 shadow-lg mb-8 relative overflow-hidden">
-                        <i class="fa-solid fa-star absolute -right-4 -bottom-4 text-7xl text-white opacity-20 transform -rotate-15"></i>
-                        <div class="flex items-center gap-4 mb-4">
-                            ${renderAvatar(state.userAvatar, { userId: state.authUid, sizeClass: 'w-16 h-16', coreClass: 'bg-white/20 bs-text-3xl text-white font-bold border border-white/30' })}
-                            <div class="min-w-0 flex-1">
-                                <h3 class="bs-text-xl font-bold mb-1">每日頭像框任務</h3>
-                                <p class="text-white/80 bs-text-sm">今天發送 20 條訊息即可即時獲得頭像框</p>
-                            </div>
-                        </div>
-                        
-                        <div class="bg-black/10 rounded-full h-3 mb-2 relative overflow-hidden">
-                            <div class="bg-white h-full rounded-full transition-all duration-1000" style="width: ${progress}%;"></div>
-                        </div>
-                        <div class="flex justify-between bs-text-sm font-bold">
-                            <span>進度</span>
-                            <span>${count} / ${threshold} 條</span>
-                        </div>
-                        
-                        ${reward.active ? `
-                            <p class="mt-4 bs-text-xs text-center text-white/90 font-bold">今日頭像框已生效，明天會重新計算</p>
-                        ` : `
-                            <p class="mt-4 bs-text-xs text-center text-white/70">仲差 ${remaining} 條訊息即可獲得今日頭像框</p>
-                        `}
-                    </div>
-
-                    <h3 class="bs-text-xl font-bold text-gray-800 mb-4 flex items-center">
-                        <i class="fa-solid fa-ticket text-brand mr-2"></i> 獎勵兌換
-                    </h3>
-
-                    <div class="space-y-4">
-                        ${state.rewards.map(reward => `
-                            <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center">
-                                <div class="w-14 h-14 rounded-full ${reward.color} flex items-center justify-center bs-text-2xl mr-4 shrink-0">
-                                    <i class="fa-solid ${reward.icon}"></i>
+                <div class="space-y-6 p-5">
+                    <section class="bs-card relative overflow-hidden">
+                        <i class="fa-solid fa-star absolute -bottom-5 -right-3 rotate-[-12deg] text-[6.5rem] text-brand opacity-10"></i>
+                        <div class="relative bg-gradient-to-br from-[var(--brand-50)] via-[var(--surface-1)] to-[var(--surface-2)] p-5">
+                            <div class="flex items-center gap-4">
+                                <div class="rounded-full bg-[var(--surface-1)] p-1 shadow-[var(--shadow-brand)]">
+                                    ${renderAvatar(state.userAvatar, { userId: state.authUid, sizeClass: 'w-16 h-16', coreClass: 'bg-gradient-to-br from-brand-300 to-brand-500 bs-text-3xl text-white font-bold border-2 border-[var(--surface-1)]' })}
                                 </div>
-                                <div class="flex-1">
-                                    <h4 class="font-bold text-gray-800 bs-text-lg leading-tight">${reward.title}</h4>
-                                    <p class="text-brand font-bold bs-text-sm mt-1">${reward.points} 積分</p>
+                                <div class="min-w-0 flex-1">
+                                    <h3 class="mb-1 font-bold text-[var(--ink-900)] bs-text-xl">每日頭像框任務</h3>
+                                    <p class="text-[var(--ink-500)] bs-text-sm">今天發送 20 條訊息即可即時獲得頭像框</p>
                                 </div>
-                                <button class="action-btn ml-2 px-4 py-2 rounded-xl font-bold bs-text-sm ${state.redeemedRewards.includes(reward.id) ? 'bg-green-100 text-green-600' : state.points >= reward.points ? 'bg-brand text-white shadow-md hover:bg-brand-dark' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}" data-action="redeemReward" data-reward-id="${reward.id}">
-                                    ${state.redeemedRewards.includes(reward.id) ? '已換' : '兌換'}
-                                </button>
                             </div>
-                        `).join('')}
-                    </div>
+
+                            <div class="mt-5">
+                                <div class="mb-2 flex items-center justify-between gap-3 font-bold text-[var(--ink-700)] bs-text-sm">
+                                    <span class="flex items-center gap-2"><i class="fa-solid fa-chart-simple text-brand"></i>進度</span>
+                                    <span class="bs-chip shrink-0">${count} / ${threshold} 條</span>
+                                </div>
+                                <div class="h-3 overflow-hidden rounded-full border border-[var(--line)] bg-[var(--surface-3)] shadow-inner">
+                                    <div class="h-full rounded-full bg-gradient-to-r from-brand-300 via-brand-500 to-brand-600 shadow-[var(--shadow-brand)] transition-all duration-1000" style="width: ${progress}%;"></div>
+                                </div>
+                            </div>
+
+                            ${reward.active ? `
+                                <p class="mt-4 flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-brand-400 to-brand-600 px-4 py-2 text-center font-bold text-white shadow-[var(--shadow-brand)] bs-text-xs"><i class="fa-solid fa-circle-check"></i>今日頭像框已生效，明天會重新計算</p>
+                            ` : `
+                                <p class="mt-4 flex items-center justify-center gap-2 rounded-full bg-[var(--surface-1)] px-4 py-2 text-center text-[var(--ink-500)] shadow-[var(--shadow-sm)] bs-text-xs"><i class="fa-solid fa-star text-[var(--accent-gold)]"></i>仲差 ${remaining} 條訊息即可獲得今日頭像框</p>
+                            `}
+                        </div>
+                    </section>
+
+                    <section>
+                        <h3 class="bs-section-title mb-4 flex items-center gap-3">
+                            <span class="flex h-10 w-10 items-center justify-center rounded-[var(--radius)] bg-[var(--surface-2)] text-brand">
+                                <i class="fa-solid fa-ticket"></i>
+                            </span>
+                            獎勵兌換
+                        </h3>
+
+                        <div class="space-y-3">
+                            ${state.rewards.map(reward => `
+                                <article class="bs-card flex items-stretch overflow-hidden">
+                                    <div class="flex w-20 shrink-0 items-center justify-center border-r border-[var(--line)] bg-[var(--surface-2)] text-brand bs-text-2xl">
+                                        <i class="fa-solid ${reward.icon}"></i>
+                                    </div>
+                                    <div class="flex min-w-0 flex-1 items-center gap-3 p-4">
+                                        <div class="min-w-0 flex-1">
+                                            <h4 class="font-bold leading-tight text-[var(--ink-900)] bs-text-base">${reward.title}</h4>
+                                            <span class="bs-chip mt-2"><i class="fa-solid fa-coins text-[var(--accent-gold)]"></i>${reward.points} 積分</span>
+                                        </div>
+                                        <button class="action-btn bs-btn min-w-[5.25rem] shrink-0 bs-text-sm ${state.redeemedRewards.includes(reward.id) ? 'bs-btn-secondary text-[var(--accent-teal)]' : state.points >= reward.points ? 'bs-btn-primary' : 'bs-btn-secondary cursor-not-allowed text-[var(--ink-300)]'}" data-action="redeemReward" data-reward-id="${reward.id}">
+                                            ${state.redeemedRewards.includes(reward.id) ? '<i class="fa-solid fa-check"></i>已換' : '<i class="fa-solid fa-ticket"></i>兌換'}
+                                        </button>
+                                    </div>
+                                </article>
+                            `).join('')}
+                        </div>
+                    </section>
                 </div>
             `;
         }
@@ -108,88 +128,130 @@
             const usesBibleVerse = state.dailyCardMode === 'bible';
 
             return `
-                <div class="p-6 space-y-4">
+                <div class="space-y-6 p-5">
                     <!-- 頭像和基本資訊 -->
-                    <div class="bg-white rounded-3xl shadow-sm p-6 text-center">
-                        ${renderAvatar(avatar, { userId: state.authUid, sizeClass: 'w-24 h-24', coreClass: 'bg-orange-100 border-4 border-orange-200 text-5xl', extraClass: 'mx-auto mb-4' })}
-                        <h2 class="bs-text-2xl font-bold text-gray-800">${state.userName || '用戶'}</h2>
-                        <p class="text-gray-500 bs-text-sm mt-1">${state.currentUser?.email || ''}</p>
-                        <span class="inline-block mt-2 px-3 py-1 rounded-full bs-text-xs font-medium bg-orange-100 text-brand-dark">${roleLabel}</span>
-                    </div>
+                    <section class="bs-card relative overflow-hidden text-center">
+                        <i class="fa-solid fa-star absolute left-5 top-5 rotate-[-12deg] text-[var(--accent-gold)] opacity-50 bs-text-lg"></i>
+                        <i class="fa-solid fa-star absolute right-7 top-8 rotate-12 text-brand opacity-30 bs-text-sm"></i>
+                        <div class="bg-gradient-to-br from-[var(--brand-50)] via-[var(--surface-1)] to-[var(--surface-2)] px-6 py-8">
+                            <div class="mx-auto mb-4 w-fit rounded-full bg-[var(--surface-1)] p-1.5 shadow-[var(--shadow-brand)]">
+                                ${renderAvatar(avatar, { userId: state.authUid, sizeClass: 'w-28 h-28', coreClass: 'bg-gradient-to-br from-[var(--brand-100)] to-[var(--brand-200)] border-4 border-[var(--surface-1)] text-brand-dark bs-text-4xl font-bold' })}
+                            </div>
+                            <h2 class="font-bold text-[var(--ink-900)] bs-text-2xl">${state.userName || '用戶'}</h2>
+                            <p class="mt-1 break-all text-[var(--ink-500)] bs-text-sm">${state.currentUser?.email || ''}</p>
+                            <span class="bs-chip mt-3"><i class="fa-solid fa-user-group text-brand"></i>${roleLabel}</span>
+                        </div>
+                    </section>
 
                     <!-- 家庭成員列表 -->
-                    <div>
-                        <h3 class="bs-text-lg font-bold text-gray-800 mb-3 flex items-center">
-                            <i class="fa-solid fa-users text-brand mr-2"></i>家庭成員列表
+                    <section>
+                        <h3 class="bs-section-title mb-3 flex items-center gap-3">
+                            <span class="flex h-10 w-10 items-center justify-center rounded-[var(--radius)] bg-[var(--surface-2)] text-brand">
+                                <i class="fa-solid fa-users"></i>
+                            </span>
+                            家庭成員列表
                         </h3>
                         ${renderLeaderboardCard()}
-                    </div>
+                    </section>
 
-                    <!-- 長者模式開關 -->
-                    <div class="bg-white rounded-3xl shadow-sm p-5 flex items-center justify-between">
-                        <div>
-                            <p class="font-bold text-gray-800 bs-text-lg">長者模式</p>
-                            <p class="bs-text-sm text-gray-500">放大字體，方便閱讀</p>
-                        </div>
-                        <button class="action-btn relative w-14 h-8 rounded-full transition-colors" data-action="toggleSeniorMode"
-                            style="background: ${state.seniorMode ? '#FF944D' : '#d1d5db'}">
-                            <span class="absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow transition-transform"
-                                style="transform: translateX(${state.seniorMode ? '24px' : '0'})"></span>
-                        </button>
-                    </div>
-
-                    <!-- 手撕日曆內容開關 -->
-                    <div class="bg-white rounded-3xl shadow-sm p-5 flex items-center justify-between">
-                        <div>
-                            <p class="font-bold text-gray-800 bs-text-lg">手撕日曆內容</p>
-                            <p class="bs-text-sm text-gray-500">${usesBibleVerse ? '顯示聖經金句' : '顯示家庭小提醒'}</p>
-                        </div>
-                        <button class="action-btn relative w-14 h-8 rounded-full transition-colors" data-action="toggleDailyCardMode" aria-label="切換手撕日曆內容"
-                            style="background: ${usesBibleVerse ? '#F59E0B' : '#d1d5db'}">
-                            <span class="absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow transition-transform"
-                                style="transform: translateX(${usesBibleVerse ? '24px' : '0'})"></span>
-                        </button>
-                    </div>
-
-                    <!-- 家庭邀請碼 -->
-                    <div class="bg-white rounded-3xl shadow-sm p-6">
-                        <h3 class="bs-text-lg font-bold text-gray-800 mb-3"><i class="fa-solid fa-users mr-2 text-brand"></i>家庭邀請碼</h3>
-                        <div class="flex items-center justify-center gap-3 bg-orange-50 rounded-2xl p-4">
-                            <span class="bs-text-3xl font-bold tracking-[0.3em] text-gray-800">${state.calendarCode || '------'}</span>
-                            <button class="action-btn px-4 py-2 bg-brand text-white rounded-xl bs-text-sm font-bold shadow-md hover:bg-brand-dark transition-colors" data-action="copyFamilyCode">
-                                <i class="fa-regular fa-copy mr-1"></i>複製
+                    <!-- 顯示偏好 -->
+                    <section class="bs-card overflow-hidden">
+                        <div class="flex min-h-[72px] items-center px-5 py-4">
+                            <span class="mr-4 flex h-11 w-11 shrink-0 items-center justify-center rounded-[var(--radius)] bg-[var(--surface-2)] text-brand bs-text-lg">
+                                <i class="fa-solid fa-text-height"></i>
+                            </span>
+                            <div class="min-w-0 flex-1">
+                                <p class="font-bold text-[var(--ink-900)] bs-text-base">長者模式</p>
+                                <p class="text-[var(--ink-500)] bs-text-sm">放大字體，方便閱讀</p>
+                            </div>
+                            <button class="action-btn relative ml-3 h-8 w-14 shrink-0 rounded-full transition-colors" data-action="toggleSeniorMode"
+                                style="background: ${state.seniorMode ? 'var(--brand-500)' : 'var(--ink-300)'}">
+                                <span class="absolute left-1 top-1 h-6 w-6 rounded-full bg-[var(--surface-1)] shadow-[var(--shadow-sm)] transition-transform"
+                                    style="transform: translateX(${state.seniorMode ? '24px' : '0'})"></span>
                             </button>
                         </div>
-                        <p class="bs-text-xs text-gray-400 text-center mt-2">分享此碼給家人加入</p>
-                    </div>
 
-                    <!-- 退出家庭 -->
-                    <div class="bg-white rounded-3xl shadow-sm p-5">
-                        <button class="action-btn w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-orange-50 text-orange-600 font-bold hover:bg-orange-100 transition-colors" data-action="leaveFamily">
-                            <i class="fa-solid fa-right-from-bracket"></i>退出家庭
-                        </button>
-                        <p class="bs-text-xs text-gray-400 text-center mt-2">退出後可加入其他家庭</p>
-                    </div>
+                        <div class="mx-5 border-t border-[var(--line)]"></div>
 
-                    <!-- 操作按鈕 -->
-                    <div class="bg-white rounded-3xl shadow-sm p-2">
-                        <button class="action-btn w-full flex items-center px-4 py-4 rounded-2xl hover:bg-gray-50 transition-colors" data-action="openModal" data-modal="editProfile">
-                            <i class="fa-solid fa-pen-to-square text-brand bs-text-lg w-8"></i>
-                            <span class="text-gray-800 font-medium">編輯個人資料</span>
-                            <i class="fa-solid fa-chevron-right text-gray-300 ml-auto"></i>
+                        <div class="flex min-h-[72px] items-center px-5 py-4">
+                            <span class="mr-4 flex h-11 w-11 shrink-0 items-center justify-center rounded-[var(--radius)] bg-[var(--surface-2)] text-[var(--accent-gold)] bs-text-lg">
+                                <i class="fa-solid fa-calendar-day"></i>
+                            </span>
+                            <div class="min-w-0 flex-1">
+                                <p class="font-bold text-[var(--ink-900)] bs-text-base">手撕日曆內容</p>
+                                <p class="text-[var(--ink-500)] bs-text-sm">${usesBibleVerse ? '顯示聖經金句' : '顯示家庭小提醒'}</p>
+                            </div>
+                            <button class="action-btn relative ml-3 h-8 w-14 shrink-0 rounded-full transition-colors" data-action="toggleDailyCardMode" aria-label="切換手撕日曆內容"
+                                style="background: ${usesBibleVerse ? 'var(--accent-gold)' : 'var(--ink-300)'}">
+                                <span class="absolute left-1 top-1 h-6 w-6 rounded-full bg-[var(--surface-1)] shadow-[var(--shadow-sm)] transition-transform"
+                                    style="transform: translateX(${usesBibleVerse ? '24px' : '0'})"></span>
+                            </button>
+                        </div>
+                    </section>
+
+                    <!-- 帳戶設定 -->
+                    <section class="bs-card overflow-hidden">
+                        <button class="action-btn flex min-h-[72px] w-full items-center px-5 py-4 text-left transition-colors hover:bg-[var(--surface-2)]" data-action="openModal" data-modal="editProfile">
+                            <span class="mr-4 flex h-11 w-11 shrink-0 items-center justify-center rounded-[var(--radius)] bg-[var(--surface-2)] text-brand bs-text-lg">
+                                <i class="fa-solid fa-pen-to-square"></i>
+                            </span>
+                            <span class="min-w-0 flex-1 font-semibold text-[var(--ink-900)] bs-text-base">編輯個人資料</span>
+                            <i class="fa-solid fa-chevron-right ml-3 text-[var(--ink-300)] bs-text-sm"></i>
                         </button>
-                        <div class="border-t border-gray-100 mx-4"></div>
-                        <button class="action-btn w-full flex items-center px-4 py-4 rounded-2xl hover:bg-gray-50 transition-colors" data-action="openModal" data-modal="changePassword">
-                            <i class="fa-solid fa-lock text-brand bs-text-lg w-8"></i>
-                            <span class="text-gray-800 font-medium">修改密碼</span>
-                            <i class="fa-solid fa-chevron-right text-gray-300 ml-auto"></i>
+
+                        <div class="mx-5 border-t border-[var(--line)]"></div>
+
+                        <button class="action-btn flex min-h-[72px] w-full items-center px-5 py-4 text-left transition-colors hover:bg-[var(--surface-2)]" data-action="openModal" data-modal="changePassword">
+                            <span class="mr-4 flex h-11 w-11 shrink-0 items-center justify-center rounded-[var(--radius)] bg-[var(--surface-2)] text-brand bs-text-lg">
+                                <i class="fa-solid fa-lock"></i>
+                            </span>
+                            <span class="min-w-0 flex-1 font-semibold text-[var(--ink-900)] bs-text-base">修改密碼</span>
+                            <i class="fa-solid fa-chevron-right ml-3 text-[var(--ink-300)] bs-text-sm"></i>
                         </button>
-                    </div>
+                    </section>
+
+                    <!-- 家庭設定 -->
+                    <section class="bs-card overflow-hidden">
+                        <div class="p-5">
+                            <h3 class="bs-section-title mb-3 flex items-center gap-3">
+                                <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-[var(--radius)] bg-[var(--surface-2)] text-brand bs-text-lg">
+                                    <i class="fa-solid fa-house-user"></i>
+                                </span>
+                                家庭邀請碼
+                            </h3>
+                            <div class="rounded-[var(--radius)] border border-[var(--line)] bg-[var(--surface-2)] p-4">
+                                <span class="block text-center font-bold tracking-[0.16em] text-[var(--ink-900)] bs-text-3xl">${state.calendarCode || '------'}</span>
+                                <button class="action-btn bs-btn bs-btn-primary mt-3 w-full bs-text-sm" data-action="copyFamilyCode">
+                                    <i class="fa-solid fa-copy"></i>複製
+                                </button>
+                            </div>
+                            <p class="mt-2 text-center text-[var(--ink-300)] bs-text-xs">分享此碼給家人加入</p>
+                        </div>
+
+                        <div class="mx-5 border-t border-[var(--line)]"></div>
+
+                        <button class="action-btn flex min-h-[72px] w-full items-center px-5 py-4 text-left transition-colors hover:bg-[var(--surface-2)]" data-action="leaveFamily">
+                            <span class="mr-4 flex h-11 w-11 shrink-0 items-center justify-center rounded-[var(--radius)] bg-[var(--surface-2)] text-brand bs-text-lg">
+                                <i class="fa-solid fa-people-arrows-left-right"></i>
+                            </span>
+                            <span class="min-w-0 flex-1">
+                                <span class="block font-semibold text-[var(--ink-900)] bs-text-base">退出家庭</span>
+                                <span class="block text-[var(--ink-500)] bs-text-xs">退出後可加入其他家庭</span>
+                            </span>
+                            <i class="fa-solid fa-chevron-right ml-3 text-[var(--ink-300)] bs-text-sm"></i>
+                        </button>
+                    </section>
 
                     <!-- 登出 -->
-                    <button class="action-btn w-full bg-red-50 text-red-500 font-bold py-4 rounded-2xl hover:bg-red-100 transition-colors" data-action="logout">
-                        <i class="fa-solid fa-right-from-bracket mr-2"></i>登出
-                    </button>
+                    <section class="bs-card overflow-hidden">
+                        <button class="action-btn flex min-h-[72px] w-full items-center px-5 py-4 text-left transition-colors hover:bg-[var(--surface-2)]" data-action="logout">
+                            <span class="mr-4 flex h-11 w-11 shrink-0 items-center justify-center rounded-[var(--radius)] bg-[var(--surface-2)] text-[var(--brand-red)] bs-text-lg">
+                                <i class="fa-solid fa-right-from-bracket"></i>
+                            </span>
+                            <span class="min-w-0 flex-1 font-semibold text-[var(--brand-red)] bs-text-base">登出</span>
+                            <i class="fa-solid fa-chevron-right ml-3 text-[var(--brand-red)] opacity-60 bs-text-sm"></i>
+                        </button>
+                    </section>
                 </div>
             `;
         }

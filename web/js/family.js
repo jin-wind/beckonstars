@@ -54,18 +54,25 @@
             });
             const sorted = Object.values(memberScores).sort((a, b) => b.score - a.score);
             if (sorted.length === 0) {
-                return `<div id="familyMemberActivityCard" class="bg-white rounded-3xl shadow-sm overflow-hidden"><div class="flex flex-col items-center justify-center py-12 px-6 text-center"><div class="w-20 h-20 bg-orange-100 rounded-full flex items-center justify-center mb-4"><i class="fa-solid fa-users bs-text-3xl text-brand"></i></div><h3 class="bs-text-xl font-bold text-gray-800 mb-2">暫未有家庭互動</h3><p class="text-gray-500">開始聊天和分享回憶後，家庭成員活躍度會自動更新。</p></div></div>`;
+                return `<div id="familyMemberActivityCard" class="bs-card overflow-hidden"><div class="flex flex-col items-center justify-center px-6 py-12 text-center"><div class="mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-[var(--surface-2)] ring-8 ring-[var(--brand-50)]"><i class="fa-solid fa-users bs-text-3xl text-brand"></i></div><h3 class="mb-2 bs-text-xl font-bold text-[var(--ink-900)]">暫未有家庭互動</h3><p class="bs-text-base text-[var(--ink-500)]">開始聊天和分享回憶後，家庭成員活躍度會自動更新。</p></div></div>`;
             }
-            const rankIcons = ['👑', '2', '3'];
+            const rankIcons = ['<i class="fa-solid fa-crown"></i>', '<i class="fa-solid fa-medal"></i>', '<i class="fa-solid fa-medal"></i>'];
             const subtitles = ['本週互動最熱烈！', '繼續保持～', '加油追上去！'];
             const rankItems = sorted.map((member, index) => {
                 const rank = index + 1;
                 const icon = rank <= 3 ? rankIcons[index] : String(rank);
                 const subtitle = rank <= 3 ? subtitles[index] : (member.messageCount > 0 ? `${member.messageCount} 則訊息` : '潛水中...');
-                const avatarBg = rank === 1 ? 'bg-[#f6d1aa] text-[#b66122]' : (rank <= 3 ? 'bg-orange-100 text-brand-dark' : 'bg-gray-100 text-gray-500');
-                return `<div class="flex items-center py-4 px-5 border-b border-gray-50"><div class="w-8 text-center mr-4 ${rank <= 3 ? (rank===1?'bs-text-2xl text-yellow-400':rank===2?'bs-text-xl text-gray-400':'bs-text-lg text-amber-600') : 'bs-text-base text-gray-400'} font-bold">${icon}</div>${renderAvatar(member.avatar, { userId: member.id, sizeClass: 'w-12 h-12', coreClass: `${avatarBg} bs-text-xl font-bold`, extraClass: 'mr-4' })}<div class="flex-1"><div class="font-bold text-gray-800 bs-text-base">${member.name}</div><div class="bs-text-xs text-gray-400">${subtitle}</div></div><div class="text-right"><div class="bs-text-lg font-bold text-brand">${member.score.toLocaleString()}</div><div class="bs-text-xs text-gray-400">分</div></div></div>`;
+                const avatarBg = rank === 1 ? 'bg-[var(--brand-100)] text-[var(--brand-700)]' : (rank <= 3 ? 'bg-[var(--surface-2)] text-brand-dark' : 'bg-[var(--surface-2)] text-[var(--ink-500)]');
+                const badgeClass = rank === 1
+                    ? 'bg-[var(--accent-gold)] text-[var(--ink-900)] ring-4 ring-[var(--brand-100)]'
+                    : rank === 2
+                        ? 'bg-[var(--surface-3)] text-[var(--ink-700)] ring-4 ring-[var(--surface-2)]'
+                        : rank === 3
+                            ? 'bg-[var(--brand-300)] text-[var(--brand-700)] ring-4 ring-[var(--brand-50)]'
+                            : 'bg-[var(--surface-2)] text-[var(--ink-500)]';
+                return `<div class="flex items-center border-b border-[var(--line)] px-5 py-4 last:border-b-0 ${rank <= 3 ? 'bg-[var(--surface-1)]' : ''}"><div class="mr-4 flex h-10 w-10 shrink-0 items-center justify-center rounded-full shadow-[var(--shadow-sm)] ${badgeClass} ${rank <= 3 ? 'bs-text-base' : 'bs-text-sm font-bold'}">${icon}</div>${renderAvatar(member.avatar, { userId: member.id, sizeClass: 'w-12 h-12', coreClass: `${avatarBg} bs-text-xl font-bold`, extraClass: 'mr-4' })}<div class="min-w-0 flex-1"><div class="truncate bs-text-base font-bold text-[var(--ink-900)]">${member.name}</div><div class="bs-text-xs text-[var(--ink-500)]">${subtitle}</div></div><div class="ml-3 text-right"><div class="bs-text-lg font-bold text-brand">${member.score.toLocaleString()}</div><div class="bs-text-xs text-[var(--ink-500)]">分</div></div></div>`;
             }).join('');
-            return `<div id="familyMemberActivityCard" class="bg-white rounded-3xl shadow-sm overflow-hidden">${rankItems}</div>`;
+            return `<div id="familyMemberActivityCard" class="bs-card overflow-hidden">${rankItems}</div>`;
         }
 
 
@@ -73,33 +80,37 @@
         function renderStep4Connect() {
             if (!state.connectionMode || state.connectionMode === 'select') {
                 return `
-                    <div class="flex flex-col h-full p-8 bg-[#FFF8F0] animate-fadeIn">
-                        <button class="action-btn self-start text-gray-400 mb-6 bs-text-xl" data-action="backStep" data-step="2">
-                            <i class="fa-solid fa-arrow-left"></i>
-                        </button>
-                        <h2 class="bs-text-3xl font-bold text-gray-800 mb-2">加入共用日曆</h2>
-                        <p class="text-gray-500 mb-10">與家人連結，隨時隨地分享生活點滴。</p>
-                        
-                        <div class="space-y-6">
-                            <button class="action-btn w-full bg-white border-2 border-brand p-6 rounded-3xl shadow-sm text-left flex items-center hover:bg-orange-50 transition-colors" data-action="setConnectionMode" data-mode="create">
-                                <div class="w-14 h-14 rounded-full bg-orange-100 text-brand flex items-center justify-center bs-text-2xl mr-4 shrink-0">
-                                    <i class="fa-solid fa-house-chimney-medical"></i>
-                                </div>
-                                <div>
-                                    <h3 class="bs-text-xl font-bold text-gray-800">建立新日曆</h3>
-                                    <p class="bs-text-sm text-gray-500 mt-1">產生一組數字邀請家人加入</p>
-                                </div>
+                    <div class="h-full overflow-y-auto bg-[var(--surface-0)] px-6 py-8 animate-fadeIn">
+                        <div class="mx-auto flex min-h-full w-full max-w-sm flex-col">
+                            <button class="action-btn mb-6 flex h-11 w-11 shrink-0 items-center justify-center self-start rounded-full border border-[var(--line)] bg-[var(--surface-1)] text-[var(--ink-700)] shadow-[var(--shadow-sm)]" data-action="backStep" data-step="2">
+                                <i class="fa-solid fa-arrow-left"></i>
                             </button>
+                            <h2 class="bs-text-3xl font-bold text-[var(--ink-900)]">加入共用日曆</h2>
+                            <p class="mb-8 mt-2 bs-text-base text-[var(--ink-500)]">與家人連結，隨時隨地分享生活點滴。</p>
 
-                            <button class="action-btn w-full bg-white border-2 border-gray-200 p-6 rounded-3xl shadow-sm text-left flex items-center hover:bg-gray-50 transition-colors" data-action="setConnectionMode" data-mode="join">
-                                <div class="w-14 h-14 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center bs-text-2xl mr-4 shrink-0">
-                                    <i class="fa-solid fa-right-to-bracket"></i>
-                                </div>
-                                <div>
-                                    <h3 class="bs-text-xl font-bold text-gray-800">加入現有日曆</h3>
-                                    <p class="bs-text-sm text-gray-500 mt-1">輸入家人提供給您的6位數字</p>
-                                </div>
-                            </button>
+                            <div class="space-y-4">
+                                <button class="action-btn bs-card group flex w-full items-center gap-4 p-5 text-left ring-1 ring-[var(--line)] transition-all focus:outline-none focus:ring-2 focus:ring-[var(--brand-400)]" data-action="setConnectionMode" data-mode="create">
+                                    <div class="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-[var(--brand-100)] bs-text-2xl text-brand">
+                                        <i class="fa-solid fa-house-chimney-medical"></i>
+                                    </div>
+                                    <div class="min-w-0 flex-1">
+                                        <h3 class="bs-text-xl font-bold text-[var(--ink-900)]">建立新日曆</h3>
+                                        <p class="mt-1 bs-text-sm text-[var(--ink-500)]">產生一組數字邀請家人加入</p>
+                                    </div>
+                                    <i class="fa-solid fa-chevron-right text-[var(--ink-300)] transition-transform group-focus:translate-x-1"></i>
+                                </button>
+
+                                <button class="action-btn bs-card group flex w-full items-center gap-4 p-5 text-left ring-1 ring-[var(--line)] transition-all focus:outline-none focus:ring-2 focus:ring-[var(--brand-400)]" data-action="setConnectionMode" data-mode="join">
+                                    <div class="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)] bs-text-2xl text-[var(--ink-700)]">
+                                        <i class="fa-solid fa-right-to-bracket"></i>
+                                    </div>
+                                    <div class="min-w-0 flex-1">
+                                        <h3 class="bs-text-xl font-bold text-[var(--ink-900)]">加入現有日曆</h3>
+                                        <p class="mt-1 bs-text-sm text-[var(--ink-500)]">輸入家人提供給您的6位數字</p>
+                                    </div>
+                                    <i class="fa-solid fa-chevron-right text-[var(--ink-300)] transition-transform group-focus:translate-x-1"></i>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 `;
@@ -111,48 +122,57 @@
                     state.calendarCode = Math.floor(100000 + Math.random() * 900000).toString();
                 }
                 return `
-                    <div class="flex flex-col h-full p-8 bg-[#FFF8F0] animate-fadeIn text-center">
-                        <button class="action-btn self-start text-gray-400 mb-2 bs-text-xl" data-action="setConnectionMode" data-mode="select">
-                            <i class="fa-solid fa-arrow-left"></i>
-                        </button>
-                        <h2 class="bs-text-2xl font-bold text-gray-800 mb-6">您的日曆邀請碼</h2>
-                        
-                        <div class="bg-white p-8 rounded-3xl shadow-lg border border-orange-100 mb-8">
-                            <p class="text-gray-500 mb-4">請將這組數字告訴您的家人</p>
-                            <div class="text-6xl font-bold text-brand tracking-widest font-mono mb-4 bg-orange-50 py-4 rounded-xl">
-                                ${state.calendarCode}
+                    <div class="h-full overflow-y-auto bg-[var(--surface-0)] px-6 py-8 text-center animate-fadeIn">
+                        <div class="mx-auto flex min-h-full w-full max-w-sm flex-col">
+                            <button class="action-btn mb-5 flex h-11 w-11 shrink-0 items-center justify-center self-start rounded-full border border-[var(--line)] bg-[var(--surface-1)] text-[var(--ink-700)] shadow-[var(--shadow-sm)]" data-action="setConnectionMode" data-mode="select">
+                                <i class="fa-solid fa-arrow-left"></i>
+                            </button>
+                            <h2 class="mb-6 bs-text-2xl font-bold text-[var(--ink-900)]">您的日曆邀請碼</h2>
+
+                            <div class="bs-card mb-8 p-5">
+                                <p class="mb-5 bs-text-base text-[var(--ink-500)]">請將這組數字告訴您的家人</p>
+                                <div class="mb-5 flex items-stretch gap-4 text-left">
+                                    <div class="flex w-24 shrink-0 items-center justify-center rounded-2xl border border-[var(--line)] bg-[var(--surface-1)] text-[var(--ink-900)] shadow-[var(--shadow-sm)]">
+                                        <i class="fa-solid fa-qrcode bs-text-4xl"></i>
+                                    </div>
+                                    <div class="flex min-w-0 flex-1 items-center justify-center rounded-2xl bg-[var(--surface-2)] px-3 py-5 font-mono bs-text-3xl font-bold text-brand">
+                                        ${state.calendarCode}
+                                    </div>
+                                </div>
+                                <button class="action-btn bs-btn bs-btn-secondary mx-auto" data-action="copyCode">
+                                    <i class="fa-regular fa-copy"></i><span>複製號碼</span>
+                                </button>
                             </div>
-                            <button class="action-btn text-brand-dark font-bold py-2 px-4 rounded-full bg-orange-100 flex items-center justify-center mx-auto" data-action="copyCode">
-                                <i class="fa-regular fa-copy mr-2"></i> 複製號碼
+
+                            <div class="flex-1"></div>
+                            <button class="action-btn bs-btn bs-btn-primary w-full" data-action="finishOnboarding">
+                                <span>進入應用程式</span><i class="fa-solid fa-arrow-right"></i>
                             </button>
                         </div>
-
-                        <div class="flex-1"></div>
-                        <button class="action-btn w-full bg-brand text-white bs-text-xl font-bold py-4 rounded-2xl shadow-lg hover:bg-brand-dark transition-colors" data-action="finishOnboarding">
-                            進入應用程式
-                        </button>
                     </div>
                 `;
             }
 
             if (state.connectionMode === 'join') {
                 return `
-                    <div class="flex flex-col h-full p-8 bg-[#FFF8F0] animate-fadeIn text-center">
-                        <button class="action-btn self-start text-gray-400 mb-6 bs-text-xl" data-action="setConnectionMode" data-mode="select">
-                            <i class="fa-solid fa-arrow-left"></i>
-                        </button>
-                        <h2 class="bs-text-3xl font-bold text-gray-800 mb-2">輸入邀請碼</h2>
-                        <p class="text-gray-500 mb-8">請輸入家人提供給您的6位數字</p>
-                        
-                        <div class="mb-8 relative">
-                            <input type="number" id="joinCodeInput" placeholder="_ _ _ _ _ _" class="w-full text-center bs-text-4xl font-mono tracking-widest p-6 rounded-2xl border-2 ${state.errorMsg ? 'border-red-400' : 'border-gray-200'} focus:border-brand outline-none bg-white">
-                            ${state.errorMsg ? `<p class="text-red-500 bs-text-sm mt-3 animate-shake">${state.errorMsg}</p>` : ''}
-                        </div>
+                    <div class="h-full overflow-y-auto bg-[var(--surface-0)] px-6 py-8 text-center animate-fadeIn">
+                        <div class="mx-auto flex min-h-full w-full max-w-sm flex-col">
+                            <button class="action-btn mb-6 flex h-11 w-11 shrink-0 items-center justify-center self-start rounded-full border border-[var(--line)] bg-[var(--surface-1)] text-[var(--ink-700)] shadow-[var(--shadow-sm)]" data-action="setConnectionMode" data-mode="select">
+                                <i class="fa-solid fa-arrow-left"></i>
+                            </button>
+                            <h2 class="bs-text-3xl font-bold text-[var(--ink-900)]">輸入邀請碼</h2>
+                            <p class="mb-8 mt-2 bs-text-base text-[var(--ink-500)]">請輸入家人提供給您的6位數字</p>
 
-                        <div class="flex-1"></div>
-                        <button class="action-btn w-full bg-brand text-white bs-text-xl font-bold py-4 rounded-2xl shadow-lg hover:bg-brand-dark transition-colors" data-action="submitJoinCode">
-                            確認加入
-                        </button>
+                            <div class="relative mb-8">
+                                <input type="number" id="joinCodeInput" placeholder="_ _ _ _ _ _" class="bs-input text-center font-mono font-bold ${state.errorMsg ? '!border-[var(--brand-red)]' : ''}" style="font-size: var(--font-3xl);">
+                                ${state.errorMsg ? `<p class="mt-3 bs-text-sm text-[var(--brand-red)] animate-shake">${state.errorMsg}</p>` : ''}
+                            </div>
+
+                            <div class="flex-1"></div>
+                            <button class="action-btn bs-btn bs-btn-primary w-full" data-action="submitJoinCode">
+                                <i class="fa-solid fa-link"></i><span>確認加入</span>
+                            </button>
+                        </div>
                     </div>
                 `;
             }

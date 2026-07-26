@@ -64,35 +64,37 @@
             const currentTime = isActive ? voicePlayback.currentTime : 0;
             const progress = duration ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0;
             const isPlaying = isActive && voicePlayback.isPlaying;
-            const trackClass = isMe ? 'bg-white/25' : 'bg-gray-200';
-            const fillClass = isMe ? 'bg-white' : 'bg-brand';
-            const buttonClass = isMe ? 'bg-white text-brand' : 'bg-brand text-white';
-            const timeClass = isMe ? 'text-white/85' : 'text-gray-500';
+            const trackClass = isMe ? 'bg-white/50' : 'bg-[var(--surface-3)]';
+            const fillClass = 'bg-[var(--brand-600)]';
+            const buttonClass = isMe
+                ? 'bg-white text-[var(--brand-700)] shadow-sm'
+                : 'bg-[var(--surface-2)] text-[var(--brand-700)] ring-1 ring-inset ring-[var(--line)]';
+            const timeClass = isMe ? 'text-white/80' : 'text-[var(--ink-500)]';
 
             if (!audioSource) {
                 return `
-                    <div class="flex items-center gap-3 min-w-48">
-                        <div class="w-9 h-9 rounded-full ${isMe ? 'bg-white/20' : 'bg-orange-100'} flex items-center justify-center">
-                            <i class="fa-solid fa-microphone ${isMe ? 'text-white' : 'text-brand'}"></i>
+                    <div class="flex min-w-48 items-center gap-3 rounded-2xl ${isMe ? 'bg-white/10' : 'bg-[var(--surface-2)]'} px-3 py-2.5">
+                        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${isMe ? 'bg-white/20 text-white' : 'bg-[var(--brand-100)] text-[var(--brand-700)]'}">
+                            <i class="fa-solid fa-microphone"></i>
                         </div>
-                        <p class="bs-text-sm opacity-80">錄音檔未同步</p>
+                        <p class="bs-text-sm font-medium opacity-80">錄音檔未同步</p>
                     </div>
                 `;
             }
 
             return `
-                <div class="voice-player flex items-center gap-2 w-full" data-message-id="${escapeAttribute(messageId)}" data-duration="${duration}">
-                    <button type="button" class="action-btn voice-play-button w-9 h-9 rounded-full ${buttonClass} flex items-center justify-center shrink-0 shadow-sm" data-action="toggleVoice" data-message-id="${escapeAttribute(messageId)}" title="${isPlaying ? '暫停錄音' : '播放錄音'}">
+                <div class="voice-player flex w-full items-center gap-2.5 py-0.5" data-message-id="${escapeAttribute(messageId)}" data-duration="${duration}">
+                    <button type="button" class="action-btn voice-play-button flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${buttonClass} transition-transform active:scale-95" data-action="toggleVoice" data-message-id="${escapeAttribute(messageId)}" title="${isPlaying ? '暫停錄音' : '播放錄音'}">
                         <i class="fa-solid ${isPlaying ? 'fa-pause' : 'fa-play'} voice-play-icon bs-text-sm"></i>
                     </button>
-                    <button type="button" class="voice-seek-bar flex-1 min-w-24 h-8 flex items-center" data-message-id="${escapeAttribute(messageId)}" title="調整播放位置">
-                        <span class="relative block h-2 w-full rounded-full ${trackClass} overflow-hidden">
-                            <span class="voice-progress-fill absolute inset-y-0 left-0 rounded-full ${fillClass}" style="width: ${progress}%;"></span>
+                    <button type="button" class="voice-seek-bar flex h-9 min-w-24 flex-1 items-center" data-message-id="${escapeAttribute(messageId)}" title="調整播放位置">
+                        <span class="relative block h-2.5 w-full overflow-hidden rounded-full ${trackClass}">
+                            <span class="voice-progress-fill absolute inset-y-0 left-0 rounded-full ${fillClass} shadow-[0_0_8px_rgba(240,122,46,0.35)]" style="width: ${progress}%;"></span>
                         </span>
                     </button>
-                    <span class="voice-time flex items-center gap-0.5 bs-text-xs tabular-nums ${timeClass} shrink-0">
+                    <span class="voice-time flex shrink-0 items-center gap-0.5 tabular-nums ${timeClass} bs-text-xs">
                         <span class="voice-current">${formatVoiceTime(currentTime)}</span>
-                        <span class="opacity-60">/</span>
+                        <span class="opacity-50">/</span>
                         <span class="voice-duration">${formatVoiceTime(duration)}</span>
                     </span>
                 </div>
@@ -415,34 +417,34 @@
             const imageSrc = getMessageImageSrc(msg);
             const audioSrc = getMessageAudioSrc(msg);
             return `
-                <div data-msg-id="${escapeAttribute(messageId)}" data-msg-key="${escapeAttribute(getMessageRenderKey(msg))}" class="flex ${isMe ? 'justify-end' : 'justify-start'}">
-                    ${!isMe ? renderAvatar(displayAvatar, { userId: senderUserId, sizeClass: 'w-10 h-10', coreClass: 'bg-orange-200 text-brand-dark font-bold bs-text-xl', extraClass: 'mr-2' }) : ''}
-                    <div class="max-w-[75%] flex flex-col ${isMe ? 'items-end' : 'items-start'}">
-                        ${!isMe ? `<span class="bs-text-xs text-gray-500 mb-1 ml-1">${displayName}</span>` : ''}
-                        <div class="p-3 rounded-2xl shadow-sm ${isMe ? 'bg-brand text-white rounded-tr-none' : 'bg-white text-gray-800 rounded-tl-none border border-gray-100'}">
-                            ${msg.type === 'text' ? `<p class="bs-text-lg">${msg.content}</p>` : ''}
-                            ${msg.type === 'photo' && imageSrc ? `<img src="${escapeAttribute(imageSrc)}" class="max-w-56 max-h-56 rounded-xl object-cover">${msg.content ? `<p class="bs-text-base mt-2">${msg.content}</p>` : ''}` : ''}
-                            ${msg.type === 'audio' ? `<div class="space-y-2 w-60 max-w-[68vw]">${renderVoicePlayer(msg, isMe)}<div class="${isMe ? 'bg-white/10' : 'bg-gray-50'} rounded-xl p-2"><p class="bs-text-xs opacity-70 mb-1">語音轉譯</p>${msg.transcript ? `<p class="bs-text-base">${msg.transcript}</p>` : `<p class="bs-text-sm opacity-80">未取得轉譯文字，可播放錄音確認內容。</p>`}</div></div>` : ''}
+                <div data-msg-id="${escapeAttribute(messageId)}" data-msg-key="${escapeAttribute(getMessageRenderKey(msg))}" class="flex items-end ${isMe ? 'justify-end' : 'justify-start'} animate-fadeIn">
+                    ${!isMe ? renderAvatar(displayAvatar, { userId: senderUserId, sizeClass: 'w-10 h-10', coreClass: 'bg-[var(--brand-100)] text-[var(--brand-700)] font-bold bs-text-xl', extraClass: 'mr-2 mb-5 shrink-0' }) : ''}
+                    <div class="flex max-w-[82%] flex-col ${isMe ? 'items-end' : 'items-start'}">
+                        ${!isMe ? `<span class="mb-1 ml-2 bs-text-xs font-medium text-[var(--ink-500)]">${displayName}</span>` : ''}
+                        <div class="${isMe ? 'bs-bubble-mine' : 'bs-bubble-theirs'} max-w-full px-4 py-3">
+                            ${msg.type === 'text' ? `<p class="bs-text-lg leading-relaxed">${msg.content}</p>` : ''}
+                            ${msg.type === 'photo' && imageSrc ? `<img src="${escapeAttribute(imageSrc)}" class="max-h-64 max-w-60 rounded-2xl object-cover shadow-sm">${msg.content ? `<p class="mt-2 bs-text-base leading-relaxed">${msg.content}</p>` : ''}` : ''}
+                            ${msg.type === 'audio' ? `<div class="w-64 max-w-[70vw] space-y-2.5">${renderVoicePlayer(msg, isMe)}<div class="rounded-2xl border ${isMe ? 'border-white/20 bg-white/10' : 'border-[var(--line)] bg-[var(--surface-2)]'} px-3 py-2.5"><p class="mb-1 bs-text-xs font-medium opacity-70">語音轉譯</p>${msg.transcript ? `<p class="bs-text-base leading-relaxed">${msg.transcript}</p>` : `<p class="bs-text-sm leading-relaxed opacity-80">未取得轉譯文字，可播放錄音確認內容。</p>`}</div></div>` : ''}
                         </div>
                         ${msg.type === 'audio' && msg.transcript && !msg.aiSummary && state.backendMode === 'server' ? `
-                            <button class="action-btn mt-2 bg-blue-50 border border-blue-100 text-blue-700 rounded-xl px-3 py-2 bs-text-sm font-bold" data-action="summarizeVoice" data-message-id="${escapeAttribute(messageId)}">
-                                <i class="fa-solid fa-wand-magic-sparkles mr-1"></i>總結錄音
+                            <button class="action-btn bs-btn bs-btn-secondary mt-2 !min-h-0 gap-1.5 px-3 py-2 bs-text-sm font-bold" data-action="summarizeVoice" data-message-id="${escapeAttribute(messageId)}">
+                                <i class="fa-solid fa-wand-magic-sparkles"></i>總結錄音
                             </button>
                         ` : ''}
                         ${msg.type === 'audio' && (msg.audio || msg.audioUrl) && !msg.transcript && state.backendMode === 'server' ? `
-                            <button class="action-btn mt-2 bg-amber-50 border border-amber-100 text-amber-700 rounded-xl px-3 py-2 bs-text-sm font-bold disabled:opacity-60" data-action="transcribeVoice" data-message-id="${escapeAttribute(messageId)}" ${state.transcribingMessageId === messageId ? 'disabled' : ''}>
-                                <i class="fa-solid ${state.transcribingMessageId === messageId ? 'fa-spinner fa-spin' : 'fa-closed-captioning'} mr-1"></i>${state.transcribingMessageId === messageId ? 'AI 轉譯中' : 'AI 轉譯錄音'}
+                            <button class="action-btn bs-btn bs-btn-ghost mt-2 !min-h-0 gap-1.5 px-3 py-2 bs-text-sm font-bold text-[var(--brand-700)] disabled:opacity-60" data-action="transcribeVoice" data-message-id="${escapeAttribute(messageId)}" ${state.transcribingMessageId === messageId ? 'disabled' : ''}>
+                                <i class="fa-solid ${state.transcribingMessageId === messageId ? 'fa-spinner fa-spin' : 'fa-closed-captioning'}"></i>${state.transcribingMessageId === messageId ? 'AI 轉譯中' : 'AI 轉譯錄音'}
                             </button>
                         ` : ''}
                         ${msg.aiSummary ? `
-                            <div class="mt-2 bg-blue-50 border border-blue-100 rounded-xl p-3 shadow-sm relative w-full">
-                                <div class="absolute -top-2 -left-2 bg-blue-500 text-white w-6 h-6 rounded-full flex items-center justify-center bs-text-xs shadow-md">
+                            <div class="bs-card-flat relative mt-2 w-full bg-[var(--surface-2)] p-3 pl-10">
+                                <div class="absolute left-3 top-3 flex h-6 w-6 items-center justify-center rounded-full bg-[var(--brand-100)] text-[var(--brand-700)] bs-text-xs">
                                     <i class="fa-solid fa-robot"></i>
                                 </div>
-                                <p class="bs-text-sm text-blue-800 pl-3 font-medium">${msg.aiSummary}</p>
+                                <p class="bs-text-sm font-medium leading-relaxed text-[var(--ink-700)]">${msg.aiSummary}</p>
                             </div>
                         ` : ''}
-                        <span class="bs-text-xs text-gray-400 mt-1 ${isMe ? 'mr-1' : 'ml-1'}">${msg.time}</span>
+                        <span class="mt-1.5 px-1 bs-text-xs font-medium text-[var(--ink-300)]">${msg.time}</span>
                     </div>
                 </div>
             `;
@@ -452,7 +454,9 @@
         function renderChatMessages() {
             const visibleMessages = state.messages;
             return `
-                <div class="text-center bs-text-xs text-gray-400 mb-4">今天</div>
+                <div class="mb-2 flex justify-center">
+                    <span class="bs-chip border border-[var(--line)] bg-[var(--surface-1)] px-3 py-1 bs-text-xs font-medium text-[var(--ink-500)] shadow-sm">今天</span>
+                </div>
                 ${visibleMessages.map(msg => {
                     const isMe = msg.senderId === state.authUid || msg.uid === state.authUid;
                     return renderSingleChatMessage(msg, isMe);
@@ -463,19 +467,19 @@
 
         function renderChat() {
             return `
-                <div class="flex flex-col h-full min-h-0 bg-[#FFF8F0]">
-                    <div id="chatMessages" class="flex-1 min-h-0 px-4 pt-4 pb-3 space-y-6 overflow-y-auto no-scrollbar">
+                <div class="flex h-full min-h-0 flex-col bg-[var(--surface-0)]">
+                    <div id="chatMessages" class="no-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto px-4 pb-4 pt-5">
                         ${renderChatMessages()}
                         <div id="chatBottomAnchor" aria-hidden="true" class="h-px"></div>
                     </div>
 
                     ${state.backendMode === 'server' ? `
-                    <div class="shrink-0 px-3 py-2 bg-[#FFF8F0] flex gap-2">
-                        <button class="action-btn flex-1 bg-white border border-gray-100 rounded-2xl py-2.5 px-4 flex items-center justify-center gap-2 bs-text-sm font-bold text-gray-600 shadow-sm hover:bg-gray-50 transition-colors disabled:opacity-60" data-action="summarizeTodayChat" ${state.summarizingChat ? 'disabled' : ''}>
-                            <i class="fa-solid ${state.summarizingChat ? 'fa-spinner fa-spin' : 'fa-wand-magic-sparkles'} text-brand"></i>
+                    <div class="flex shrink-0 gap-2 bg-[var(--surface-0)] px-3 pb-1 pt-2">
+                        <button class="action-btn bs-btn bs-btn-secondary flex-1 gap-2 px-4 py-2.5 bs-text-sm font-bold disabled:opacity-60" data-action="summarizeTodayChat" ${state.summarizingChat ? 'disabled' : ''}>
+                            <i class="fa-solid ${state.summarizingChat ? 'fa-spinner fa-spin' : 'fa-wand-magic-sparkles'} text-[var(--brand-700)]"></i>
                             ${state.summarizingChat ? 'AI 總結中...' : 'AI 總結今日聊天'}
                         </button>
-                        <button class="action-btn w-12 h-12 bg-white border border-gray-100 rounded-2xl flex items-center justify-center text-brand shadow-sm hover:bg-gray-50 transition-colors" data-action="openAIImageGen" title="AI 圖片生成">
+                        <button class="action-btn bs-btn bs-btn-ghost h-12 w-12 shrink-0 !p-0 text-[var(--brand-700)]" data-action="openAIImageGen" title="AI 圖片生成">
                             <i class="fa-solid fa-image bs-text-lg"></i>
                         </button>
                     </div>

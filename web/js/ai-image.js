@@ -132,40 +132,45 @@
             ];
 
             return `
-                <div class="flex flex-col h-full bg-[#FFF8F0]">
+                <div class="flex flex-col h-full bg-[var(--surface-0)]">
                     <!-- 頂部標題欄 -->
-                    <div class="shrink-0 bg-white border-b border-gray-100 px-4 py-3 flex items-center gap-3">
-                        <button class="action-btn w-10 h-10 flex items-center justify-center text-gray-600 hover:bg-gray-50 rounded-full transition-colors" data-action="closeAIImageGen">
+                    <div class="bs-appbar shrink-0 px-4 py-3 flex items-center gap-3">
+                        <button class="action-btn w-10 h-10 flex items-center justify-center text-[var(--ink-700)] bg-[var(--surface-1)] border border-[var(--line)] rounded-full transition-colors" data-action="closeAIImageGen">
                             <i class="fa-solid fa-arrow-left bs-text-lg"></i>
                         </button>
-                        <h1 class="bs-text-xl font-bold text-gray-800">AI 圖片生成</h1>
+                        <div class="w-10 h-10 rounded-2xl bg-[var(--surface-2)] text-brand flex items-center justify-center bs-text-lg">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i>
+                        </div>
+                        <h1 class="bs-text-xl font-bold text-[var(--ink-900)]">AI 圖片生成</h1>
                     </div>
 
                     <!-- 主內容區 -->
-                    <div class="flex-1 overflow-y-auto no-scrollbar p-4 space-y-4">
+                    <div class="flex-1 overflow-y-auto no-scrollbar p-4 space-y-5">
                         <!-- 上傳參考圖片 -->
-                        <div class="bg-white rounded-3xl shadow-sm p-6">
-                            <h3 class="bs-text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                                <i class="fa-solid fa-image text-brand"></i>參考圖片
+                        <div class="bs-card p-5">
+                            <h3 class="bs-section-title mb-4 flex items-center gap-3">
+                                <span class="w-9 h-9 rounded-xl bg-[var(--surface-2)] text-brand flex items-center justify-center"><i class="fa-solid fa-image"></i></span><span>參考圖片</span>
                             </h3>
 
                             ${state.aiImageRefImage ? `
-                                <div class="relative rounded-2xl overflow-hidden bg-gray-100 mb-4">
-                                    <img src="${state.aiImageRefImage}" class="w-full h-auto" alt="參考圖片">
-                                    <button class="action-btn absolute top-2 right-2 w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-red-600 transition-colors" data-action="removeRefImage">
-                                        <i class="fa-solid fa-xmark"></i>
+                                <div class="relative rounded-2xl overflow-hidden bg-[var(--surface-2)] border border-[var(--line)] mb-4 p-2">
+                                    <img src="${state.aiImageRefImage}" class="w-full max-h-80 object-contain rounded-xl" alt="參考圖片">
+                                    <button class="action-btn absolute top-4 right-4 w-10 h-10 bg-[var(--surface-1)] border border-[var(--line)] text-[var(--brand-red)] rounded-full flex items-center justify-center shadow-lg transition-colors" data-action="removeRefImage">
+                                        <i class="fa-solid fa-trash-can"></i>
                                     </button>
                                 </div>
                             ` : `
-                                <div class="border-2 border-dashed border-gray-300 rounded-2xl p-8 text-center">
-                                    <i class="fa-solid fa-cloud-arrow-up bs-text-4xl text-gray-400 mb-3"></i>
-                                    <p class="bs-text-sm text-gray-600 mb-4">上傳或拍攝圖片</p>
-                                    <div class="flex gap-3 justify-center">
-                                        <button class="action-btn px-4 py-2 bg-brand text-white rounded-xl bs-text-sm font-bold shadow-md hover:bg-brand-dark transition-colors" data-action="uploadRefImage">
-                                            <i class="fa-solid fa-upload mr-1"></i>上傳圖片
+                                <div class="bs-card-flat bg-[var(--surface-2)] border-2 border-dashed border-[var(--ink-300)] p-6 text-center">
+                                    <div class="w-16 h-16 rounded-full bg-[var(--surface-1)] text-brand flex items-center justify-center mx-auto mb-3 shadow-sm">
+                                        <i class="fa-solid fa-cloud-arrow-up bs-text-3xl"></i>
+                                    </div>
+                                    <p class="bs-text-sm text-[var(--ink-500)] mb-4">上傳或拍攝圖片</p>
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <button class="action-btn bs-btn bs-btn-primary w-full" data-action="uploadRefImage">
+                                            <i class="fa-solid fa-upload"></i><span>上傳圖片</span>
                                         </button>
-                                        <button class="action-btn px-4 py-2 bg-gray-600 text-white rounded-xl bs-text-sm font-bold shadow-md hover:bg-gray-700 transition-colors" data-action="captureRefImage">
-                                            <i class="fa-solid fa-camera mr-1"></i>拍照
+                                        <button class="action-btn bs-btn bs-btn-secondary w-full" data-action="captureRefImage">
+                                            <i class="fa-solid fa-camera"></i><span>拍照</span>
                                         </button>
                                     </div>
                                 </div>
@@ -173,29 +178,32 @@
                         </div>
 
                         <!-- 選擇風格 -->
-                        <div class="bg-white rounded-3xl shadow-sm p-6">
-                            <h3 class="bs-text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                                <i class="fa-solid fa-palette text-brand"></i>選擇風格
+                        <div class="bs-card p-5">
+                            <h3 class="bs-section-title mb-4 flex items-center gap-3">
+                                <span class="w-9 h-9 rounded-xl bg-[var(--surface-2)] text-brand flex items-center justify-center"><i class="fa-solid fa-palette"></i></span><span>選擇風格</span>
                             </h3>
                             <div class="grid grid-cols-2 gap-3">
                                 ${styles.map(style => `
-                                    <button class="action-btn p-4 rounded-2xl border-2 transition-all ${state.aiImageStyle === style.id ? 'border-brand bg-orange-50' : 'border-gray-200 bg-white hover:border-gray-300'}" data-action="selectStyle" data-style="${style.id}">
-                                        <i class="fa-solid ${style.icon} bs-text-2xl ${state.aiImageStyle === style.id ? 'text-brand' : 'text-gray-400'} mb-2"></i>
-                                        <p class="bs-text-sm font-bold ${state.aiImageStyle === style.id ? 'text-brand' : 'text-gray-700'}">${style.name}</p>
+                                    <button class="action-btn bs-card-flat relative min-h-28 p-4 transition-all flex flex-col items-center justify-center gap-2 ${state.aiImageStyle === style.id ? 'ring-2 ring-brand bg-[var(--surface-2)] shadow-md' : ''}" data-action="selectStyle" data-style="${style.id}">
+                                        ${state.aiImageStyle === style.id ? '<span class="absolute top-2 right-2 w-6 h-6 rounded-full bg-brand text-white flex items-center justify-center bs-text-xs"><i class="fa-solid fa-check"></i></span>' : ''}
+                                        <div class="w-12 h-12 rounded-2xl flex items-center justify-center ${state.aiImageStyle === style.id ? 'bg-brand text-white shadow-md' : 'bg-[var(--surface-2)] text-[var(--ink-500)]'}">
+                                            <i class="fa-solid ${style.icon} bs-text-lg"></i>
+                                        </div>
+                                        <p class="bs-text-sm font-bold ${state.aiImageStyle === style.id ? 'text-brand-dark' : 'text-[var(--ink-700)]'}">${style.name}</p>
                                     </button>
                                 `).join('')}
                             </div>
                         </div>
 
                         <!-- 生成數量 -->
-                        <div class="bg-white rounded-3xl shadow-sm p-6">
-                            <h3 class="bs-text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                                <i class="fa-solid fa-images text-brand"></i>生成數量
+                        <div class="bs-card p-5">
+                            <h3 class="bs-section-title mb-4 flex items-center gap-3">
+                                <span class="w-9 h-9 rounded-xl bg-[var(--surface-2)] text-brand flex items-center justify-center"><i class="fa-solid fa-images"></i></span><span>生成數量</span>
                             </h3>
-                            <div class="flex gap-3">
+                            <div class="grid grid-cols-4 gap-3">
                                 ${[1,2,3,4].map(n => `
-                                    <button class="action-btn flex-1 py-3 rounded-2xl border-2 transition-all ${(state.aiImageCount || 4) === n ? 'border-brand bg-orange-50' : 'border-gray-200 bg-white hover:border-gray-300'}" data-action="selectImageCount" data-count="${n}">
-                                        <p class="bs-text-lg font-bold ${(state.aiImageCount || 4) === n ? 'text-brand' : 'text-gray-700'}">${n}</p>
+                                    <button class="action-btn bs-chip min-h-12 justify-center border transition-all ${(state.aiImageCount || 4) === n ? '!bg-brand !text-white border-brand shadow-md' : 'border-[var(--line)]'}" data-action="selectImageCount" data-count="${n}">
+                                        <span class="bs-text-lg font-bold">${n}</span>
                                     </button>
                                 `).join('')}
                             </div>
@@ -203,48 +211,65 @@
 
                         <!-- 生成結果 -->
                         ${state.aiImageGenerating ? `
-                            <div class="bg-white rounded-3xl shadow-sm p-6">
-                                <div class="flex flex-col items-center justify-center py-12">
-                                    <div class="w-20 h-20 border-4 border-brand border-t-transparent rounded-full animate-spin mb-4"></div>
-                                    <p class="bs-text-lg font-bold text-gray-800 mb-2">AI 正在生成圖片...</p>
-                                    <p class="bs-text-sm text-gray-500">這可能需要 10-30 秒</p>
+                            <div class="bs-card p-5 overflow-hidden">
+                                <div class="flex items-center gap-3 mb-4">
+                                    <div class="relative w-11 h-11 rounded-2xl bg-[var(--surface-2)] flex items-center justify-center text-brand">
+                                        <i class="fa-solid fa-wand-magic-sparkles bs-text-lg"></i>
+                                        <span class="absolute inset-0 border-2 border-[var(--line)] border-t-brand rounded-2xl animate-spin"></span>
+                                    </div>
+                                    <div>
+                                        <p class="bs-text-lg font-bold text-[var(--ink-900)]">AI 正在生成圖片...</p>
+                                        <p class="bs-text-sm text-[var(--ink-500)]">這可能需要 10-30 秒</p>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div class="aspect-[3/4] rounded-2xl bg-[var(--surface-2)] border border-[var(--line)] animate-pulse overflow-hidden"><div class="h-3 w-2/3 bg-[var(--surface-3)] rounded-full m-4"></div></div>
+                                    <div class="aspect-[3/4] rounded-2xl bg-[var(--surface-2)] border border-[var(--line)] animate-pulse overflow-hidden"><div class="h-3 w-1/2 bg-[var(--surface-3)] rounded-full m-4"></div></div>
+                                    <div class="aspect-[3/4] rounded-2xl bg-[var(--surface-2)] border border-[var(--line)] animate-pulse overflow-hidden"><div class="h-3 w-3/4 bg-[var(--surface-3)] rounded-full m-4"></div></div>
+                                    <div class="aspect-[3/4] rounded-2xl bg-[var(--surface-2)] border border-[var(--line)] animate-pulse overflow-hidden"><div class="h-3 w-1/2 bg-[var(--surface-3)] rounded-full m-4"></div></div>
                                 </div>
                             </div>
                         ` : state.aiImageResults.length > 0 ? `
-                            <div class="bg-white rounded-3xl shadow-sm p-6">
-                                <h3 class="bs-text-lg font-bold text-gray-800 mb-4 flex items-center justify-between">
-                                    <span class="flex items-center gap-2">
-                                        <i class="fa-solid fa-sparkles text-brand"></i>生成結果 (${state.aiImageResults.length} 張)
+                            <div class="bs-card p-5">
+                                <div class="mb-4 flex items-center justify-between gap-3">
+                                    <span class="bs-section-title flex items-center gap-3 min-w-0">
+                                        <span class="w-9 h-9 shrink-0 rounded-xl bg-[var(--surface-2)] text-brand flex items-center justify-center"><i class="fa-solid fa-sparkles"></i></span>
+                                        <span>生成結果 (${state.aiImageResults.length} 張)</span>
                                     </span>
-                                    <button class="action-btn px-4 py-2 bg-brand text-white rounded-xl bs-text-sm font-bold shadow-md hover:bg-brand-dark transition-colors" data-action="downloadAllGeneratedImages">
-                                        <i class="fa-solid fa-download mr-1"></i>全部保存
+                                    <button class="action-btn bs-btn bs-btn-primary bs-text-sm shrink-0" data-action="downloadAllGeneratedImages">
+                                        <i class="fa-solid fa-download"></i><span>全部保存</span>
                                     </button>
-                                </h3>
+                                </div>
 
                                 <!-- 圖片網格 -->
                                 <div class="grid ${state.aiImageResults.length === 1 ? 'grid-cols-1' : 'grid-cols-2'} gap-3">
                                     ${state.aiImageResults.map((img, idx) => `
-                                        <div class="relative rounded-2xl overflow-hidden bg-gray-100">
-                                            <img src="${img}" class="w-full h-auto" alt="生成的圖片 ${idx + 1}">
-                                            <div class="absolute bottom-2 right-2 flex gap-2">
-                                                <button class="action-btn w-8 h-8 bg-black/50 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-black/70 transition-colors" data-action="downloadGeneratedImage" data-url="${escapeAttribute(img)}">
-                                                    <i class="fa-solid fa-download bs-text-xs"></i>
-                                                </button>
-                                                <button class="action-btn w-8 h-8 bg-black/50 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-black/70 transition-colors" data-action="viewGeneratedImageFullscreen" data-url="${escapeAttribute(img)}">
+                                        <div class="bs-card-flat overflow-hidden p-2">
+                                            <div class="relative aspect-[3/4] rounded-xl overflow-hidden bg-[var(--surface-2)]">
+                                                <img src="${img}" class="w-full h-full object-cover" alt="生成的圖片 ${idx + 1}">
+                                                <button class="action-btn absolute top-2 right-2 w-9 h-9 bg-[var(--surface-1)]/90 text-[var(--ink-700)] rounded-full flex items-center justify-center shadow-lg" data-action="viewGeneratedImageFullscreen" data-url="${escapeAttribute(img)}">
                                                     <i class="fa-solid fa-expand bs-text-xs"></i>
                                                 </button>
-                                                <button class="action-btn w-8 h-8 bg-black/50 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-black/70 transition-colors" data-action="showQrCode" data-url="${escapeAttribute(img)}">
-                                                    <i class="fa-solid fa-qrcode bs-text-xs"></i>
+                                            </div>
+                                            <div class="grid grid-cols-2 gap-2 pt-2">
+                                                <button class="action-btn bs-btn bs-btn-primary min-w-0 px-2 bs-text-sm" data-action="downloadGeneratedImage" data-url="${escapeAttribute(img)}">
+                                                    <i class="fa-solid fa-download"></i><span>下載</span>
+                                                </button>
+                                                <button class="action-btn bs-btn bs-btn-secondary min-w-0 px-2 bs-text-sm" data-action="shareGeneratedImage" data-url="${escapeAttribute(img)}">
+                                                    <i class="fa-solid fa-share-nodes"></i><span>分享</span>
                                                 </button>
                                             </div>
+                                            <button class="action-btn bs-btn bs-btn-ghost w-full mt-2 bs-text-sm" data-action="showQrCode" data-url="${escapeAttribute(img)}">
+                                                <i class="fa-solid fa-qrcode"></i><span>QR碼</span>
+                                            </button>
                                         </div>
                                     `).join('')}
                                 </div>
 
                                 <!-- 操作按鈕 -->
                                 <div class="flex gap-3 mt-4">
-                                    <button class="action-btn flex-1 py-3 bg-gray-600 text-white rounded-xl font-bold shadow-md hover:bg-gray-700 transition-colors" data-action="shareGeneratedImage" data-url="${escapeAttribute(state.aiImageResults[0])}">
-                                        <i class="fa-solid fa-share-nodes mr-2"></i>分享圖片
+                                    <button class="action-btn bs-btn bs-btn-secondary flex-1" data-action="shareGeneratedImage" data-url="${escapeAttribute(state.aiImageResults[0])}">
+                                        <i class="fa-solid fa-share-nodes"></i><span>分享圖片</span>
                                     </button>
                                 </div>
                             </div>
@@ -252,9 +277,9 @@
                     </div>
 
                     <!-- 底部生成按鈕 -->
-                    <div class="shrink-0 bg-white border-t border-gray-100 p-4">
-                        <button class="action-btn w-full py-4 rounded-2xl font-bold bs-text-lg shadow-lg transition-colors disabled:opacity-50 ${state.aiImageGenerating ? 'bg-gray-400 text-white' : 'bg-brand text-white hover:bg-brand-dark'}" data-action="generateAIImage" ${!state.aiImageRefImage || state.aiImageGenerating ? 'disabled' : ''}>
-                            ${state.aiImageGenerating ? '<i class="fa-solid fa-spinner fa-spin mr-2"></i>生成中...' : '<i class="fa-solid fa-wand-magic-sparkles mr-2"></i>開始生成'}
+                    <div class="bs-appbar shrink-0 border-t border-[var(--line)] border-b-0 p-4">
+                        <button class="action-btn bs-btn bs-btn-primary w-full bs-text-lg" data-action="generateAIImage" ${!state.aiImageRefImage || state.aiImageGenerating ? 'disabled' : ''}>
+                            ${state.aiImageGenerating ? '<i class="fa-solid fa-spinner fa-spin"></i><span>生成中...</span>' : '<i class="fa-solid fa-wand-magic-sparkles"></i><span>開始生成</span>'}
                         </button>
                     </div>
 

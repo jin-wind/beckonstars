@@ -209,53 +209,50 @@
         function renderStep1Auth() {
             const isLogin = state.authMode === 'login';
             return `
-                <div class="flex flex-col items-center justify-center h-full p-8 bg-gradient-to-b from-[#FFF8F0] to-[#FFE5D0] animate-fadeIn overflow-y-auto">
-                    <div class="w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-lg mb-4">
-                        <i class="fa-solid fa-star bs-text-4xl text-brand"></i>
-                    </div>
-                    <h1 class="bs-text-3xl font-bold text-gray-800 mb-1 tracking-wider">星喚</h1>
-                    <p class="bs-text-base text-gray-600 mb-6">Beckon Stars</p>
-
-                    <div class="w-full max-w-sm">
-                        <div class="flex mb-6 bg-gray-100 rounded-xl p-1">
-                            <button class="action-btn flex-1 py-2 rounded-lg bs-text-sm font-medium transition-colors ${isLogin ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}" data-action="switchAuthMode" data-mode="login">登入</button>
-                            <button class="action-btn flex-1 py-2 rounded-lg bs-text-sm font-medium transition-colors ${!isLogin ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}" data-action="switchAuthMode" data-mode="register">註冊</button>
+                <div class="flex h-full overflow-y-auto bg-[var(--surface-0)] px-6 py-8 animate-fadeIn">
+                    <div class="m-auto w-full max-w-sm">
+                        <div class="mb-6 text-center">
+                            <div class="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full border border-[var(--brand-200)] bg-[var(--surface-1)] shadow-[var(--shadow-lg)] ring-8 ring-[var(--brand-50)]">
+                                <i class="fa-solid fa-star bs-text-4xl text-brand"></i>
+                            </div>
+                            <h1 class="bs-text-4xl font-bold text-[var(--ink-900)]">星喚</h1>
+                            <p class="mt-1 bs-text-base text-[var(--ink-500)]">Beckon Stars</p>
                         </div>
 
-                        <div class="mb-4">
-                            <button class="action-btn w-full min-h-[44px] bg-white text-gray-700 bs-text-base font-bold py-3 px-6 rounded-xl border border-gray-200 shadow-sm hover:bg-gray-50 transition-colors flex items-center justify-center gap-3" data-action="androidGoogleLogin" ${state.googleSignInLoading ? 'disabled' : ''}>
-                                <i class="fa-brands fa-google text-red-500"></i>
+                        <div class="bs-card p-5">
+                            <div class="mb-5 flex rounded-full bg-[var(--surface-2)] p-1">
+                                <button class="action-btn flex-1 rounded-full py-2 bs-text-sm font-semibold transition-colors ${isLogin ? 'bg-[var(--surface-1)] text-[var(--ink-900)] shadow-[var(--shadow-sm)]' : 'text-[var(--ink-500)]'}" data-action="switchAuthMode" data-mode="login">登入</button>
+                                <button class="action-btn flex-1 rounded-full py-2 bs-text-sm font-semibold transition-colors ${!isLogin ? 'bg-[var(--surface-1)] text-[var(--ink-900)] shadow-[var(--shadow-sm)]' : 'text-[var(--ink-500)]'}" data-action="switchAuthMode" data-mode="register">註冊</button>
+                            </div>
+
+                            <button class="action-btn bs-btn bs-btn-ghost w-full bg-[var(--surface-1)] shadow-[var(--shadow-sm)]" data-action="androidGoogleLogin" ${state.googleSignInLoading ? 'disabled' : ''}>
+                                <i class="fa-brands fa-google text-[var(--brand-red)]"></i>
                                 <span>${state.googleSignInLoading ? 'Google 登入中...' : '使用 Google 登入'}</span>
                             </button>
+
+                            <div class="my-4 flex items-center gap-3">
+                                <div class="h-px flex-1 bg-[var(--line)]"></div>
+                                <span class="bs-text-xs text-[var(--ink-500)]">或使用電郵</span>
+                                <div class="h-px flex-1 bg-[var(--line)]"></div>
+                            </div>
+
+                            <div class="space-y-3">
+                                ${!isLogin ? `
+                                <input id="authName" type="text" placeholder="用戶名稱" class="bs-input" autocomplete="name">
+                                ` : ''}
+                                <input id="authEmail" type="email" placeholder="電郵地址" class="bs-input" autocomplete="email">
+                                <input id="authPassword" type="password" placeholder="密碼" class="bs-input" autocomplete="${isLogin ? 'current-password' : 'new-password'}">
+                            </div>
+
+                            <button class="action-btn bs-btn bs-btn-primary mt-4 w-full" data-action="${isLogin ? 'login' : 'register'}">
+                                <i class="fa-solid ${isLogin ? 'fa-arrow-right-to-bracket' : 'fa-user-plus'}"></i>
+                                <span>${isLogin ? '登入' : '註冊'}</span>
+                            </button>
+
+                            ${state.errorMsg ? `<p class="mt-3 text-center bs-text-sm text-[var(--brand-red)] animate-shake">${state.errorMsg}</p>` : ''}
+
+                            <p class="mt-4 text-center bs-text-xs text-[var(--ink-500)]">${isLogin ? '還沒有帳號？' : '已有帳號？'} <button class="action-btn font-semibold text-brand" data-action="switchAuthMode" data-mode="${isLogin ? 'register' : 'login'}">${isLogin ? '立即註冊' : '返回登入'}</button></p>
                         </div>
-
-                        <div class="flex items-center gap-3 mb-4">
-                            <div class="h-px bg-gray-200 flex-1"></div>
-                            <span class="bs-text-xs text-gray-400">或使用電郵</span>
-                            <div class="h-px bg-gray-200 flex-1"></div>
-                        </div>
-
-                        ${!isLogin ? `
-                        <div class="mb-3">
-                            <input id="authName" type="text" placeholder="用戶名稱" class="w-full px-4 py-3 rounded-xl border border-gray-200 bs-text-base focus:outline-none focus:border-brand bg-white" autocomplete="name">
-                        </div>
-                        ` : ''}
-
-                        <div class="mb-3">
-                            <input id="authEmail" type="email" placeholder="電郵地址" class="w-full px-4 py-3 rounded-xl border border-gray-200 bs-text-base focus:outline-none focus:border-brand bg-white" autocomplete="email">
-                        </div>
-
-                        <div class="mb-4">
-                            <input id="authPassword" type="password" placeholder="密碼" class="w-full px-4 py-3 rounded-xl border border-gray-200 bs-text-base focus:outline-none focus:border-brand bg-white" autocomplete="${isLogin ? 'current-password' : 'new-password'}">
-                        </div>
-
-                        <button class="action-btn w-full bg-brand text-white bs-text-lg font-bold py-3 px-6 rounded-xl shadow-md hover:opacity-90 transition-opacity" data-action="${isLogin ? 'login' : 'register'}">
-                            ${isLogin ? '登入' : '註冊'}
-                        </button>
-
-                        ${state.errorMsg ? `<p class="text-red-500 bs-text-sm mt-3 text-center animate-shake">${state.errorMsg}</p>` : ''}
-
-                        <p class="bs-text-xs text-gray-400 text-center mt-4">${isLogin ? '還沒有帳號？' : '已有帳號？'} <button class="action-btn text-brand font-medium" data-action="switchAuthMode" data-mode="${isLogin ? 'register' : 'login'}">${isLogin ? '立即註冊' : '返回登入'}</button></p>
                     </div>
                 </div>
             `;
@@ -265,21 +262,39 @@
         // 步驟 2: 選擇角色
         function renderStep2Role() {
             return `
-                <div class="flex flex-col items-center justify-center h-full p-8 text-center bg-gradient-to-b from-[#FFF8F0] to-[#FFE5D0] animate-fadeIn">
-                    <div class="w-28 h-28 bg-white rounded-full flex items-center justify-center shadow-lg mb-6">
-                        <i class="fa-solid fa-star text-5xl text-brand"></i>
+                <div class="flex h-full overflow-y-auto bg-[var(--surface-0)] px-6 py-8 text-center animate-fadeIn">
+                    <div class="m-auto w-full max-w-sm">
+                        <div class="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full border border-[var(--brand-200)] bg-[var(--surface-1)] shadow-[var(--shadow-lg)] ring-8 ring-[var(--brand-50)]">
+                            <i class="fa-solid fa-star bs-text-4xl text-brand"></i>
+                        </div>
+                        <h1 class="bs-text-3xl font-bold text-[var(--ink-900)]">星喚</h1>
+                        <p class="mb-8 mt-1 bs-text-base text-[var(--ink-500)]">Beckon Stars</p>
+
+                        <h2 class="bs-section-title mb-4 text-left">請選擇您的身份</h2>
+
+                        <div class="space-y-4">
+                            <button class="action-btn group bs-card w-full p-5 text-left flex items-center gap-4 ring-1 ring-[var(--line)] transition-all focus:outline-none focus:ring-2 focus:ring-[var(--brand-400)] focus:shadow-[var(--shadow-brand)]" data-action="setRole" data-role="senior">
+                                <div class="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)] bs-text-2xl text-brand transition-colors group-focus:bg-[var(--brand-100)]">
+                                    <i class="fa-solid fa-person-cane"></i>
+                                </div>
+                                <div class="flex-1 bs-text-xl font-bold text-[var(--ink-900)]">我是長者</div>
+                                <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[var(--ink-300)] text-[var(--ink-300)] transition-colors group-focus:border-[var(--brand-500)] group-focus:bg-[var(--brand-500)] group-focus:text-white">
+                                    <i class="fa-regular fa-circle group-focus:hidden"></i>
+                                    <i class="fa-solid fa-check hidden group-focus:block"></i>
+                                </div>
+                            </button>
+                            <button class="action-btn group bs-card w-full p-5 text-left flex items-center gap-4 ring-1 ring-[var(--line)] transition-all focus:outline-none focus:ring-2 focus:ring-[var(--brand-400)] focus:shadow-[var(--shadow-brand)]" data-action="setRole" data-role="child">
+                                <div class="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)] bs-text-2xl text-brand transition-colors group-focus:bg-[var(--brand-100)]">
+                                    <i class="fa-solid fa-children"></i>
+                                </div>
+                                <div class="flex-1 bs-text-xl font-bold text-[var(--ink-900)]">我是子女</div>
+                                <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[var(--ink-300)] text-[var(--ink-300)] transition-colors group-focus:border-[var(--brand-500)] group-focus:bg-[var(--brand-500)] group-focus:text-white">
+                                    <i class="fa-regular fa-circle group-focus:hidden"></i>
+                                    <i class="fa-solid fa-check hidden group-focus:block"></i>
+                                </div>
+                            </button>
+                        </div>
                     </div>
-                    <h1 class="bs-text-4xl font-bold text-gray-800 mb-2 tracking-wider">星喚</h1>
-                    <p class="bs-text-lg text-gray-600 mb-10">Beckon Stars</p>
-                    
-                    <h2 class="bs-text-xl font-medium text-gray-700 mb-6">請選擇您的身份</h2>
-                    
-                    <button class="action-btn w-full bg-brand text-white bs-text-xl font-bold py-4 px-6 rounded-2xl shadow-md mb-4 hover:bg-brand-dark transition-colors" data-action="setRole" data-role="senior">
-                        <i class="fa-solid fa-person-cane mr-2"></i> 我是長者
-                    </button>
-                    <button class="action-btn w-full bg-white text-brand border-2 border-brand bs-text-xl font-bold py-4 px-6 rounded-2xl shadow-sm hover:bg-orange-50 transition-colors" data-action="setRole" data-role="child">
-                        <i class="fa-solid fa-children mr-2"></i> 我是子女
-                    </button>
                 </div>
             `;
         }
@@ -293,33 +308,37 @@
             }
 
             return `
-                <div class="flex flex-col h-full p-8 bg-[#FFF8F0] animate-fadeIn">
-                    <button class="action-btn self-start text-gray-400 mb-6 bs-text-xl" data-action="backStep" data-step="1">
-                        <i class="fa-solid fa-arrow-left"></i>
-                    </button>
-                    <h2 class="bs-text-3xl font-bold text-gray-800 mb-2">設定個人檔案</h2>
-                    <p class="text-gray-500 mb-8">選擇一個喜歡的頭像並輸入稱呼</p>
-                    
-                    <!-- 頭像選擇 -->
-                    <div class="grid grid-cols-3 gap-4 mb-8">
-                        ${avatarOptions.map(avatar => `
-                            <button class="action-btn bs-text-4xl p-3 rounded-2xl transition-all ${state.userAvatar === avatar ? 'bg-brand shadow-md transform scale-105' : 'bg-white border border-gray-200 opacity-60'}" data-action="selectAvatar" data-avatar="${avatar}">
-                                ${avatar}
-                            </button>
-                        `).join('')}
-                    </div>
+                <div class="h-full overflow-y-auto bg-[var(--surface-0)] px-6 py-8 animate-fadeIn">
+                    <div class="mx-auto flex min-h-full w-full max-w-sm flex-col">
+                        <button class="action-btn mb-6 flex h-11 w-11 shrink-0 items-center justify-center self-start rounded-full border border-[var(--line)] bg-[var(--surface-1)] text-[var(--ink-700)] shadow-[var(--shadow-sm)]" data-action="backStep" data-step="1">
+                            <i class="fa-solid fa-arrow-left"></i>
+                        </button>
+                        <h2 class="bs-text-3xl font-bold text-[var(--ink-900)]">設定個人檔案</h2>
+                        <p class="mb-6 mt-2 bs-text-base text-[var(--ink-500)]">選擇一個喜歡的頭像並輸入稱呼</p>
 
-                    <!-- 稱呼輸入 -->
-                    <div class="mb-8 relative">
-                        <label class="block text-gray-700 font-bold mb-2">您的稱呼</label>
-                        <input type="text" id="nameInput" value="${state.userName}" placeholder="例如: ${state.role === 'senior' ? '媽媽, 爺爺' : '阿強, 妹妹'}" class="w-full bs-text-xl p-4 rounded-2xl border-2 ${state.errorMsg ? 'border-red-400' : 'border-gray-200'} focus:border-brand outline-none bg-white">
-                        ${state.errorMsg ? `<p class="text-red-500 bs-text-sm mt-2 absolute -bottom-6 animate-shake">${state.errorMsg}</p>` : ''}
-                    </div>
+                        <!-- 頭像選擇 -->
+                        <div class="bs-card-flat mb-6 p-5">
+                            <div class="grid grid-cols-3 gap-4">
+                                ${avatarOptions.map(avatar => `
+                                    <button class="action-btn aspect-square rounded-full flex items-center justify-center bs-text-4xl transition-all ${state.userAvatar === avatar ? 'bg-[var(--surface-1)] shadow-[var(--shadow-md)] ring-4 ring-[var(--brand-400)] ring-offset-2 ring-offset-[var(--surface-2)] scale-105' : 'bg-[var(--surface-1)] border border-[var(--line)] opacity-70'}" data-action="selectAvatar" data-avatar="${avatar}">
+                                        ${avatar}
+                                    </button>
+                                `).join('')}
+                            </div>
+                        </div>
 
-                    <div class="flex-1"></div>
-                    <button class="action-btn w-full bg-brand text-white bs-text-xl font-bold py-4 rounded-2xl shadow-lg hover:bg-brand-dark transition-colors" data-action="submitProfile">
-                        下一步 <i class="fa-solid fa-arrow-right ml-2"></i>
-                    </button>
+                        <!-- 稱呼輸入 -->
+                        <div class="relative mb-8">
+                            <label class="mb-2 block bs-text-base font-bold text-[var(--ink-700)]">您的稱呼</label>
+                            <input type="text" id="nameInput" value="${state.userName}" placeholder="例如: ${state.role === 'senior' ? '媽媽, 爺爺' : '阿強, 妹妹'}" class="bs-input ${state.errorMsg ? '!border-[var(--brand-red)]' : ''}" style="font-size: var(--font-xl);">
+                            ${state.errorMsg ? `<p class="absolute -bottom-6 mt-2 bs-text-sm text-[var(--brand-red)] animate-shake">${state.errorMsg}</p>` : ''}
+                        </div>
+
+                        <div class="flex-1"></div>
+                        <button class="action-btn bs-btn bs-btn-primary w-full" data-action="submitProfile">
+                            <span>下一步</span><i class="fa-solid fa-arrow-right"></i>
+                        </button>
+                    </div>
                 </div>
             `;
         }

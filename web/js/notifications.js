@@ -7,6 +7,7 @@
 
         async function requestNotificationPermission() {
             if (isNativeApp()) {
+                const previousPermission = getRuntimeNotificationPermission();
                 const granted = Platform.requestNotificationPermission();
                 state.notificationPermission = getRuntimeNotificationPermission();
                 render();
@@ -15,6 +16,12 @@
                     showMessage('App 通知已開啟。');
                     return;
                 }
+                // Android's bridge returns false both when it has just opened the
+                // permission dialog and when permission is unavailable. iOS is
+                // always asynchronous. In either case, wait for the native
+                // setAndroidNotificationPermission callback instead of showing a
+                // premature "not allowed" message while the system sheet is open.
+                if (previousPermission === 'default') return;
                 showMessage('請在系統權限視窗或 App 設定中允許通知。');
                 return;
             }
@@ -95,6 +102,6 @@
             state.notificationPermission = permission || getRuntimeNotificationPermission();
             render();
             showMessage(state.notificationPermission === 'granted'
-                ? 'APK 通知已開啟。'
-                : 'APK 通知未開啟，你可以稍後到 Android App 設定允許。');
+                ? 'App 通知已開啟。'
+                : 'App 通知未開啟，你可以稍後到系統設定允許。');
         };

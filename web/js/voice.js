@@ -447,6 +447,8 @@
 
         window.handleAndroidVoiceError = message => {
             state.transcribingMessageId = null;
+            state.recordingForMemory = false;
+            state.isRecordingMemory = false;
             resetVoiceRecordingState();
             render();
             showMessage(message || '語音識別失敗，請再試一次。');
