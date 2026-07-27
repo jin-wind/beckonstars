@@ -2,7 +2,8 @@ name: Flutter build
 
 on:
   push:
-    branches: [main]
+    branches:
+      - '**'
     paths:
       - 'flutter_app/**'
       - '.github/workflows/flutter-build.yml'
