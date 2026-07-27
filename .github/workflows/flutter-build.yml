@@ -35,8 +35,24 @@ jobs:
 
       - name: Generate Flutter platform scaffolding
         run: |
-          flutter create --platforms=android .
+          flutter create --platforms=android --org hk.beckonstars.dev .
           rm -f test/widget_test.dart
+
+      - name: Use test app identity
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          gradle = Path('android/app/build.gradle')
+          text = gradle.read_text()
+          text = text.replace('namespace = "hk.beckonstars.dev.beckon_stars"', 'namespace = "hk.beckonstars.dev.beckon_stars_test"')
+          text = text.replace('applicationId = "hk.beckonstars.dev.beckon_stars"', 'applicationId = "hk.beckonstars.dev.beckon_stars_test"')
+          gradle.write_text(text)
+
+          manifest = Path('android/app/src/main/AndroidManifest.xml')
+          text = manifest.read_text()
+          text = text.replace('android:label="beckon_stars"', 'android:label="星喚測試"')
+          manifest.write_text(text)
+          PY
 
       - name: Install dependencies
         run: flutter pub get
