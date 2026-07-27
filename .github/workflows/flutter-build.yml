@@ -29,10 +29,11 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: '3.24.5'
           cache: true
 
       - name: Generate Flutter platform scaffolding
-        run: flutter create --platforms=android,ios .
+        run: flutter create --platforms=android .
 
       - name: Install dependencies
         run: flutter pub get
@@ -44,7 +45,14 @@ jobs:
         run: flutter test
 
       - name: Build debug APK
-        run: flutter build apk --debug --dart-define=API_BASE_URL=${{ vars.API_BASE_URL || 'http://144.79.170.102:8787' }}
+        env:
+          API_BASE_URL: ${{ vars.API_BASE_URL || 'http://144.79.170.102:8787' }}
+        run: |
+          if [[ ! "$API_BASE_URL" =~ ^https?:// ]]; then
+            echo "API_BASE_URL must start with http:// or https://" >&2
+            exit 1
+          fi
+          flutter build apk --debug --dart-define="API_BASE_URL=$API_BASE_URL"
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4

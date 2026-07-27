@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
@@ -74,8 +73,6 @@ class ApiClient {
       }
     } on TimeoutException {
       throw const ApiException(0, '連線逾時，請檢查網絡或 API 伺服器');
-    } on SocketException {
-      throw const ApiException(0, '無法連線到伺服器，請檢查網絡');
     } on http.ClientException catch (error) {
       throw ApiException(0, '無法連線到伺服器：${error.message}');
     } on FormatException {
