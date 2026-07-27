@@ -34,7 +34,9 @@ jobs:
           cache: true
 
       - name: Generate Flutter platform scaffolding
-        run: flutter create --platforms=android .
+        run: |
+          flutter create --platforms=android .
+          rm -f test/widget_test.dart
 
       - name: Install dependencies
         run: flutter pub get

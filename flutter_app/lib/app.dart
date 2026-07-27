@@ -24,7 +24,7 @@ class BeckonStarsApp extends StatelessWidget {
           brightness: Brightness.light,
         ),
         scaffoldBackgroundColor: const Color(0xFFFFF8F1),
-        cardTheme: CardThemeData(
+        cardTheme: CardTheme(
           elevation: 0,
           color: Colors.white,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
