@@ -127,7 +127,7 @@ Google 登入只支援 Android APK 原生流程：APK 透過 Android Credential 
 Android APK 預設連接遠端伺服器：
 
 ```javascript
-const selfHostedApiBase = 'http://144.79.170.102:8787';
+const selfHostedApiBase = 'https://stem.tmcss.edu.hk/BeckonStars';
 ```
 
 如需修改伺服器地址，編輯 `android/app/src/main/assets/index.html` 中的配置。

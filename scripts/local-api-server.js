@@ -492,6 +492,7 @@ const openrouterReferer = process.env.OPENROUTER_HTTP_REFERER || (process.env.OP
 const aiImageProvider = (process.env.AI_IMAGE_PROVIDER || 'kklt').trim().toLowerCase();
 const drawApiBaseUrl = (process.env.DRAW_API_BASE_URL || 'https://tupian.kklt.lol').replace(/\/+$/, '');
 const drawApiKey = process.env.DRAW_API_KEY || '';
+const drawImageModel = process.env.DRAW_IMAGE_MODEL?.trim() || 'gpt-image-2.6';
 const drawImageSize = process.env.DRAW_IMAGE_SIZE || '3:4';
 const drawImageResolution = process.env.DRAW_IMAGE_RESOLUTION || '2K';
 
@@ -859,6 +860,7 @@ async function callKkltImageApi({ prompt, referenceImage, count, size, resolutio
     form.append('image', blob, `reference.${imageMimeToExtension(image.mime)}`);
     form.append('prompt', prompt);
     form.append('count', String(requestCount));
+    form.append('model', drawImageModel);
     form.append('size', requestSize);
     if (requestResolution) form.append('resolution', requestResolution);
 
@@ -877,6 +879,7 @@ async function callKkltImageApi({ prompt, referenceImage, count, size, resolutio
       body: JSON.stringify({
         prompt,
         count: requestCount,
+        model: drawImageModel,
         size: requestSize,
         ...(requestResolution ? { resolution: requestResolution } : {})
       })
@@ -1669,6 +1672,7 @@ const server = http.createServer(async (req, res) => {
         googleAuth: Boolean(GOOGLE_CLIENT_ID),
         aiImage: {
           provider: aiImageProvider,
+          model: drawImageModel,
           fallback: null,
           drawApiConfigured: Boolean(drawApiKey)
         }
