@@ -60,8 +60,14 @@
             overscroll-behavior: none;
         }
         #app {
+            width: 100%;
+            max-width: 28rem;
             height: var(--app-height, 100dvh);
             min-height: 0;
+        }
+        /* 平板以完整內容寬度顯示，小螢幕維持手機版寬度。 */
+        @media (min-width: 600px) {
+            #app { max-width: 64rem; }
         }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -134,7 +140,7 @@
 </head>
 <body class="text-gray-800 w-full flex justify-center bg-gray-100">
 
-    <div id="app" class="w-full max-w-md h-full min-h-0 bg-[#FFF8F0] shadow-2xl relative overflow-hidden flex flex-col">
+    <div id="app" class="w-full h-full min-h-0 bg-[#FFF8F0] shadow-2xl relative overflow-hidden flex flex-col">
         <!-- 內容會由 JavaScript 動態渲染 -->
     </div>
 
